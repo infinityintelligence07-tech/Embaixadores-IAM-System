@@ -22,7 +22,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 50s
 
   nginx:
     image: nginx:1.27-alpine
@@ -31,8 +31,10 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Bootstrap HTTP. Após emitir certs, troque para ./docker/nginx/nginx.conf
+      - ./docker/nginx/nginx.http.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/certs:/etc/nginx/certs:ro
+      - certbot_www:/var/www/certbot:ro
     depends_on:
       app:
         condition: service_healthy
@@ -47,3 +49,6 @@ services:
 networks:
   internal:
     driver: bridge
+
+volumes:
+  certbot_www:

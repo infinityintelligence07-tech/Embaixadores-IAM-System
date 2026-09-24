@@ -30,14 +30,23 @@ async function bootstrap() {
     }),
   );
   
-  // Serve static frontend in production
-  const frontendDistPath = join(__dirname, '../../frontend/dist');
-  if (existsSync(frontendDistPath)) {
+  // Serve static frontend (Docker: /app/public; local: frontend/dist)
+  const frontendCandidates = [
+    process.env.FRONTEND_DIST_PATH,
+    join(__dirname, '../public'),
+    join(__dirname, '../../frontend/dist'),
+    join(process.cwd(), 'public'),
+  ].filter((p): p is string => Boolean(p));
+
+  const frontendDistPath = frontendCandidates.find((p) =>
+    existsSync(join(p, 'index.html')),
+  );
+
+  if (frontendDistPath) {
     app.use(express.static(frontendDistPath));
-    
-    // SPA fallback
+
     app.use((req: any, res: any, next: any) => {
-      if (!req.url.startsWith('/api')) {
+      if (req.method === 'GET' && !req.path.startsWith('/api')) {
         res.sendFile(join(frontendDistPath, 'index.html'));
       } else {
         next();

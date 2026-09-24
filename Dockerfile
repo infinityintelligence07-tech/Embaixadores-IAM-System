@@ -20,13 +20,16 @@ RUN npm run build && npm prune --omit=dev
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-RUN addgroup -S app && adduser -S app -G app
+RUN apk add --no-cache wget \
+  && addgroup -S app && adduser -S app -G app
 
 COPY --from=backend-build /app/backend/dist ./dist
 COPY --from=backend-build /app/backend/node_modules ./node_modules
 COPY --from=backend-build /app/backend/package.json ./package.json
 COPY --from=frontend-build /app/frontend/dist ./public
 COPY supabase/migrations ./migrations
+
+ENV FRONTEND_DIST_PATH=/app/public
 
 USER app
 EXPOSE 3000
