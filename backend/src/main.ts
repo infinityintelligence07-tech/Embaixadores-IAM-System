@@ -12,9 +12,30 @@ async function bootstrap() {
   
   const app = await NestFactory.create(AppModule);
   
-  // Security
-  app.use(helmet());
-  
+  // Security — CSP precisa permitir Auth/API do Supabase no browser
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          connectSrc: [
+            "'self'",
+            'https://*.supabase.co',
+            'wss://*.supabase.co',
+            config.supabase.url,
+          ],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+          styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
+          fontSrc: ["'self'", 'https:', 'data:'],
+          scriptSrc: ["'self'"],
+          frameSrc: ["'self'", 'https://*.supabase.co'],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );  
   // CORS
   app.enableCors({
     origin: config.app.corsOrigin,
