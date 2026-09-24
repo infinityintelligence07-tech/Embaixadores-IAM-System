@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+
+  --color-brand-gold: #d4af37;
+  --color-brand-gold-muted: #b8942e;
+  --color-brand-violet: #7c3aed;
+  --color-brand-violet-muted: #6d28d9;
+  --color-surface: #0f0f12;
+  --color-surface-elevated: #17171c;
+  --color-surface-card: #1c1c24;
+  --color-border: #2a2a35;
+  --color-text: #f4f4f5;
+  --color-text-muted: #a1a1aa;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-podium-gold: #d4af37;
+  --color-podium-silver: #c0c0c0;
+  --color-podium-bronze: #cd7f32;
+}
+
+:root {
+  color-scheme: dark;
+  --focus-ring: 0 0 0 2px var(--color-brand-violet), 0 0 0 4px rgba(124, 58, 237, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-surface);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+::selection {
+  background: rgba(212, 175, 55, 0.35);
+  color: #fff;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
