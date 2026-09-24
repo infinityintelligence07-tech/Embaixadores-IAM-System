@@ -12,3 +12,8 @@ backend/dist/
 docker/nginx/certs/*.pem
 .vite/
 *.tsbuildinfo
+scripts/_remote_deploy.py
+scripts/_remote_deploy_finish.py
+scripts/_remote_inspect.py
+scripts/_remote_nginx_sample.py
+scripts/_remote_*.py

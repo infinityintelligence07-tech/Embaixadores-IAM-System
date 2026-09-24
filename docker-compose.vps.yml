@@ -1,0 +1,8 @@
+# Override para VPS Hostinger compartilhada (nginx do host na 80/443)
+services:
+  app:
+    ports:
+      - "127.0.0.1:3012:3000"
+  nginx:
+    profiles:
+      - unused
