@@ -102,7 +102,6 @@ export function ProfilePage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-brand-gold">Conta</p>
         <h1 className="font-display text-3xl text-text">Seu perfil</h1>
         <p className="mt-2 text-text-muted">
           Atualize seus dados e gerencie sua conta.

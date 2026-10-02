@@ -34,7 +34,7 @@ export class ContentsController {
         allContents.push({
           id: content.id,
           platform: content.platform,
-          title: content.title || 'Untitled',
+          title: content.title || 'Sem título',
           url: content.permalink || '',
           views: content.latestViews || 0,
           publishedAt: content.publishedAt?.toISOString() || '',

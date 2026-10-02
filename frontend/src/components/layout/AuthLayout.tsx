@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { LegalLinks } from './LegalLinks';
 
 export function AuthLayout({
@@ -14,9 +15,9 @@ export function AuthLayout({
     <div className="min-h-screen bg-surface px-4 py-10">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
-          <p className="text-xs uppercase tracking-[0.25em] text-brand-gold">
-            Embaixadores
-          </p>
+          <div className="mb-4 flex justify-center">
+            <BrandMark variant="wordmark" />
+          </div>
           <h1 className="mt-2 font-display text-3xl text-text">{title}</h1>
           <p className="mt-2 text-sm text-text-muted">{subtitle}</p>
         </div>

@@ -116,7 +116,7 @@ async function seedDemo() {
       for (let i = 0; i < contentItems.length; i++) {
         const item = contentItems[i];
         await client.query(
-          `INSERT INTO content_items (
+          `INSERT INTO contents (
             social_account_id, platform, platform_content_id, title,
             published_at, eligible, latest_views, latest_views_collected_at
           )

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { readInstagramViews } from '../../domain/view-metrics';
 import {
   SocialMetricsProvider,
   SocialCredentials,
@@ -95,15 +96,13 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
         let viewsAvailable = false;
         
         try {
-          const insightsUrl = `${this.baseUrl}/${item.id}/insights?metric=impressions&access_token=${creds.accessToken}`;
+          const insightsUrl = `${this.baseUrl}/${item.id}/insights?metric=views&period=lifetime&access_token=${creds.accessToken}`;
           const insightsResponse = await fetch(insightsUrl);
           
           if (insightsResponse.ok) {
             const insightsData = await insightsResponse.json();
-            if (insightsData.data && insightsData.data.length > 0) {
-              views = insightsData.data[0].values[0]?.value || null;
-              viewsAvailable = true;
-            }
+            views = readInstagramViews(insightsData);
+            viewsAvailable = views !== null;
           }
         } catch (error) {
           this.logger.warn(`Failed to fetch insights for media ${item.id}:`, error);
@@ -138,29 +137,27 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
       const meData = await meResponse.json();
       const igUserId = meData.id;
       
-      // Try to get account insights (impressions)
-      const insightsUrl = `${this.baseUrl}/${igUserId}/insights?metric=impressions&period=lifetime&access_token=${creds.accessToken}`;
+      const insightsUrl = `${this.baseUrl}/${igUserId}/insights?metric=views&period=days_28&metric_type=total_value&access_token=${creds.accessToken}`;
       const insightsResponse = await fetch(insightsUrl);
       
       if (insightsResponse.ok) {
         const insightsData = await insightsResponse.json();
-        if (insightsData.data && insightsData.data.length > 0) {
-          const impressions = insightsData.data[0].values[0]?.value || null;
+        const views = readInstagramViews(insightsData);
+        if (views !== null) {
           return {
-            officialViews: impressions,
+            officialViews: views,
             availability: 'available',
-            periodLabel: 'lifetime',
-            definitionLabel: 'total_impressions',
+            periodLabel: 'days_28',
+            definitionLabel: 'Views da conta nos últimos 28 dias',
           };
         }
       }
       
-      // Account insights unavailable (requires business account or app review)
       return {
         officialViews: null,
         availability: 'unavailable',
-        periodLabel: 'lifetime',
-        definitionLabel: 'Account insights require Instagram Business account',
+        periodLabel: 'days_28',
+        definitionLabel: 'Views da conta indisponíveis',
       };
     } catch (error) {
       this.logger.warn('Failed to get Instagram account metrics:', error);
@@ -176,20 +173,15 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     platformContentId: string,
   ): Promise<ContentMetricsResult> {
     try {
-      const insightsUrl = `${this.baseUrl}/${platformContentId}/insights?metric=impressions&access_token=${creds.accessToken}`;
+      const insightsUrl = `${this.baseUrl}/${platformContentId}/insights?metric=views&period=lifetime&access_token=${creds.accessToken}`;
       const response = await fetch(insightsUrl);
       
       if (!response.ok) {
         return { views: null, viewsAvailable: false };
       }
       
-      const data = await response.json();
-      if (data.data && data.data.length > 0) {
-        const views = data.data[0].values[0]?.value || null;
-        return { views, viewsAvailable: true };
-      }
-      
-      return { views: null, viewsAvailable: false };
+      const views = readInstagramViews(await response.json());
+      return { views, viewsAvailable: views !== null };
     } catch (error) {
       this.logger.warn(`Failed to get content metrics for ${platformContentId}:`, error);
       return { views: null, viewsAvailable: false };

@@ -1,6 +1,7 @@
-import clsx from 'clsx';
 import { Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useLayoutEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { useAuth } from '@/contexts/AuthContext';
 import { LegalLinks } from './LegalLinks';
 
@@ -14,120 +15,75 @@ const navItems = [
 
 export function AppShell() {
   const { profile, isAdmin } = useAuth();
+  const location = useLocation();
+  const apple = location.pathname.startsWith('/admin');
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = apple ? 'apple' : 'arena';
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', apple ? '#f5f5f7' : '#070b14');
+  }, [apple]);
 
   return (
-    <div className="min-h-screen bg-surface pb-24 md:pb-8">
-      <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-brand-gold">
-              Embaixadores
-            </p>
-            <h1 className="font-display text-lg text-text">Acorde Sua Mente</h1>
-          </div>
-          <div className="hidden items-center gap-2 md:flex">
-            {navItems.map((item) => (
-              <DesktopNavLink key={item.to} {...item} />
-            ))}
-            {isAdmin ? (
-              <DesktopNavLink to="/admin" label="Admin" icon={Shield} />
-            ) : null}
-          </div>
-          <div className="hidden text-right text-sm md:block">
-            <p className="font-medium text-text">
-              {profile?.publicName ?? 'Embaixador'}
-            </p>
-            <p className="text-text-muted">{profile?.email}</p>
-          </div>
+    <div className={apple ? 'shell shell-apple' : 'shell shell-arena'}>
+      <header className="shell-bar">
+        <NavLink to="/dashboard" className="shell-brand">
+          {apple ? (
+            <>
+              <BrandMark variant="icon" />
+              <span className="shell-brand-name">Embaixadores</span>
+            </>
+          ) : (
+            <BrandMark variant="wordmark" />
+          )}
+        </NavLink>
+        <nav className="shell-nav" aria-label="Navegação principal">
+          {navItems.map((item) => (
+            <NavLink key={item.to} to={item.to}>
+              <item.icon className="size-4" aria-hidden />
+              {item.label}
+            </NavLink>
+          ))}
+          {isAdmin ? (
+            <NavLink to="/admin">
+              <Shield className="size-4" aria-hidden />
+              Administração
+            </NavLink>
+          ) : null}
+        </nav>
+        <div className="shell-user">
+          <strong>{profile?.publicName ?? 'Embaixador'}</strong>
+          <span>{profile?.email}</span>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
+      <main className="shell-main">
         <Outlet />
       </main>
 
-      <footer className="mx-auto max-w-6xl border-t border-border px-4 py-6">
+      <footer className="shell-foot">
         <LegalLinks />
       </footer>
 
-      <nav
-        aria-label="Navegação principal"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface-elevated/95 backdrop-blur md:hidden"
-      >
-        <ul className="grid grid-cols-5">
+      <nav className="shell-tabbar" aria-label="Navegação principal">
+        <ul>
           {navItems.map((item) => (
             <li key={item.to}>
-              <MobileNavLink {...item} />
+              <NavLink to={item.to}>
+                <item.icon className="size-5" aria-hidden />
+                <span>{item.label}</span>
+              </NavLink>
             </li>
           ))}
         </ul>
         {isAdmin ? (
-          <NavLink
-            to="/admin"
-            className={({ isActive }) =>
-              clsx(
-                'flex items-center justify-center gap-2 border-t border-border px-4 py-2 text-xs',
-                isActive ? 'text-brand-gold' : 'text-text-muted',
-              )
-            }
-          >
+          <NavLink to="/admin" className="shell-admin-link">
             <Shield className="size-4" aria-hidden />
             Administração
           </NavLink>
         ) : null}
       </nav>
     </div>
-  );
-}
-
-function DesktopNavLink({
-  to,
-  label,
-  icon: Icon,
-}: {
-  to: string;
-  label: string;
-  icon: typeof Home;
-}) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        clsx(
-          'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-          isActive
-            ? 'bg-brand-violet/20 text-violet-100'
-            : 'text-text-muted hover:bg-surface-card hover:text-text',
-        )
-      }
-    >
-      <Icon className="size-4" aria-hidden />
-      {label}
-    </NavLink>
-  );
-}
-
-function MobileNavLink({
-  to,
-  label,
-  icon: Icon,
-}: {
-  to: string;
-  label: string;
-  icon: typeof Home;
-}) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        clsx(
-          'flex flex-col items-center gap-1 px-2 py-3 text-[11px]',
-          isActive ? 'text-brand-gold' : 'text-text-muted',
-        )
-      }
-    >
-      <Icon className="size-5" aria-hidden />
-      <span>{label}</span>
-    </NavLink>
   );
 }

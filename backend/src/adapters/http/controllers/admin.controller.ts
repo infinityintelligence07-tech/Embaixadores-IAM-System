@@ -24,6 +24,7 @@ import {
 import { ClockPort } from '../../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { ComputeAndPublishRankingUseCase } from '../../../application/rankings/compute-and-publish.use-case';
+import { daysWithoutPosting } from '../../../domain/view-metrics';
 import {
   ConnectionStatus,
   RankingCategory,
@@ -56,11 +57,17 @@ export class AdminController {
   @Get('users')
   async listUsers() {
     const memberships = await this.membershipRepo.findAll();
+    const now = this.clock.now();
+    const since = new Date(now.getTime() - 30 * 86_400_000);
+    const rhythms = await this.contentRepo.summarizePosting(since);
+    const rhythmByProfile = new Map(rhythms.map((item) => [item.profileId, item]));
     const users = [];
 
     for (const membership of memberships) {
       const profile = await this.profileRepo.findById(membership.profileId);
       if (profile && !profile.deletedAt) {
+        const rhythm = rhythmByProfile.get(profile.id);
+        const lastPublishedAt = rhythm?.lastPublishedAt ?? null;
         users.push({
           id: profile.id,
           email: profile.email,
@@ -69,6 +76,10 @@ export class AdminController {
           status: membership.status,
           role: profile.role,
           createdAt: profile.createdAt.toISOString(),
+          postsLast30Days: rhythm?.postsLast30Days ?? 0,
+          contentCount: rhythm?.contentCount ?? 0,
+          lastPublishedAt: lastPublishedAt?.toISOString() ?? null,
+          daysWithoutPosting: daysWithoutPosting(lastPublishedAt, now),
         });
       }
     }

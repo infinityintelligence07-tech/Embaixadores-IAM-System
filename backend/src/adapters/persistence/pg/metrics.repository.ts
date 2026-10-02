@@ -111,7 +111,7 @@ export class PgMetricsRepository implements MetricsRepository {
          COALESCE(MAX(c.latest_views), 0) AS best_video_views,
          (
            SELECT id 
-           FROM content_items 
+           FROM contents 
            WHERE social_account_id = sa.id 
              AND eligible = true 
              AND excluded_at IS NULL
@@ -121,7 +121,7 @@ export class PgMetricsRepository implements MetricsRepository {
            LIMIT 1
          ) AS best_content_id
        FROM social_accounts sa
-       LEFT JOIN content_items c ON c.social_account_id = sa.id
+       LEFT JOIN contents c ON c.social_account_id = sa.id
          AND c.eligible = true
          AND c.excluded_at IS NULL
          AND c.removed_on_platform = false

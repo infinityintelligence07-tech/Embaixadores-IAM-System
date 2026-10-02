@@ -1,9 +1,9 @@
-import { Instagram, RefreshCw, Trash2 } from 'lucide-react';
+import { RefreshCw, Trash2 } from 'lucide-react';
+import { CompetitionGate } from '@/components/arena/CompetitionGate';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   ApiError,
@@ -138,8 +138,6 @@ export function ConnectionsPage() {
     }
   }
 
-  const connectedPlatforms = new Set(accounts.map((a) => a.platform));
-
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -151,10 +149,10 @@ export function ConnectionsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-brand-gold">Redes</p>
         <h1 className="font-display text-3xl text-text">Conexões</h1>
-        <p className="mt-2 text-text-muted">
-          Conecte Instagram e TikTok para monitorar seus conteúdos automaticamente.
+        <p className="mt-2 max-w-[62ch] text-text-muted">
+          Para entrar na competição, conecte o Instagram e o TikTok com a sua conta.
+          Sem essa autorização, suas views não entram no ranking.
         </p>
       </header>
 
@@ -164,50 +162,14 @@ export function ConnectionsPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {(['instagram', 'tiktok'] as SocialPlatform[]).map((platform) => (
-          <article
-            key={platform}
-            className="rounded-2xl border border-border bg-surface-card p-5"
-          >
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-brand-violet/15 p-2 text-brand-violet">
-                {platform === 'instagram' ? (
-                  <Instagram className="size-5" aria-hidden />
-                ) : (
-                  <TikTokIcon />
-                )}
-              </div>
-              <div>
-                <h2 className="font-display text-lg text-text">
-                  {platformLabel(platform)}
-                </h2>
-                <p className="text-sm text-text-muted">
-                  {connectedPlatforms.has(platform)
-                    ? 'Conta vinculada'
-                    : 'Nenhuma conta conectada'}
-                </p>
-              </div>
-            </div>
-            {!connectedPlatforms.has(platform) ? (
-              <Button
-                className="mt-4 w-full"
-                loading={actionId === platform}
-                onClick={() => handleConnect(platform)}
-              >
-                Conectar {platformLabel(platform)}
-              </Button>
-            ) : null}
-          </article>
-        ))}
-      </div>
+      <CompetitionGate
+        accounts={accounts}
+        persist
+        busy={actionId === 'instagram' || actionId === 'tiktok' ? actionId : null}
+        onConnect={(platform) => void handleConnect(platform)}
+      />
 
-      {accounts.length === 0 ? (
-        <EmptyState
-          title="Nenhuma conexão ativa"
-          description="Conecte pelo menos uma rede para começar a sincronizar conteúdos."
-        />
-      ) : (
+      {accounts.length === 0 ? null : (
         <ul className="space-y-3">
           {accounts.map((account) => (
             <li
@@ -249,7 +211,7 @@ export function ConnectionsPage() {
                     aria-label={`Sincronizar ${account.username}`}
                   >
                     <RefreshCw className="size-4" aria-hidden />
-                    Sync
+                    Sincronizar
                   </Button>
                   <Button
                     variant="danger"
@@ -267,13 +229,5 @@ export function ConnectionsPage() {
         </ul>
       )}
     </div>
-  );
-}
-
-function TikTokIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" aria-hidden fill="currentColor">
-      <path d="M16.5 3c.6 3.1 2.5 5 5.5 5.3V12c-2.8-.1-5.2-1.1-7.2-2.7v7.8c0 4.2-3.4 7.6-7.6 7.6S0 21.3 0 17.1s3.4-7.6 7.6-7.6c.4 0 .8 0 1.2.1v4.3c-.3-.1-.7-.2-1.1-.2-1.8 0-3.3 1.5-3.3 3.3s1.5 3.3 3.3 3.3 3.3-1.5 3.3-3.3V3h4.5z" />
-    </svg>
   );
 }

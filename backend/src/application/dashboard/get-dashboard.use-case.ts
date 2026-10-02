@@ -67,7 +67,7 @@ export class GetDashboardUseCase {
           monitoredViewsTotal: null,
           bestVideo: null,
           officialAccountViews: null,
-          officialAccountViewsLabel: 'Not available',
+          officialAccountViewsLabel: 'Views da conta indisponíveis',
           contentCount: 0,
           lastSyncAt: null,
           connectionStatus: null,
@@ -123,9 +123,9 @@ export class GetDashboardUseCase {
               permalink: bestContent.permalink,
             }
           : null,
-        officialAccountViews: accountSnapshot?.officialViews || null,
+        officialAccountViews: accountSnapshot?.officialViews ?? null,
         officialAccountViewsLabel:
-          accountSnapshot?.definitionLabel || 'Official account views',
+          accountSnapshot?.definitionLabel || 'Views da conta',
         contentCount: contents.length,
         lastSyncAt: account.lastSyncedAt,
         connectionStatus: account.status,
@@ -136,7 +136,7 @@ export class GetDashboardUseCase {
     return {
       slices,
       rankingCriteria:
-        'Rankings are based on total views across eligible content. Best video considers only the highest-performing single video.',
+        'A ordem usa as views monitoradas de cada rede. O vídeo com mais views considera só o maior vídeo elegível.',
     };
   }
 }

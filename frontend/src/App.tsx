@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/routing/ProtectedRoute';
@@ -15,6 +16,10 @@ import { RankingsPage } from '@/pages/RankingsPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { TermsPage } from '@/pages/TermsPage';
+
+const DevPreview = import.meta.env.DEV
+  ? lazy(() => import('@/pages/PreviewPage'))
+  : null;
 
 export default function App() {
   return (
@@ -48,6 +53,17 @@ export default function App() {
           <Route path="/admin" element={<AdminPage />} />
         </Route>
       </Route>
+
+      {DevPreview ? (
+        <Route
+          path="/preview"
+          element={
+            <Suspense fallback={null}>
+              <DevPreview />
+            </Suspense>
+          }
+        />
+      ) : null}
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

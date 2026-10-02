@@ -126,6 +126,10 @@ export interface AdminUser {
   status: UserStatus;
   role: UserRole;
   createdAt: string;
+  postsLast30Days: number;
+  contentCount: number;
+  lastPublishedAt: string | null;
+  daysWithoutPosting: number | null;
 }
 
 export interface AdminSyncJob {

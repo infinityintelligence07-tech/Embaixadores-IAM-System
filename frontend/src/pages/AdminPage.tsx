@@ -1,7 +1,5 @@
-import { RefreshCw, Settings, Shield, UserCheck, UserX } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
@@ -13,24 +11,73 @@ import {
   type AdminSyncJob,
   type AdminUser,
   type SocialPlatform,
+  type UserStatus,
 } from '@/lib/api';
+import '@/components/admin/admin.css';
 
-function syncStatusTone(
-  status: AdminSyncJob['status'],
-): 'success' | 'warning' | 'danger' | 'neutral' {
+type AdminSection = 'pessoas' | 'sincronizacao' | 'regras' | 'conteudo' | 'auditoria';
+
+export interface AdminPreview {
+  users: AdminUser[];
+  syncs: AdminSyncJob[];
+  audit: AdminAuditEntry[];
+  settings: AdminSettings;
+}
+
+const sections: { id: AdminSection; label: string }[] = [
+  { id: 'pessoas', label: 'Pessoas' },
+  { id: 'sincronizacao', label: 'Sincronização' },
+  { id: 'regras', label: 'Regras' },
+  { id: 'conteudo', label: 'Conteúdo' },
+  { id: 'auditoria', label: 'Auditoria' },
+];
+
+function postingLine(user: AdminUser): string {
+  const posts = user.postsLast30Days ?? 0;
+  const frequency =
+    posts === 0
+      ? 'Nenhum post nos últimos 30 dias'
+      : posts === 1
+        ? '1 post nos últimos 30 dias'
+        : `${posts} posts nos últimos 30 dias`;
+  if (user.daysWithoutPosting == null) {
+    return `${frequency}. Ainda não há post sincronizado.`;
+  }
+  if (user.daysWithoutPosting === 0) {
+    return `${frequency}. Postou hoje.`;
+  }
+  if (user.daysWithoutPosting === 1) {
+    return `${frequency}. Há 1 dia sem postar.`;
+  }
+  return `${frequency}. Há ${user.daysWithoutPosting} dias sem postar.`;
+}
+
+function statusLabel(status: UserStatus): string {
   switch (status) {
-    case 'succeeded':
-      return 'success';
-    case 'failed':
-      return 'danger';
-    case 'running':
+    case 'approved':
+      return 'Aprovado';
     case 'pending':
-      return 'warning';
-    case 'cancelled':
-      return 'neutral';
+      return 'Pendente';
+    case 'suspended':
+      return 'Suspenso';
     default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+function statusTone(status: UserStatus): 'ok' | 'wait' | 'stop' {
+  switch (status) {
+    case 'approved':
+      return 'ok';
+    case 'pending':
+      return 'wait';
+    case 'suspended':
+      return 'stop';
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
     }
   }
 }
@@ -48,23 +95,33 @@ function syncStatusLabel(status: AdminSyncJob['status']): string {
     case 'cancelled':
       return 'Cancelada';
     default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
+      const exhaustive: never = status;
+      return exhaustive;
     }
   }
 }
 
-export function AdminPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [syncs, setSyncs] = useState<AdminSyncJob[]>([]);
-  const [audit, setAudit] = useState<AdminAuditEntry[]>([]);
-  const [settings, setSettings] = useState<AdminSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+function platformName(platform: SocialPlatform): string {
+  return platform === 'instagram' ? 'Instagram' : 'TikTok';
+}
+
+export function AdminPage({ preview }: { preview?: AdminPreview }) {
+  const [section, setSection] = useState<AdminSection>('pessoas');
+  const [peopleOrder, setPeopleOrder] = useState<'posts' | 'silence'>('posts');
+  const [users, setUsers] = useState<AdminUser[]>(preview?.users ?? []);
+  const [syncs, setSyncs] = useState<AdminSyncJob[]>(preview?.syncs ?? []);
+  const [audit, setAudit] = useState<AdminAuditEntry[]>(preview?.audit ?? []);
+  const [settings, setSettings] = useState<AdminSettings | null>(preview?.settings ?? null);
+  const [loading, setLoading] = useState(!preview);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
+    if (preview) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -79,11 +136,11 @@ export function AdminPage() {
       setAudit(auditData);
       setSettings(settingsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar painel admin.');
+      setError(err instanceof Error ? err.message : 'Erro ao carregar a administração.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [preview]);
 
   useEffect(() => {
     void loadAll();
@@ -92,9 +149,15 @@ export function AdminPage() {
   async function handleApprove(id: string) {
     setActionLoading(id);
     try {
-      await api.adminApproveUser(id);
+      if (preview) {
+        setUsers((current) =>
+          current.map((user) => (user.id === id ? { ...user, status: 'approved' } : user)),
+        );
+      } else {
+        await api.adminApproveUser(id);
+        await loadAll();
+      }
       setMessage('Usuário aprovado.');
-      await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao aprovar.');
     } finally {
@@ -106,9 +169,15 @@ export function AdminPage() {
     if (!window.confirm('Suspender este usuário?')) return;
     setActionLoading(id);
     try {
-      await api.adminSuspendUser(id);
+      if (preview) {
+        setUsers((current) =>
+          current.map((user) => (user.id === id ? { ...user, status: 'suspended' } : user)),
+        );
+      } else {
+        await api.adminSuspendUser(id);
+        await loadAll();
+      }
       setMessage('Usuário suspenso.');
-      await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao suspender.');
     } finally {
@@ -120,11 +189,13 @@ export function AdminPage() {
     const key = `${userId}-${platform}`;
     setActionLoading(key);
     try {
-      await api.adminRequestSync(userId, platform);
+      if (!preview) {
+        await api.adminRequestSync(userId, platform);
+        await loadAll();
+      }
       setMessage('Sincronização solicitada.');
-      await loadAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao solicitar sync.');
+      setError(err instanceof Error ? err.message : 'Falha ao solicitar sincronização.');
     } finally {
       setActionLoading(null);
     }
@@ -134,9 +205,11 @@ export function AdminPage() {
     if (!contentId.trim() || !reason.trim()) return;
     setActionLoading(`exclude-${contentId}`);
     try {
-      await api.adminExcludeContent(contentId.trim(), reason.trim());
+      if (!preview) {
+        await api.adminExcludeContent(contentId.trim(), reason.trim());
+        await loadAll();
+      }
       setMessage('Conteúdo excluído do ranking.');
-      await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao excluir conteúdo.');
     } finally {
@@ -147,9 +220,11 @@ export function AdminPage() {
   async function handleRecalculate() {
     setActionLoading('recalculate');
     try {
-      await api.adminRecalculateRankings();
+      if (!preview) {
+        await api.adminRecalculateRankings();
+        await loadAll();
+      }
       setMessage('Recálculo de rankings iniciado.');
-      await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha no recálculo.');
     } finally {
@@ -160,13 +235,16 @@ export function AdminPage() {
   async function handleSettingsSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!settings) return;
-
     setActionLoading('settings');
     try {
-      const updated = await api.adminUpdateSettings(settings);
-      setSettings(updated);
-      setMessage('Configurações salvas.');
-      await loadAll();
+      if (preview) {
+        setMessage('Configurações salvas.');
+      } else {
+        const updated = await api.adminUpdateSettings(settings);
+        setSettings(updated);
+        setMessage('Configurações salvas.');
+        await loadAll();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao salvar configurações.');
     } finally {
@@ -183,14 +261,11 @@ export function AdminPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="admin">
       <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-brand-gold">
-          Administração
-        </p>
-        <h1 className="font-display text-3xl text-text">Painel administrativo</h1>
-        <p className="mt-2 text-text-muted">
-          Aprove embaixadores, gerencie sincronizações e configure o programa.
+        <h1 className="admin-title">Administração</h1>
+        <p className="admin-lead">
+          Aprove embaixadores, acompanhe a sincronização e ajuste as regras do programa.
         </p>
       </header>
 
@@ -201,209 +276,229 @@ export function AdminPage() {
       ) : null}
       {message ? <Alert variant="success">{message}</Alert> : null}
 
-      <section className="rounded-2xl border border-border bg-surface-card p-5">
-        <div className="flex items-center gap-2">
-          <Shield className="size-5 text-brand-gold" aria-hidden />
-          <h2 className="font-display text-xl text-text">Usuários</h2>
-        </div>
-        {users.length === 0 ? (
-          <EmptyState title="Nenhum usuário" description="Lista vazia no momento." />
-        ) : (
-          <ul className="mt-4 space-y-3">
-            {users.map((user) => (
-              <li
-                key={user.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-elevated p-3"
-              >
-                <div>
-                  <p className="font-medium text-text">
-                    {user.publicName}{' '}
-                    <span className="text-sm font-normal text-text-muted">
-                      ({user.fullName})
-                    </span>{' '}
-                    <Badge
-                      tone={
-                        user.status === 'approved'
-                          ? 'success'
-                          : user.status === 'pending'
-                            ? 'warning'
-                            : 'danger'
-                      }
+      <div className="admin-layout">
+        <nav className="admin-nav" aria-label="Seções da administração">
+          {sections.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={section === item.id ? 'page' : undefined}
+              onClick={() => setSection(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {section === 'pessoas' ? (
+          <section className="admin-panel" aria-label="Pessoas">
+            <h2>Embaixadores</h2>
+            <div className="admin-row">
+              <div className="admin-actions">
+                <button
+                  type="button"
+                  aria-pressed={peopleOrder === 'posts'}
+                  onClick={() => setPeopleOrder('posts')}
+                >
+                  Quem posta mais
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={peopleOrder === 'silence'}
+                  onClick={() => setPeopleOrder('silence')}
+                >
+                  Mais tempo sem postar
+                </button>
+              </div>
+            </div>
+            {users.length === 0 ? (
+              <EmptyState title="Nenhuma pessoa" description="A lista está vazia no momento." />
+            ) : (
+              [...users]
+                .sort((a, b) =>
+                  peopleOrder === 'posts'
+                    ? (b.postsLast30Days ?? 0) - (a.postsLast30Days ?? 0)
+                    : (b.daysWithoutPosting ?? -1) - (a.daysWithoutPosting ?? -1),
+                )
+                .map((user) => (
+                <article key={user.id} className="admin-row">
+                  <div className="admin-person">
+                    <strong>
+                      {user.publicName}
+                      <span className="admin-status" data-tone={statusTone(user.status)}>
+                        <i />
+                        {statusLabel(user.status)}
+                      </span>
+                    </strong>
+                    <span>
+                      {user.fullName} · {user.email}
+                    </span>
+                    <span>{postingLine(user)}</span>
+                  </div>
+                  <div className="admin-actions">
+                    {user.status !== 'approved' ? (
+                      <button
+                        type="button"
+                        className="is-go"
+                        disabled={actionLoading === user.id}
+                        onClick={() => void handleApprove(user.id)}
+                      >
+                        Aprovar
+                      </button>
+                    ) : null}
+                    {user.status !== 'suspended' ? (
+                      <button
+                        type="button"
+                        className="is-stop"
+                        disabled={actionLoading === user.id}
+                        onClick={() => void handleSuspend(user.id)}
+                      >
+                        Suspender
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={actionLoading === `${user.id}-instagram`}
+                      onClick={() => void handleRequestSync(user.id, 'instagram')}
                     >
-                      {user.status}
-                    </Badge>
-                  </p>
-                  <p className="text-sm text-text-muted">{user.email}</p>
-                </div>
-                <div className="flex gap-2">
-                  {user.status !== 'approved' ? (
-                    <Button
-                      size="sm"
-                      loading={actionLoading === user.id}
-                      onClick={() => handleApprove(user.id)}
+                      Sincronizar Instagram
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actionLoading === `${user.id}-tiktok`}
+                      onClick={() => void handleRequestSync(user.id, 'tiktok')}
                     >
-                      <UserCheck className="size-4" aria-hidden />
-                      Aprovar
-                    </Button>
-                  ) : null}
-                  {user.status !== 'suspended' ? (
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      loading={actionLoading === user.id}
-                      onClick={() => handleSuspend(user.id)}
-                    >
-                      <UserX className="size-4" aria-hidden />
-                      Suspender
-                    </Button>
-                  ) : null}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    loading={actionLoading === `${user.id}-instagram`}
-                    onClick={() => handleRequestSync(user.id, 'instagram')}
-                  >
-                    Sync IG
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    loading={actionLoading === `${user.id}-tiktok`}
-                    onClick={() => handleRequestSync(user.id, 'tiktok')}
-                  >
-                    Sync TT
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                      Sincronizar TikTok
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+        ) : null}
 
-      <ExcludeContentSection
-        onExclude={handleExcludeContent}
-        loadingId={actionLoading}
-      />
-
-      <section className="rounded-2xl border border-border bg-surface-card p-5">
-        <div className="flex items-center gap-2">
-          <RefreshCw className="size-5 text-brand-gold" aria-hidden />
-          <h2 className="font-display text-xl text-text">Sincronizações</h2>
-        </div>
-        {syncs.length === 0 ? (
-          <p className="mt-3 text-sm text-text-muted">Nenhuma sincronização registrada.</p>
-        ) : (
-          <ul className="mt-4 space-y-2">
-            {syncs.map((job) => (
-              <li
-                key={job.id}
-                className="rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm"
+        {section === 'sincronizacao' ? (
+          <section className="admin-panel" aria-label="Sincronização">
+            <h2>Coletas recentes</h2>
+            {syncs.length === 0 ? (
+              <p className="admin-row admin-meta">Nenhuma sincronização registrada.</p>
+            ) : (
+              syncs.map((job) => (
+                <article key={job.id} className="admin-row">
+                  <div className="admin-person">
+                    <strong>
+                      {platformName(job.platform)}
+                      <span className="admin-status" data-tone={job.status === 'failed' ? 'stop' : job.status === 'succeeded' ? 'ok' : 'wait'}>
+                        <i />
+                        {syncStatusLabel(job.status)}
+                      </span>
+                    </strong>
+                    <span>Perfil {job.profileId}</span>
+                    {job.errorMessage ? <span>{job.errorMessage}</span> : null}
+                  </div>
+                </article>
+              ))
+            )}
+            <div className="admin-row">
+              <button
+                type="button"
+                className="admin-primary"
+                disabled={actionLoading === 'recalculate'}
+                onClick={() => void handleRecalculate()}
               >
-                <span className="font-medium text-text">
-                  {job.platform} · perfil {job.profileId}
-                </span>
-                <Badge tone={syncStatusTone(job.status)} className="ml-2">
-                  {syncStatusLabel(job.status)}
-                </Badge>
-                {job.errorMessage ? (
-                  <p className="mt-1 text-red-300">{job.errorMessage}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-        <Button
-          className="mt-4"
-          variant="secondary"
-          loading={actionLoading === 'recalculate'}
-          onClick={handleRecalculate}
-        >
-          Recalcular rankings
-        </Button>
-      </section>
+                Recalcular rankings
+              </button>
+            </div>
+          </section>
+        ) : null}
 
-      <section className="rounded-2xl border border-border bg-surface-card p-5">
-        <div className="flex items-center gap-2">
-          <Settings className="size-5 text-brand-gold" aria-hidden />
-          <h2 className="font-display text-xl text-text">Configurações</h2>
-        </div>
-        {settings ? (
-          <form onSubmit={handleSettingsSubmit} className="mt-4 space-y-4">
-            <Input
-              label="Intervalo de sync automático (minutos)"
-              name="syncIntervalMinutes"
-              type="number"
-              min={1}
-              value={String(settings.syncIntervalMinutes)}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  syncIntervalMinutes: Number(e.target.value),
-                })
-              }
-            />
-            <Input
-              label="Tolerância de dados desatualizados (horas)"
-              name="staleToleranceHours"
-              type="number"
-              min={1}
-              value={String(settings.staleToleranceHours)}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  staleToleranceHours: Number(e.target.value),
-                })
-              }
-            />
-            <Input
-              label="Cooldown de sync manual (segundos)"
-              name="manualSyncCooldownSeconds"
-              type="number"
-              min={0}
-              value={String(settings.manualSyncCooldownSeconds)}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  manualSyncCooldownSeconds: Number(e.target.value),
-                })
-              }
-            />
-            <Button type="submit" loading={actionLoading === 'settings'}>
-              Salvar configurações
-            </Button>
-          </form>
-        ) : (
-          <p className="mt-3 text-sm text-text-muted">Configurações indisponíveis.</p>
-        )}
-      </section>
+        {section === 'regras' ? (
+          <section className="admin-panel" aria-label="Regras">
+            <h2>Programa</h2>
+            {settings ? (
+              <form className="admin-form" onSubmit={(event) => void handleSettingsSubmit(event)}>
+                <Input
+                  label="Intervalo de sincronização automática (minutos)"
+                  name="syncIntervalMinutes"
+                  type="number"
+                  min={1}
+                  value={String(settings.syncIntervalMinutes)}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      syncIntervalMinutes: Number(event.target.value),
+                    })
+                  }
+                />
+                <Input
+                  label="Tolerância de dados desatualizados (horas)"
+                  name="staleToleranceHours"
+                  type="number"
+                  min={1}
+                  value={String(settings.staleToleranceHours)}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      staleToleranceHours: Number(event.target.value),
+                    })
+                  }
+                />
+                <Input
+                  label="Espera para sincronizar de novo (segundos)"
+                  name="manualSyncCooldownSeconds"
+                  type="number"
+                  min={0}
+                  value={String(settings.manualSyncCooldownSeconds)}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      manualSyncCooldownSeconds: Number(event.target.value),
+                    })
+                  }
+                />
+                <Button type="submit" loading={actionLoading === 'settings'}>
+                  Salvar regras
+                </Button>
+              </form>
+            ) : (
+              <p className="admin-row admin-meta">Regras indisponíveis.</p>
+            )}
+          </section>
+        ) : null}
 
-      <section className="rounded-2xl border border-border bg-surface-card p-5">
-        <h2 className="font-display text-xl text-text">Trilha de auditoria</h2>
-        {audit.length === 0 ? (
-          <p className="mt-3 text-sm text-text-muted">Nenhum evento registrado.</p>
-        ) : (
-          <ul className="mt-4 space-y-2">
-            {audit.map((entry) => (
-              <li
-                key={entry.id}
-                className="rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm"
-              >
-                <p className="font-medium text-text">{entry.action}</p>
-                <p className="text-text-muted">
-                  {entry.actorId ? `Ator: ${entry.actorId}` : 'Sistema'} ·{' '}
-                  {entry.entityType}
-                  {entry.entityId ? `: ${entry.entityId}` : ''}
-                  {entry.reason ? ` · Motivo: ${entry.reason}` : ''} ·{' '}
-                  {new Intl.DateTimeFormat('pt-BR', {
-                    dateStyle: 'short',
-                    timeStyle: 'short',
-                  }).format(new Date(entry.createdAt))}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        {section === 'conteudo' ? (
+          <ExcludeContentSection
+            onExclude={handleExcludeContent}
+            loadingId={actionLoading}
+          />
+        ) : null}
+
+        {section === 'auditoria' ? (
+          <section className="admin-panel" aria-label="Auditoria">
+            <h2>Trilha</h2>
+            {audit.length === 0 ? (
+              <p className="admin-row admin-meta">Nenhum evento registrado.</p>
+            ) : (
+              audit.map((entry) => (
+                <article key={entry.id} className="admin-row">
+                  <div className="admin-person">
+                    <strong>{entry.action}</strong>
+                    <span>
+                      {entry.actorId ? `Ator ${entry.actorId}` : 'Sistema'} · {entry.entityType}
+                      {entry.entityId ? ` ${entry.entityId}` : ''}
+                      {entry.reason ? ` · ${entry.reason}` : ''} ·{' '}
+                      {new Intl.DateTimeFormat('pt-BR', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      }).format(new Date(entry.createdAt))}
+                    </span>
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -419,42 +514,41 @@ function ExcludeContentSection({
   const [reason, setReason] = useState('');
 
   return (
-    <section className="rounded-2xl border border-border bg-surface-card p-5">
-      <h2 className="font-display text-xl text-text">Excluir conteúdo</h2>
-      <p className="mt-1 text-sm text-text-muted">
-        Remove um conteúdo do cálculo do ranking pelo identificador, com motivo registrado.
-      </p>
+    <section className="admin-panel" aria-label="Conteúdo">
+      <h2>Excluir do ranking</h2>
       <form
-        className="mt-4 space-y-4"
+        className="admin-form"
         onSubmit={(event) => {
           event.preventDefault();
           onExclude(contentId, reason);
         }}
       >
+        <p className="admin-meta">
+          Remove um conteúdo do cálculo pelo identificador, com o motivo registrado na auditoria.
+        </p>
         <Input
-          label="ID do conteúdo"
+          label="Identificador do conteúdo"
           name="contentId"
           value={contentId}
-          onChange={(e) => setContentId(e.target.value)}
-          placeholder="uuid-do-conteudo"
+          onChange={(event) => setContentId(event.target.value)}
+          placeholder="Identificador"
           required
         />
         <Input
           label="Motivo da exclusão"
           name="reason"
           value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          onChange={(event) => setReason(event.target.value)}
           placeholder="Descreva o motivo"
           required
         />
-        <Button
+        <button
           type="submit"
-          variant="danger"
-          loading={loadingId === `exclude-${contentId}` && Boolean(contentId)}
-          disabled={!contentId.trim() || !reason.trim()}
+          className="is-stop"
+          disabled={!contentId.trim() || !reason.trim() || loadingId === `exclude-${contentId}`}
         >
           Excluir do ranking
-        </Button>
+        </button>
       </form>
     </section>
   );

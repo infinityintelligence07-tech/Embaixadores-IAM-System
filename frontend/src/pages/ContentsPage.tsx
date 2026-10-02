@@ -61,9 +61,6 @@ export function ContentsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-brand-gold">
-          Monitoramento
-        </p>
         <h1 className="font-display text-3xl text-text">Conteúdos</h1>
         <p className="mt-2 text-text-muted">
           Lista de publicações monitoradas nas suas redes conectadas.

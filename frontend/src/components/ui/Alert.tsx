@@ -11,10 +11,10 @@ interface AlertProps {
 }
 
 const variantClasses: Record<AlertVariant, string> = {
-  info: 'border-brand-violet/40 bg-brand-violet/10 text-violet-100',
-  success: 'border-success/40 bg-success/10 text-green-100',
-  warning: 'border-warning/40 bg-warning/10 text-amber-100',
-  error: 'border-danger/40 bg-danger/10 text-red-100',
+  info: 'border-[var(--line)] bg-[var(--accent-soft)] text-[var(--ink)]',
+  success: 'border-transparent bg-[var(--good-soft)] text-[var(--ink)]',
+  warning: 'border-transparent bg-[var(--warn-soft)] text-[var(--ink)]',
+  error: 'border-transparent bg-[var(--bad-soft)] text-[var(--ink)]',
 };
 
 export function Alert({

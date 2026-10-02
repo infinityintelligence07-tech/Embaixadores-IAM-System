@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import '@/components/arena/arena.css';
 
 const steps = [
   {
@@ -17,8 +18,9 @@ const steps = [
   },
   {
     id: 'connections',
-    title: 'Conecte suas redes',
-    description: 'Vincule Instagram e/ou TikTok para monitorar seus conteúdos.',
+    title: 'Entre na competição',
+    description:
+      'Conecte o Instagram e o TikTok com a sua conta. Sem essa autorização, suas views não entram no ranking.',
     icon: Link2,
   },
   {
@@ -71,9 +73,6 @@ export function OnboardingPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
-        <p className="text-xs uppercase tracking-[0.2em] text-brand-gold">
-          Boas-vindas
-        </p>
         <h1 className="font-display text-3xl text-text">Guia de onboarding</h1>
         <p className="mt-2 text-text-muted">
           Siga os passos abaixo para começar a participar do programa.
@@ -106,10 +105,8 @@ export function OnboardingPage() {
                 <h2 className="font-display text-lg text-text">{step.title}</h2>
                 <p className="mt-1 text-sm text-text-muted">{step.description}</p>
                 {step.id === 'connections' ? (
-                  <Link to="/conexoes" className="mt-3 inline-block">
-                    <Button type="button" variant="secondary" size="sm">
-                      Conectar redes
-                    </Button>
+                  <Link to="/conexoes" className="cta mt-3">
+                    Conectar Instagram e TikTok
                   </Link>
                 ) : null}
               </div>

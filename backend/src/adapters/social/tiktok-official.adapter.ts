@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { readTikTokViewCount } from '../../domain/view-metrics';
 import {
   SocialMetricsProvider,
   SocialCredentials,
@@ -103,8 +104,8 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
       permalink: video.share_url || null,
       publishedAt: video.create_time ? new Date(video.create_time * 1000) : null,
       mediaType: 'video',
-      views: video.view_count || null,
-      viewsAvailable: true,
+      views: readTikTokViewCount(video.view_count),
+      viewsAvailable: video.view_count !== undefined && video.view_count !== null,
     }));
     
     return {
@@ -118,7 +119,7 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
     return {
       officialViews: null,
       availability: 'unavailable',
-      definitionLabel: 'Account views unavailable in TikTok Display API',
+      definitionLabel: 'Views da conta indisponíveis no TikTok',
     };
   }
   
@@ -128,7 +129,7 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
   ): Promise<ContentMetricsResult> {
     try {
       // Fetch single video details
-      const url = `${this.baseUrl}/v2/video/list/?fields=id,view_count`;
+      const url = `${this.baseUrl}/v2/video/query/?fields=id,view_count`;
       
       const response = await fetch(url, {
         method: 'POST',
@@ -136,7 +137,9 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
           Authorization: `Bearer ${creds.accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ max_count: 20 }),
+        body: JSON.stringify({
+          filters: { video_ids: [platformContentId] },
+        }),
       });
       
       if (!response.ok) {
@@ -144,17 +147,11 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
       }
       
       const data = await response.json();
-      const videos = data.data?.videos || [];
-      const video = videos.find((v: any) => v.id === platformContentId);
-      
-      if (video) {
-        return {
-          views: video.view_count || null,
-          viewsAvailable: true,
-        };
-      }
-      
-      return { views: null, viewsAvailable: false };
+      const video = (data.data?.videos || []).find(
+        (item: { id?: string }) => item.id === platformContentId,
+      );
+      const views = readTikTokViewCount(video?.view_count);
+      return { views, viewsAvailable: views !== null };
     } catch (error) {
       this.logger.warn(`Failed to get TikTok content metrics for ${platformContentId}:`, error);
       return { views: null, viewsAvailable: false };

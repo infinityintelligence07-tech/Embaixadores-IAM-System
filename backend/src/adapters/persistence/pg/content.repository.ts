@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Pool } from 'pg';
 import {
   ContentRepository,
+  PostingRhythm,
   UpsertContentInput,
 } from '../../../ports/repositories.port';
 import { ContentItem } from '../../../domain/entities';
@@ -26,7 +27,7 @@ export class PgContentRepository implements ContentRepository {
   
   async findById(id: ContentId): Promise<ContentItem | null> {
     const result = await this.pool.query(
-      `SELECT * FROM content_items WHERE id = $1`,
+      `SELECT * FROM contents WHERE id = $1`,
       [id],
     );
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
@@ -37,7 +38,7 @@ export class PgContentRepository implements ContentRepository {
     platformContentId: string,
   ): Promise<ContentItem | null> {
     const result = await this.pool.query(
-      `SELECT * FROM content_items WHERE platform = $1 AND platform_content_id = $2`,
+      `SELECT * FROM contents WHERE platform = $1 AND platform_content_id = $2`,
       [platform, platformContentId],
     );
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
@@ -47,7 +48,7 @@ export class PgContentRepository implements ContentRepository {
     socialAccountId: SocialAccountId,
   ): Promise<ContentItem[]> {
     const result = await this.pool.query(
-      `SELECT * FROM content_items 
+      `SELECT * FROM contents 
        WHERE social_account_id = $1 
          AND eligible = true 
          AND excluded_at IS NULL
@@ -57,28 +58,59 @@ export class PgContentRepository implements ContentRepository {
     );
     return result.rows.map(row => this.mapRow(row));
   }
+
+  async summarizePosting(since: Date): Promise<PostingRhythm[]> {
+    const result = await this.pool.query(
+      `SELECT
+         sa.profile_id,
+         COUNT(c.id) FILTER (
+           WHERE c.published_at >= $1
+             AND c.removed_on_platform = false
+             AND c.excluded_at IS NULL
+         )::int AS posts_last_30_days,
+         COUNT(c.id) FILTER (
+           WHERE c.removed_on_platform = false
+             AND c.excluded_at IS NULL
+         )::int AS content_count,
+         MAX(c.published_at) FILTER (
+           WHERE c.removed_on_platform = false
+             AND c.excluded_at IS NULL
+         ) AS last_published_at
+       FROM social_accounts sa
+       LEFT JOIN contents c ON c.social_account_id = sa.id
+       GROUP BY sa.profile_id`,
+      [since],
+    );
+
+    return result.rows.map((row) => ({
+      profileId: asProfileId(row.profile_id),
+      postsLast30Days: Number(row.posts_last_30_days) || 0,
+      contentCount: Number(row.content_count) || 0,
+      lastPublishedAt: row.last_published_at ? new Date(row.last_published_at) : null,
+    }));
+  }
   
   async upsert(input: UpsertContentInput): Promise<ContentItem> {
     // CRITICAL: Never overwrite valid latest_views with null on API failure
     const result = await this.pool.query(
-      `INSERT INTO content_items (
+      `INSERT INTO contents (
         social_account_id, platform, platform_content_id, title, thumbnail_url,
         permalink, published_at, media_type, latest_views, latest_views_collected_at
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (platform, platform_content_id) DO UPDATE SET
-        title = COALESCE($4, content_items.title),
-        thumbnail_url = COALESCE($5, content_items.thumbnail_url),
-        permalink = COALESCE($6, content_items.permalink),
-        published_at = COALESCE($7, content_items.published_at),
-        media_type = COALESCE($8, content_items.media_type),
+        title = COALESCE($4, contents.title),
+        thumbnail_url = COALESCE($5, contents.thumbnail_url),
+        permalink = COALESCE($6, contents.permalink),
+        published_at = COALESCE($7, contents.published_at),
+        media_type = COALESCE($8, contents.media_type),
         latest_views = CASE 
           WHEN $9 IS NOT NULL THEN $9
-          ELSE content_items.latest_views
+          ELSE contents.latest_views
         END,
         latest_views_collected_at = CASE 
           WHEN $10 IS NOT NULL THEN $10
-          ELSE content_items.latest_views_collected_at
+          ELSE contents.latest_views_collected_at
         END,
         updated_at = NOW()
       RETURNING *`,
@@ -100,7 +132,7 @@ export class PgContentRepository implements ContentRepository {
   
   async markRemoved(id: ContentId): Promise<void> {
     await this.pool.query(
-      `UPDATE content_items SET removed_on_platform = true, updated_at = NOW() WHERE id = $1`,
+      `UPDATE contents SET removed_on_platform = true, updated_at = NOW() WHERE id = $1`,
       [id],
     );
   }
@@ -112,7 +144,7 @@ export class PgContentRepository implements ContentRepository {
     excludedAt: Date,
   ): Promise<ContentItem> {
     const result = await this.pool.query(
-      `UPDATE content_items
+      `UPDATE contents
        SET excluded_at = $2,
            exclusion_reason = $3,
            excluded_by = $4,
@@ -127,7 +159,7 @@ export class PgContentRepository implements ContentRepository {
   
   async restore(id: ContentId): Promise<ContentItem> {
     const result = await this.pool.query(
-      `UPDATE content_items
+      `UPDATE contents
        SET excluded_at = NULL,
            exclusion_reason = NULL,
            excluded_by = NULL,

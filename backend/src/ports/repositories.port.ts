@@ -159,6 +159,13 @@ export interface UpsertContentInput {
   latestViewsCollectedAt: Date | null;
 }
 
+export interface PostingRhythm {
+  profileId: ProfileId;
+  postsLast30Days: number;
+  contentCount: number;
+  lastPublishedAt: Date | null;
+}
+
 export interface ContentRepository {
   findById(id: ContentId): Promise<ContentItem | null>;
   findByPlatformContentId(
@@ -166,6 +173,7 @@ export interface ContentRepository {
     platformContentId: string,
   ): Promise<ContentItem | null>;
   findEligibleByAccount(socialAccountId: SocialAccountId): Promise<ContentItem[]>;
+  summarizePosting(since: Date): Promise<PostingRhythm[]>;
   upsert(input: UpsertContentInput): Promise<ContentItem>;
   markRemoved(id: ContentId): Promise<void>;
   exclude(

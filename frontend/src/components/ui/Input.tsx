@@ -38,7 +38,7 @@ export function Input({
           }
           className={clsx(
             'w-full rounded-xl border bg-surface-elevated px-3 py-2.5 text-sm text-text placeholder:text-text-muted',
-            'border-border focus:border-brand-violet',
+            'border-border',
             leading && 'pl-10',
             error && 'border-danger',
             className,
@@ -52,7 +52,7 @@ export function Input({
         </p>
       ) : null}
       {error ? (
-        <p id={`${inputId}-error`} role="alert" className="text-xs text-red-300">
+        <p id={`${inputId}-error`} role="alert" className="text-xs text-[var(--bad)]">
           {error}
         </p>
       ) : null}
