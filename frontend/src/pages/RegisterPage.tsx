@@ -109,6 +109,18 @@ export function RegisterPage() {
             leading={<Lock className="size-4" aria-hidden />}
           />
 
+          <p className="text-xs text-text-muted">
+            Ao se cadastrar, você concorda com os{' '}
+            <Link to="/termos" className="text-brand-gold underline-offset-4 hover:underline">
+              Termos de Uso
+            </Link>{' '}
+            e a{' '}
+            <Link to="/privacidade" className="text-brand-gold underline-offset-4 hover:underline">
+              Política de Privacidade
+            </Link>
+            .
+          </p>
+
           <Button type="submit" className="w-full" loading={loading}>
             Cadastrar
           </Button>

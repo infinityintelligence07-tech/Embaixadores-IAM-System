@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { LegalLinks } from './LegalLinks';
 
 export function AuthLayout({
   title,
@@ -22,6 +23,7 @@ export function AuthLayout({
         <div className="rounded-2xl border border-border bg-surface-card p-6 shadow-xl shadow-black/20">
           {children}
         </div>
+        <LegalLinks className="mt-6" />
       </div>
     </div>
   );

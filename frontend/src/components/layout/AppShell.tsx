@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { LegalLinks } from './LegalLinks';
 
 const navItems = [
   { to: '/dashboard', label: 'Início', icon: Home },
@@ -44,6 +45,10 @@ export function AppShell() {
       <main className="mx-auto max-w-6xl px-4 py-6">
         <Outlet />
       </main>
+
+      <footer className="mx-auto max-w-6xl border-t border-border px-4 py-6">
+        <LegalLinks />
+      </footer>
 
       <nav
         aria-label="Navegação principal"
