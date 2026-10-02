@@ -17,7 +17,7 @@ No painel Cloudflare do domínio `iamcontrol.com.br`:
 
 | Tipo | Nome | Conteúdo | Proxy |
 |---|---|---|---|
-| A | `embaixadores` | `<IP_PUBLICO_DA_VPS>` | Proxied (laranja) |
+| A | `area.embaixadores` | `<IP_PUBLICO_DA_VPS>` | DNS only (cinza) — o Universal SSL gratuito não cobre subdomínio de 2º nível |
 
 SSL/TLS → **Full (Strict)** após o certificado na origem (Let's Encrypt via Nginx ou Traefik).
 
@@ -67,7 +67,7 @@ Aplicar também o SQL em `supabase/migrations/` via Supabase CLI ou SQL Editor (
 Com o `docker/nginx/nginx.conf` e Certbot (ou certificado Hostinger):
 
 ```bash
-certbot --nginx -d embaixadores.iamcontrol.com.br
+certbot --nginx -d area.embaixadores.iamcontrol.com.br
 ```
 
 Cloudflare Full (Strict) exige certificado válido na origem.
@@ -108,9 +108,9 @@ Docker logging driver `json-file` com `max-size` / `max-file` (ver `docker-compo
 
 ## URLs de produção a registrar
 
-- Site: `https://embaixadores.iamcontrol.com.br`
-- API health: `https://embaixadores.iamcontrol.com.br/api/health`
-- Auth callback: `https://embaixadores.iamcontrol.com.br/auth/callback`
-- Reset senha: `https://embaixadores.iamcontrol.com.br/auth/reset`
-- IG OAuth: `https://embaixadores.iamcontrol.com.br/api/social/oauth/instagram/callback`
-- TT OAuth: `https://embaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback`
+- Site: `https://area.embaixadores.iamcontrol.com.br`
+- API health: `https://area.embaixadores.iamcontrol.com.br/api/health`
+- Auth callback: `https://area.embaixadores.iamcontrol.com.br/auth/callback`
+- Reset senha: `https://area.embaixadores.iamcontrol.com.br/auth/reset`
+- IG OAuth: `https://area.embaixadores.iamcontrol.com.br/api/social/oauth/instagram/callback`
+- TT OAuth: `https://area.embaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback`

@@ -74,13 +74,13 @@ Cada chamada usa as credenciais criptografadas do **embaixador dono** da conta (
 
 ## URLs de callback (produção)
 
-Base: `https://embaixadores.iamcontrol.com.br`
+Base: `https://area.embaixadores.iamcontrol.com.br`
 
 | Fluxo | URL |
 |---|---|
-| Confirmação de e-mail (Supabase) | `https://embaixadores.iamcontrol.com.br/auth/callback` |
-| Recuperação de senha | `https://embaixadores.iamcontrol.com.br/auth/reset` |
-| OAuth Instagram | `https://embaixadores.iamcontrol.com.br/api/social/oauth/instagram/callback` |
-| OAuth TikTok | `https://embaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback` |
+| Confirmação de e-mail (Supabase) | `https://area.embaixadores.iamcontrol.com.br/auth/callback` |
+| Recuperação de senha | `https://area.embaixadores.iamcontrol.com.br/auth/reset` |
+| OAuth Instagram | `https://area.embaixadores.iamcontrol.com.br/api/social/oauth/instagram/callback` |
+| OAuth TikTok | `https://area.embaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback` |
 
 Configure as mesmas URLs no Supabase Auth, Meta App e TikTok Developer Portal.

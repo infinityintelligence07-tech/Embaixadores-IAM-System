@@ -17,7 +17,7 @@ export function TermsPage() {
         <p className="text-sm text-[var(--color-muted)]">Última atualização: {updated}</p>
         <p>
           Estes Termos regem o uso da plataforma <strong>Embaixadores Acorde Sua Mente</strong>{' '}
-          (https://embaixadores.iamcontrol.com.br), operada pela IAM Control / Acorde Sua Mente.
+          (https://area.embaixadores.iamcontrol.com.br), operada pela IAM Control / Acorde Sua Mente.
         </p>
         <h2 className="text-xl text-violet">1. Objeto</h2>
         <p>
