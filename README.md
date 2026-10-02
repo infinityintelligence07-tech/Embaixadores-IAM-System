@@ -2,7 +2,7 @@
 
 Plataforma para cadastro, autenticação, acompanhamento de desempenho e classificação de embaixadores que produzem cortes para Instagram e TikTok.
 
-**Produção:** https://area.embaixadores.iamcontrol.com.br
+**Produção:** https://areaembaixadores.iamcontrol.com.br
 
 ## Stack
 

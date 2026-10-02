@@ -17,7 +17,7 @@ export function PrivacyPage() {
         <p className="text-sm text-text-muted">Última atualização: {updated}</p>
         <p>
           Esta política descreve como a plataforma <strong>Embaixadores Acorde Sua Mente</strong>{' '}
-          (https://area.embaixadores.iamcontrol.com.br) trata dados pessoais e dados obtidos via
+          (https://areaembaixadores.iamcontrol.com.br) trata dados pessoais e dados obtidos via
           integrações sociais.
         </p>
         <h2 className="text-xl text-violet-300">1. Dados que coletamos</h2>

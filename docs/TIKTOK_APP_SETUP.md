@@ -6,8 +6,8 @@ Use isto no formulário do TikTok for Developers. Prefira **Sandbox** para testa
 
 | Campo | Valor CORRETO | NÃO use |
 |---|---|---|
-| Web/Desktop URL | `https://area.embaixadores.iamcontrol.com.br` | URL de callback OAuth |
-| Redirect / Callback (Login Kit) | `https://area.embaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback` | — |
+| Web/Desktop URL | `https://areaembaixadores.iamcontrol.com.br` | URL de callback OAuth |
+| Redirect / Callback (Login Kit) | `https://areaembaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback` | — |
 
 A URL de callback **não** é o “site oficial”. Ela fica na configuração do **Login Kit**.
 
@@ -19,10 +19,10 @@ A URL de callback **não** é o “site oficial”. Ela fica na configuração d
 | Category | `Business` |
 | Description (EN, ≤120) | `Ambassador ranking platform that syncs authorized TikTok video view metrics.` |
 | Description (alt) | `Ranks ambassadors by authorized TikTok video views via Display API.` |
-| Terms of Service URL | `https://area.embaixadores.iamcontrol.com.br/termos` |
-| Privacy Policy URL | `https://area.embaixadores.iamcontrol.com.br/privacidade` |
+| Terms of Service URL | `https://areaembaixadores.iamcontrol.com.br/termos` |
+| Privacy Policy URL | `https://areaembaixadores.iamcontrol.com.br/privacidade` |
 | Platforms | marque só **Web** |
-| Web/Desktop URL | `https://area.embaixadores.iamcontrol.com.br` |
+| Web/Desktop URL | `https://areaembaixadores.iamcontrol.com.br` |
 | App icon | `docs/assets/tiktok-app-icon.png` (1024×1024) |
 
 ## Products e Scopes (obrigatório)
@@ -39,7 +39,7 @@ Não adicione Share Kit, Content Posting etc. — atrasa a revisão.
 ### Login Kit — Redirect URI
 
 ```
-https://area.embaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback
+https://areaembaixadores.iamcontrol.com.br/api/social/oauth/tiktok/callback
 ```
 
 Em Sandbox/local, se permitido:
@@ -51,7 +51,7 @@ http://localhost:3000/api/social/oauth/tiktok/callback
 ## App review — texto (colar no campo Explanation)
 
 ```
-Our web app "Embaixadores Acorde Sua Mente" (https://area.embaixadores.iamcontrol.com.br) lets approved brand ambassadors connect their own TikTok account via Login Kit (OAuth + PKCE).
+Our web app "Embaixadores Acorde Sua Mente" (https://areaembaixadores.iamcontrol.com.br) lets approved brand ambassadors connect their own TikTok account via Login Kit (OAuth + PKCE).
 
 Scopes used:
 - user.info.basic: read the authorized user's open_id, avatar, and display name to prove account ownership and show the connected profile.
@@ -71,7 +71,7 @@ We do not use Share Kit or Content Posting API. Users can disconnect TikTok anyt
 
 Grave um MP4 (≤50MB) no **Sandbox**, mostrando:
 
-1. Abrir `https://area.embaixadores.iamcontrol.com.br` (domínio deve bater com o Web URL)
+1. Abrir `https://areaembaixadores.iamcontrol.com.br` (domínio deve bater com o Web URL)
 2. Login → Conexões → Conectar TikTok
 3. Tela de autorização TikTok
 4. Retorno à plataforma com conta conectada
