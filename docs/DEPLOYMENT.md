@@ -79,6 +79,28 @@ Cloudflare Full (Strict) exige certificado válido na origem.
 
 ## 7. Atualização
 
+### Automática (GitHub Actions)
+
+Todo push na `main` dispara `.github/workflows/deploy.yml`:
+
+1. Roda testes e build do backend e do frontend. Se falhar, não faz deploy.
+2. Conecta na VPS por SSH e executa `scripts/deploy.sh`, que atualiza o código para `origin/main`, reconstrói o container `app` e espera o `/api/health` ficar saudável.
+3. Confere `https://areaembaixadores.iamcontrol.com.br/api/health`.
+
+Também pode ser disparado manualmente em **Actions → Deploy → Run workflow**.
+
+Segredos do repositório: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (chave ed25519 exclusiva do deploy, comentário `github-actions-deploy@embaixadores` no `authorized_keys`) e `VPS_KNOWN_HOSTS` (chave de host da VPS). Para revogar o acesso, remova a linha correspondente em `/root/.ssh/authorized_keys`.
+
+Migrations **não** rodam automaticamente; aplique-as antes do push quando houver.
+
+### Manual
+
+```bash
+bash scripts/deploy.sh
+```
+
+Ou passo a passo:
+
 ```bash
 git pull
 docker compose build app
