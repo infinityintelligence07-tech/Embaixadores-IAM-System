@@ -310,10 +310,7 @@ export default function PreviewPage() {
       <header className="shell-bar">
         <div className="shell-brand">
           {apple ? (
-            <>
-              <BrandMark variant="icon" />
-              <span className="shell-brand-name">Embaixadores</span>
-            </>
+            <span className="shell-brand-name">Embaixadores</span>
           ) : (
             <BrandMark variant="wordmark" />
           )}

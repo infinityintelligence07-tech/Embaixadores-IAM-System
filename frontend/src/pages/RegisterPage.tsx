@@ -111,11 +111,11 @@ export function RegisterPage() {
 
           <p className="text-xs text-text-muted">
             Ao se cadastrar, você concorda com os{' '}
-            <Link to="/termos" className="text-brand-gold underline-offset-4 hover:underline">
+            <Link to="/termos" className="text-brand-violet underline-offset-4 hover:underline">
               Termos de Uso
             </Link>{' '}
             e a{' '}
-            <Link to="/privacidade" className="text-brand-gold underline-offset-4 hover:underline">
+            <Link to="/privacidade" className="text-brand-violet underline-offset-4 hover:underline">
               Política de Privacidade
             </Link>
             .
@@ -129,7 +129,7 @@ export function RegisterPage() {
             Já tem conta?{' '}
             <Link
               to="/login"
-              className="text-brand-gold underline-offset-4 hover:underline"
+              className="text-brand-violet underline-offset-4 hover:underline"
             >
               Entrar
             </Link>

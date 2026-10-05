@@ -46,7 +46,7 @@ export function ForgotPasswordPage() {
           </Alert>
           <Link
             to="/login"
-            className="block text-center text-sm text-brand-gold underline-offset-4 hover:underline"
+            className="block text-center text-sm text-brand-violet underline-offset-4 hover:underline"
           >
             Voltar ao login
           </Link>

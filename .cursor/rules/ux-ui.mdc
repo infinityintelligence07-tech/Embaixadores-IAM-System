@@ -1,0 +1,25 @@
+---
+description: Regras de UX e UI da IAM para as telas dos Embaixadores
+alwaysApply: true
+---
+
+# UX e UI
+
+A interface segue o design system da IAM. Clareza vem antes de novidade. A cópia é em português, com pontuação natural, sem travessão e sem meia-risca.
+
+## Duas superfícies
+
+- Painel operacional (login, conexões, conteúdos, perfil, administração, termos): fundo `#f2f2f7`, cartão branco, texto `#1d1d1f`, azul `#0034B8` só como tint e CTA comum.
+- Ranking (início e rankings): palco escuro da competição. O escuro não é o tema do produto inteiro.
+
+## Régua
+
+- Auxiliar no mínimo 12 px, sem caixa alta automática. Corpo 14 px. Título principal 32 px no desktop e 28 px no mobile. O número da posição no ranking pode passar disso, porque é o dado em evidência.
+- Controles com 42 px de altura. Alvo de toque de 44 px. Campo no mobile com 16 px.
+- Cartão com raio de 14 px. Irmãos com 10 px entre si. Nada de texto colado na borda.
+- Verde só no botão de ação (`#34C759` com texto escuro, ou verde escuro com texto branco quando o contraste pedir). Azul é a marca. Vermelho é perigo. Laranja é atenção.
+- Foco visível no teclado. Animação curta, desligada com `prefers-reduced-motion`.
+- Um cartão responde a uma pergunta. Um número não se repete na mesma tela com bases diferentes.
+- Lista até 10 itens aberta. De 11 a 30, dez visíveis e o restante sob demanda. Acima de 30, páginas.
+- Estados obrigatórios: carregando, vazio com próxima ação, erro com o que fazer, sucesso e desabilitado.
+- Dado que ainda não chegou aparece como "Sem dados", "Em coleta" ou "Não integrado". Número de demonstração não entra em produção.

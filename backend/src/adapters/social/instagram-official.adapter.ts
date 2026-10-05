@@ -15,8 +15,8 @@ import {
  * OAuth flow:
  * 1. Redirect to https://www.instagram.com/oauth/authorize with scopes:
  *    instagram_business_basic,instagram_business_manage_insights
- * 2. Exchange code at https://graph.instagram.com/v22.0/oauth/access_token
- * 3. Get long-lived token
+ * 2. Exchange code at https://api.instagram.com/oauth/access_token
+ * 3. Get long-lived token at https://graph.instagram.com/access_token
  * 
  * IMPORTANT: Requires app review from Meta to access insights in production.
  * Without review, only test users can connect.
@@ -30,36 +30,13 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
   private readonly baseUrl = 'https://graph.instagram.com/v22.0';
   
   async getAuthorizedProfile(creds: SocialCredentials): Promise<AuthorizedProfile> {
-    // Get IG user ID first
-    const meResponse = await fetch(`${this.baseUrl}/me?access_token=${creds.accessToken}`);
-    
-    if (!meResponse.ok) {
-      const error = await meResponse.text();
-      this.logger.error('Failed to get Instagram user:', error);
-      throw new Error('Failed to get Instagram profile');
-    }
-    
-    const meData = await meResponse.json();
-    const igUserId = meData.id;
-    
-    // Get business account details
-    const profileResponse = await fetch(
-      `${this.baseUrl}/${igUserId}?fields=username,name,profile_picture_url&access_token=${creds.accessToken}`,
-    );
-    
-    if (!profileResponse.ok) {
-      const error = await profileResponse.text();
-      this.logger.error('Failed to get Instagram profile:', error);
-      throw new Error('Failed to get Instagram profile');
-    }
-    
-    const profile = await profileResponse.json();
-    
+    const profile = await this.fetchMe(creds.accessToken);
+
     return {
-      platformUserId: igUserId,
-      username: profile.username || null,
-      displayName: profile.name || profile.username || 'Instagram User',
-      avatarUrl: profile.profile_picture_url || null,
+      platformUserId: profile.id,
+      username: profile.username || '',
+      displayName: profile.name || profile.username || 'Instagram',
+      avatarUrl: profile.avatarUrl,
       profileUrl: profile.username ? `https://instagram.com/${profile.username}` : null,
     };
   }
@@ -68,16 +45,8 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     creds: SocialCredentials,
     cursor?: string | null,
   ): Promise<SocialContentPage> {
-    const meResponse = await fetch(`${this.baseUrl}/me?access_token=${creds.accessToken}`);
-    if (!meResponse.ok) {
-      throw new Error('Failed to get Instagram user');
-    }
-    
-    const meData = await meResponse.json();
-    const igUserId = meData.id;
-    
-    const url = cursor || 
-      `${this.baseUrl}/${igUserId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=100&access_token=${creds.accessToken}`;
+    const url = cursor ||
+      `${this.baseUrl}/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=100&access_token=${encodeURIComponent(creds.accessToken)}`;
     
     const response = await fetch(url);
     
@@ -129,15 +98,7 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
   
   async getAccountMetrics(creds: SocialCredentials): Promise<AccountMetricsResult> {
     try {
-      const meResponse = await fetch(`${this.baseUrl}/me?access_token=${creds.accessToken}`);
-      if (!meResponse.ok) {
-        throw new Error('Failed to get Instagram user');
-      }
-      
-      const meData = await meResponse.json();
-      const igUserId = meData.id;
-      
-      const insightsUrl = `${this.baseUrl}/${igUserId}/insights?metric=views&period=days_28&metric_type=total_value&access_token=${creds.accessToken}`;
+      const insightsUrl = `${this.baseUrl}/me/insights?metric=views&period=days_28&metric_type=total_value&access_token=${encodeURIComponent(creds.accessToken)}`;
       const insightsResponse = await fetch(insightsUrl);
       
       if (insightsResponse.ok) {
@@ -188,6 +149,36 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     }
   }
   
+  private async fetchMe(accessToken: string): Promise<{
+    id: string;
+    username: string | null;
+    name: string | null;
+    avatarUrl: string | null;
+  }> {
+    const url = new URL(`${this.baseUrl}/me`);
+    url.searchParams.set('fields', 'user_id,username,name,profile_picture_url');
+    url.searchParams.set('access_token', accessToken);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      this.logger.error('Failed to get Instagram profile', { status: response.status });
+      throw new Error('Failed to get Instagram profile');
+    }
+
+    const data = await response.json();
+    const id = String(data.user_id || data.id || '');
+    if (!id) {
+      throw new Error('Failed to get Instagram profile');
+    }
+
+    return {
+      id,
+      username: data.username || null,
+      name: data.name || null,
+      avatarUrl: data.profile_picture_url || null,
+    };
+  }
+
   async disconnect(_creds: SocialCredentials): Promise<void> {
     // Instagram doesn't require explicit revocation on our end
     // Token will be invalidated when user revokes in Instagram settings

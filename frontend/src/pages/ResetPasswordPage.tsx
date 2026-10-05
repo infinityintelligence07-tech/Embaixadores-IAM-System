@@ -63,7 +63,7 @@ export function ResetPasswordPage() {
       >
         <Alert variant="warning" role="alert">
           Este link não é mais válido. Gere outro em{' '}
-          <Link to="/recuperar-senha" className="text-brand-gold underline">
+          <Link to="/recuperar-senha" className="text-brand-violet underline">
             recuperar senha
           </Link>
           .

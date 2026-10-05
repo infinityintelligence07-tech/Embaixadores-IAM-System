@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { BrandMark } from '@/components/brand/BrandMark';
+import { useSurfaceTheme } from '@/lib/theme';
 import { LegalLinks } from './LegalLinks';
 
 export function AuthLayout({
@@ -11,13 +11,15 @@ export function AuthLayout({
   subtitle: string;
   children: ReactNode;
 }) {
+  useSurfaceTheme('apple');
+
   return (
     <div className="min-h-screen bg-surface px-4 py-10">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mb-4 flex justify-center">
-            <BrandMark variant="wordmark" />
-          </div>
+          <p className="mb-4 text-[15px] font-semibold tracking-[-0.02em] text-text">
+            Embaixadores
+          </p>
           <h1 className="mt-2 font-display text-3xl text-text">{title}</h1>
           <p className="mt-2 text-sm text-text-muted">{subtitle}</p>
         </div>

@@ -80,7 +80,7 @@ export function LoginPage() {
         <div className="flex items-center justify-between text-sm">
           <Link
             to="/recuperar-senha"
-            className="text-brand-gold underline-offset-4 hover:underline"
+            className="text-brand-violet underline-offset-4 hover:underline"
           >
             Esqueci minha senha
           </Link>
@@ -94,7 +94,7 @@ export function LoginPage() {
           Ainda não tem conta?{' '}
           <Link
             to="/cadastro"
-            className="text-brand-gold underline-offset-4 hover:underline"
+            className="text-brand-violet underline-offset-4 hover:underline"
           >
             Cadastre-se
           </Link>

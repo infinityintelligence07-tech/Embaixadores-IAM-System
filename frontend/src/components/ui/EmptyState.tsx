@@ -14,7 +14,7 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-card px-6 py-10 text-center"
     >
       {icon ? (
-        <div className="mb-3 text-brand-gold" aria-hidden>
+        <div className="mb-3 text-brand-violet" aria-hidden>
           {icon}
         </div>
       ) : null}

@@ -90,9 +90,15 @@ export class SocialController {
     @Param('platform') platform: string,
     @Query('code') code: string,
     @Query('state') state: string,
+    @Query('error') oauthError: string,
     @Res() res: Response,
   ) {
-    if (!code || !state) {
+    if (oauthError === 'access_denied') {
+      return res.redirect('/conexoes?error=access_denied');
+    }
+
+    const cleanCode = code?.replace(/#_$/, '').trim();
+    if (!cleanCode || !state) {
       return res.redirect('/conexoes?error=missing_parameters');
     }
 
@@ -103,7 +109,7 @@ export class SocialController {
     try {
       await this.oauthCallbackUseCase.execute(
         platform as SocialPlatform,
-        code,
+        cleanCode,
         state,
       );
       return res.redirect('/conexoes?connected=true');

@@ -87,8 +87,9 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [ladderOpen, setLadderOpen] = useState(false);
   const picked = useRef(false);
-  const patentRef = useRef<HTMLDivElement | null>(null);
+  const patentRef = useRef<HTMLLIElement | null>(null);
 
   useEffect(() => {
     if (locked) return;
@@ -235,11 +236,14 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const youAreInTail = (standing?.position ?? 0) > 10;
 
   useEffect(() => {
-    const node = patentRef.current;
-    const track = node?.parentElement;
-    if (!node || !track) return;
-    track.scrollTo({ left: Math.max(0, node.offsetLeft - 12), behavior: 'smooth' });
-  }, [patent.current.level, platform]);
+    if (!ladderOpen) return;
+    patentRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setLadderOpen(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [ladderOpen]);
 
   useEffect(() => {
     if (!restOpen || !youAreInTail) return;
@@ -570,46 +574,60 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         </>
       )}
 
-      {blocked ? null : (
-      <section className="patent" aria-label="Patente">
-        <div className="patent-head">
-          <div>
-            <p className="patent-kicker">Patente por views totais</p>
-            <h2>{patent.current.name}</h2>
-            <p>{patent.current.line}</p>
-          </div>
-          <img className="patent-mark" src="/brand/mark-navy.jpg" alt="" />
-        </div>
-        <div className="patent-track">
-          {PATENTS.map((item) => {
-            const state =
-              item.level < patent.current.level
-                ? 'is-done'
-                : item.level === patent.current.level
-                  ? 'is-now'
-                  : '';
-            return (
-              <div
-                key={item.level}
-                className={clsx('patent-node', state)}
-                ref={item.level === patent.current.level ? patentRef : undefined}
-              >
-                <i />
-                <strong>{item.name}</strong>
-                <span>
-                  {item.level === 6 ? 'Máxima' : formatViews(item.minViews)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <p className="patent-next">
-          {patent.next
-            ? `Faltam ${formatViews(patent.remaining)} views totais para ${patent.next.name}.`
-            : 'Você chegou à patente máxima.'}
-        </p>
+      <section className="tier" aria-label="Nível">
+        <button type="button" className="tier-current" onClick={() => setLadderOpen(true)}>
+          <img src={patent.current.image} alt="" />
+          <span>
+            <small>Seu nível</small>
+            <strong>{patent.current.name}</strong>
+            <em>
+              {patent.next
+                ? `Faltam ${formatViews(patent.remaining)} views para ${patent.next.name}.`
+                : 'Você chegou ao nível máximo.'}
+            </em>
+          </span>
+        </button>
       </section>
-      )}
+      {ladderOpen ? (
+        <div className="tier-layer" role="dialog" aria-modal="true" aria-labelledby="tier-title">
+          <button type="button" className="tier-scrim" aria-label="Fechar" onClick={() => setLadderOpen(false)} />
+          <div className="tier-sheet">
+            <p className="tier-kicker">Guerreiros embaixadores</p>
+            <h2 id="tier-title">Progressão de níveis</h2>
+            <ol className="tier-row">
+              {PATENTS.map((item) => {
+                const state =
+                  item.level < patent.current.level
+                    ? 'is-done'
+                    : item.level === patent.current.level
+                      ? 'is-now'
+                      : 'is-ahead';
+                return (
+                  <li
+                    key={item.level}
+                    className={state}
+                    ref={item.level === patent.current.level ? patentRef : undefined}
+                  >
+                    <img src={item.image} alt="" />
+                    <strong>{item.name}</strong>
+                    <span>{item.step}</span>
+                    <small>
+                      {state === 'is-now'
+                        ? 'Você está aqui'
+                        : state === 'is-done'
+                          ? 'Concluído'
+                          : item.line}
+                    </small>
+                  </li>
+                );
+              })}
+            </ol>
+            <button type="button" className="tier-close" onClick={() => setLadderOpen(false)}>
+              Fechar
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {slice && !blocked ? (
         <p className="arena-note">

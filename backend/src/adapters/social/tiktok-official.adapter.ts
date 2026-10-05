@@ -44,6 +44,10 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
     }
     
     const data = await response.json();
+    if (data.error?.code && data.error.code !== 'ok') {
+      this.logger.error('TikTok profile error', data.error.code);
+      throw new Error('Failed to get TikTok profile');
+    }
     const user = data.data?.user;
     
     if (!user) {

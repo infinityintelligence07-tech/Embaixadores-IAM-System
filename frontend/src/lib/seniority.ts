@@ -1,46 +1,44 @@
 export interface Patent {
-  level: 1 | 2 | 3 | 4 | 5 | 6;
+  level: 1 | 2 | 3 | 4;
   name: string;
   minViews: number;
   line: string;
+  image: string;
+  step: string;
 }
 
 export const PATENTS: readonly Patent[] = [
   {
     level: 1,
-    name: 'Recruta',
+    name: 'Despertar',
     minViews: 0,
-    line: 'Sua voz está começando a aparecer.',
+    line: 'Você entra aqui, antes da primeira mil views.',
+    image: '/brand/tiers/despertar.jpg',
+    step: 'Nível inicial',
   },
   {
     level: 2,
-    name: 'Voz',
-    minViews: 2_500,
-    line: 'As pessoas já param para ouvir.',
+    name: 'Energia',
+    minViews: 1_000,
+    line: 'A partir das primeiras 1.000 views.',
+    image: '/brand/tiers/energia.jpg',
+    step: 'Nível 1',
   },
   {
     level: 3,
-    name: 'Embaixador',
-    minViews: 15_000,
-    line: 'Você representa o movimento.',
+    name: 'Prosperidade',
+    minViews: 25_000,
+    line: 'A partir de 25.000 views.',
+    image: '/brand/tiers/prosperidade.jpg',
+    step: 'Nível 2',
   },
   {
     level: 4,
-    name: 'Referência',
-    minViews: 60_000,
-    line: 'Outros medem o próprio ritmo pelo seu.',
-  },
-  {
-    level: 5,
-    name: 'Ícone',
-    minViews: 200_000,
-    line: 'Seu alcance já atravessa a rede.',
-  },
-  {
-    level: 6,
-    name: 'Lenda',
-    minViews: 750_000,
-    line: 'Patente máxima. O ranking inteiro te enxerga.',
+    name: 'Governo',
+    minViews: 150_000,
+    line: 'A partir de 150.000 views.',
+    image: '/brand/tiers/governo.jpg',
+    step: 'Nível 3',
   },
 ];
 

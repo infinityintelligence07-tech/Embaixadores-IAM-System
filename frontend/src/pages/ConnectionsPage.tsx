@@ -1,6 +1,7 @@
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { CompetitionGate } from '@/components/arena/CompetitionGate';
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -75,7 +76,17 @@ function statusLabel(status: ConnectionStatus): string {
   }
 }
 
+const CALLBACK_ERRORS: Record<string, string> = {
+  access_denied: 'Você cancelou a entrada. Conecte a conta para entrar na competição.',
+  missing_parameters: 'A conexão foi interrompida antes de terminar. Tente de novo.',
+  invalid_platform: 'Essa rede não está disponível.',
+  connection_failed: 'Não foi possível concluir a entrada. Tente de novo.',
+};
+
 export function ConnectionsPage() {
+  const [params] = useSearchParams();
+  const callbackError = params.get('error');
+  const connected = params.get('connected') === 'true';
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,9 +167,13 @@ export function ConnectionsPage() {
         </p>
       </header>
 
-      {error ? (
+      {error || callbackError ? (
         <Alert variant="error" role="alert">
-          {error}
+          {error ?? CALLBACK_ERRORS[callbackError ?? ''] ?? 'Não foi possível concluir a conexão.'}
+        </Alert>
+      ) : connected ? (
+        <Alert variant="success" role="status">
+          Conta conectada. Suas views passam a contar no ranking.
         </Alert>
       ) : null}
 

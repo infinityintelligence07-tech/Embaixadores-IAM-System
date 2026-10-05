@@ -1,8 +1,8 @@
 import { Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
-import { useLayoutEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { useAuth } from '@/contexts/AuthContext';
+import { isRankingPath, useSurfaceTheme } from '@/lib/theme';
 import { LegalLinks } from './LegalLinks';
 
 const navItems = [
@@ -16,24 +16,16 @@ const navItems = [
 export function AppShell() {
   const { profile, isAdmin } = useAuth();
   const location = useLocation();
-  const apple = location.pathname.startsWith('/admin');
+  const apple = !isRankingPath(location.pathname);
 
-  useLayoutEffect(() => {
-    document.documentElement.dataset.theme = apple ? 'apple' : 'arena';
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', apple ? '#f5f5f7' : '#070b14');
-  }, [apple]);
+  useSurfaceTheme(apple ? 'apple' : 'arena');
 
   return (
     <div className={apple ? 'shell shell-apple' : 'shell shell-arena'}>
       <header className="shell-bar">
         <NavLink to="/dashboard" className="shell-brand">
           {apple ? (
-            <>
-              <BrandMark variant="icon" />
-              <span className="shell-brand-name">Embaixadores</span>
-            </>
+            <span className="shell-brand-name">Embaixadores</span>
           ) : (
             <BrandMark variant="wordmark" />
           )}

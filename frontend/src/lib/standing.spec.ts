@@ -3,30 +3,29 @@ import { patentFor } from '@/lib/seniority';
 import { describeChase } from '@/lib/standing';
 
 describe('patentFor', () => {
-  it('começa em Recruta', () => {
-    expect(patentFor(0).current.name).toBe('Recruta');
-    expect(patentFor(2_499).current.name).toBe('Recruta');
+  it('começa em Despertar', () => {
+    expect(patentFor(0).current.name).toBe('Despertar');
+    expect(patentFor(999).current.name).toBe('Despertar');
   });
 
   it('sobe no limiar exato', () => {
-    expect(patentFor(2_500).current.name).toBe('Voz');
-    expect(patentFor(15_000).current.name).toBe('Embaixador');
-    expect(patentFor(60_000).current.name).toBe('Referência');
-    expect(patentFor(200_000).current.name).toBe('Ícone');
+    expect(patentFor(1_000).current.name).toBe('Energia');
+    expect(patentFor(25_000).current.name).toBe('Prosperidade');
+    expect(patentFor(150_000).current.name).toBe('Governo');
   });
 
-  it('trata Lenda como patente máxima', () => {
-    const max = patentFor(750_000);
-    expect(max.current.name).toBe('Lenda');
+  it('trata Governo como nível máximo', () => {
+    const max = patentFor(150_000);
+    expect(max.current.name).toBe('Governo');
     expect(max.next).toBeNull();
     expect(max.remaining).toBe(0);
     expect(max.progress).toBe(1);
   });
 
-  it('mede o que falta para a próxima patente', () => {
-    const step = patentFor(749_999);
-    expect(step.current.name).toBe('Ícone');
-    expect(step.next?.name).toBe('Lenda');
+  it('mede o que falta para o próximo nível', () => {
+    const step = patentFor(24_999);
+    expect(step.current.name).toBe('Energia');
+    expect(step.next?.name).toBe('Prosperidade');
     expect(step.remaining).toBe(1);
   });
 });

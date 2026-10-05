@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSurfaceTheme } from '@/lib/theme';
 import { api } from '@/lib/api';
 import '@/components/arena/arena.css';
 
@@ -32,6 +33,7 @@ const steps = [
 ];
 
 export function OnboardingPage() {
+  useSurfaceTheme('apple');
   const { profile, refreshProfile } = useAuth();
   const [fullName, setFullName] = useState(profile?.fullName ?? '');
   const [publicName, setPublicName] = useState(profile?.publicName ?? '');

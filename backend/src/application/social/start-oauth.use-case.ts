@@ -28,7 +28,7 @@ export class StartOAuthUseCase {
     if (platform === SocialPlatform.Instagram) {
       if (!this.config.social.meta.appId) {
         throw new BadRequestException(
-          'Instagram integration is not configured. Please contact support.',
+          'A entrada no Instagram ainda não está configurada. Avise o suporte.',
         );
       }
       
@@ -54,7 +54,7 @@ export class StartOAuthUseCase {
     if (platform === SocialPlatform.TikTok) {
       if (!this.config.social.tiktok.clientKey) {
         throw new BadRequestException(
-          'TikTok integration is not configured. Please contact support.',
+          'A entrada no TikTok ainda não está configurada. Avise o suporte.',
         );
       }
       
@@ -86,6 +86,6 @@ export class StartOAuthUseCase {
       return { url: url.toString() };
     }
     
-    throw new BadRequestException('Unsupported platform');
+    throw new BadRequestException('Essa rede não está disponível.');
   }
 }

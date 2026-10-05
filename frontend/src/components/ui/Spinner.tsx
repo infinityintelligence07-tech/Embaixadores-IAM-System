@@ -14,7 +14,7 @@ export function Spinner({ label = 'Carregando', size = 'md' }: SpinnerProps) {
     <div role="status" className="inline-flex items-center gap-2 text-text-muted">
       <span
         aria-hidden
-        className={`animate-spin rounded-full border-brand-gold border-r-transparent ${sizeMap[size]}`}
+        className={`animate-spin rounded-full border-brand-violet border-r-transparent ${sizeMap[size]}`}
       />
       <span className="text-sm">{label}</span>
     </div>

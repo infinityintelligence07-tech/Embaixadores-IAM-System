@@ -108,7 +108,7 @@ export function ContentsPage() {
                   href={item.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-sm text-brand-gold underline-offset-4 hover:underline"
+                  className="mt-2 inline-flex items-center gap-1 text-sm text-brand-violet underline-offset-4 hover:underline"
                 >
                   Abrir conteúdo
                   <ExternalLink className="size-3.5" aria-hidden />

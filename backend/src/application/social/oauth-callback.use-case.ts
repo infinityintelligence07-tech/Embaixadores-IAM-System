@@ -153,39 +153,51 @@ export class OAuthCallbackUseCase {
     if (platform === SocialPlatform.Instagram) {
       const redirectUri = `${this.config.app.baseUrl}/api/social/oauth/instagram/callback`;
       
-      const response = await fetch('https://graph.instagram.com/v22.0/oauth/access_token', {
+      const body = new FormData();
+      body.set('client_id', this.config.social.meta.appId!);
+      body.set('client_secret', this.config.social.meta.appSecret!);
+      body.set('grant_type', 'authorization_code');
+      body.set('redirect_uri', redirectUri);
+      body.set('code', code.replace(/#_$/, '').trim());
+
+      const response = await fetch('https://api.instagram.com/oauth/access_token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: this.config.social.meta.appId!,
-          client_secret: this.config.social.meta.appSecret!,
-          grant_type: 'authorization_code',
-          redirect_uri: redirectUri,
-          code,
-        }),
+        body,
       });
-      
-      if (!response.ok) {
-        throw new BadRequestException('Failed to exchange Instagram code');
+
+      const data = await response.json().catch(() => null);
+      const tokenPayload = data?.data?.[0] ?? data;
+      const shortToken = tokenPayload?.access_token as string | undefined;
+
+      if (!response.ok || !shortToken) {
+        console.error('Instagram token exchange failed', {
+          status: response.status,
+          error: tokenPayload?.error_message || tokenPayload?.error || data?.error_message,
+        });
+        throw new BadRequestException('Não foi possível concluir a entrada no Instagram.');
       }
-      
-      const data = await response.json();
-      
-      // Get long-lived token
-      const longLivedResponse = await fetch(
-        `https://graph.instagram.com/v22.0/access_token?grant_type=ig_exchange_token&client_secret=${this.config.social.meta.appSecret}&access_token=${data.access_token}`,
-      );
-      
+
+      const longLivedUrl = new URL('https://graph.instagram.com/access_token');
+      longLivedUrl.searchParams.set('grant_type', 'ig_exchange_token');
+      longLivedUrl.searchParams.set('client_secret', this.config.social.meta.appSecret!);
+      longLivedUrl.searchParams.set('access_token', shortToken);
+      const longLivedResponse = await fetch(longLivedUrl);
+
       if (!longLivedResponse.ok) {
-        // Fall back to short-lived token
         return {
-          accessToken: data.access_token,
+          accessToken: shortToken,
           scopes: [],
         };
       }
-      
+
       const longLivedData = await longLivedResponse.json();
-      
+      if (!longLivedData?.access_token) {
+        return {
+          accessToken: shortToken,
+          scopes: [],
+        };
+      }
+
       return {
         accessToken: longLivedData.access_token,
         expiresAt: new Date(Date.now() + (longLivedData.expires_in || 5184000) * 1000),
@@ -209,23 +221,31 @@ export class OAuthCallbackUseCase {
         }),
       });
       
-      if (!response.ok) {
-        throw new BadRequestException('Failed to exchange TikTok code');
+      const data = await response.json().catch(() => null);
+
+      const tokenError = typeof data?.error === 'string' ? data.error : data?.error?.code;
+      if (!response.ok || (tokenError && tokenError !== 'ok') || !data?.access_token) {
+        console.error('TikTok token exchange failed', {
+          status: response.status,
+          error: data?.error,
+          description: data?.error_description,
+        });
+        throw new BadRequestException('Não foi possível concluir a entrada no TikTok.');
       }
-      
-      const data = await response.json();
-      
+
+      const expiresIn = typeof data.expires_in === 'number' ? data.expires_in : 86_400;
+
       return {
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
-        expiresAt: new Date(Date.now() + data.expires_in * 1000),
+        expiresAt: new Date(Date.now() + expiresIn * 1000),
         refreshExpiresAt: data.refresh_expires_in
           ? new Date(Date.now() + data.refresh_expires_in * 1000)
           : undefined,
         scopes: data.scope?.split(',') || [],
       };
     }
-    
-    throw new BadRequestException('Unsupported platform');
+
+    throw new BadRequestException('Essa rede não está disponível.');
   }
 }
