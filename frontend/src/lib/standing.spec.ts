@@ -11,11 +11,12 @@ describe('patentFor', () => {
   it('sobe no limiar exato', () => {
     expect(patentFor(1_000).current.name).toBe('Energia');
     expect(patentFor(25_000).current.name).toBe('Prosperidade');
-    expect(patentFor(150_000).current.name).toBe('Governo');
+    expect(patentFor(499_999).current.name).toBe('Prosperidade');
+    expect(patentFor(500_000).current.name).toBe('Governo');
   });
 
   it('trata Governo como nível máximo', () => {
-    const max = patentFor(150_000);
+    const max = patentFor(500_000);
     expect(max.current.name).toBe('Governo');
     expect(max.next).toBeNull();
     expect(max.remaining).toBe(0);

@@ -237,7 +237,11 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
   useEffect(() => {
     if (!ladderOpen) return;
-    patentRef.current?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    const node = patentRef.current;
+    const row = node?.parentElement;
+    if (node && row && row.scrollWidth > row.clientWidth + 1) {
+      row.scrollTo({ left: Math.max(0, node.offsetLeft - (row.clientWidth - node.offsetWidth) / 2) });
+    }
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') setLadderOpen(false);
     }
@@ -606,6 +610,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                   <li
                     key={item.level}
                     className={state}
+                    data-level={item.level}
                     ref={item.level === patent.current.level ? patentRef : undefined}
                   >
                     <img src={item.image} alt="" />
@@ -616,7 +621,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                         ? 'Você está aqui'
                         : state === 'is-done'
                           ? 'Concluído'
-                          : item.line}
+                          : `${formatViews(item.minViews)} views`}
                     </small>
                   </li>
                 );

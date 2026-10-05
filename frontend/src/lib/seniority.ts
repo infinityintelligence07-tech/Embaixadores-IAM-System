@@ -35,8 +35,8 @@ export const PATENTS: readonly Patent[] = [
   {
     level: 4,
     name: 'Governo',
-    minViews: 150_000,
-    line: 'A partir de 150.000 views.',
+    minViews: 500_000,
+    line: 'A partir de 500.000 views.',
     image: '/brand/tiers/governo.jpg',
     step: 'Nível 3',
   },
