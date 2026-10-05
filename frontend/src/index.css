@@ -326,6 +326,12 @@ html {
     display: flex;
   }
 
+  .shell-user {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
   .shell-tabbar {
     display: none;
   }

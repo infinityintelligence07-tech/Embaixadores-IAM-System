@@ -13,7 +13,7 @@ export const PATENTS: readonly Patent[] = [
     name: 'Despertar',
     minViews: 0,
     line: 'Você entra aqui, antes da primeira mil views.',
-    image: '/brand/tiers/despertar.jpg',
+    image: '/brand/tiers/despertar.png',
     step: 'Nível inicial',
   },
   {
@@ -21,7 +21,7 @@ export const PATENTS: readonly Patent[] = [
     name: 'Energia',
     minViews: 1_000,
     line: 'A partir das primeiras 1.000 views.',
-    image: '/brand/tiers/energia.jpg',
+    image: '/brand/tiers/energia.png',
     step: 'Nível 1',
   },
   {
@@ -29,7 +29,7 @@ export const PATENTS: readonly Patent[] = [
     name: 'Prosperidade',
     minViews: 25_000,
     line: 'A partir de 25.000 views.',
-    image: '/brand/tiers/prosperidade.jpg',
+    image: '/brand/tiers/prosperidade.png',
     step: 'Nível 2',
   },
   {
@@ -37,7 +37,7 @@ export const PATENTS: readonly Patent[] = [
     name: 'Governo',
     minViews: 500_000,
     line: 'A partir de 500.000 views.',
-    image: '/brand/tiers/governo.jpg',
+    image: '/brand/tiers/governo.png',
     step: 'Nível 3',
   },
 ];

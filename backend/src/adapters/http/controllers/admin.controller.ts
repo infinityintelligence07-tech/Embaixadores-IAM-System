@@ -281,7 +281,7 @@ export class AdminController {
   async getSettings() {
     const syncIntervalMinutes = await this.settingsRepo.getNumber(
       'sync_interval_minutes',
-      60,
+      10,
     );
     const staleToleranceHours = await this.settingsRepo.getNumber(
       'stale_tolerance_hours',
@@ -312,7 +312,7 @@ export class AdminController {
     if (body.syncIntervalMinutes !== undefined) {
       await this.settingsRepo.set(
         'sync_interval_minutes',
-        body.syncIntervalMinutes,
+        10,
         req.user.id as never,
       );
     }

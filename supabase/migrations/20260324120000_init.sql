@@ -252,7 +252,7 @@ CREATE TABLE public.app_settings (
 );
 
 INSERT INTO public.app_settings (key, value) VALUES
-  ('sync_interval_minutes', '60'),
+  ('sync_interval_minutes', '10'),
   ('stale_tolerance_hours', '24'),
   ('manual_sync_cooldown_seconds', '300');
 

@@ -128,6 +128,7 @@ export interface SocialAccountRepository {
     platformUserId: string,
   ): Promise<SocialAccount | null>;
   findConnectedByPlatform(platform: SocialPlatform): Promise<SocialAccount[]>;
+  findDueForSync(olderThan: Date): Promise<SocialAccount[]>;
   create(input: CreateSocialAccountInput): Promise<SocialAccount>;
   update(id: SocialAccountId, input: UpdateSocialAccountInput): Promise<SocialAccount>;
   saveCredentials(

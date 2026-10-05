@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
-import { SocialAccountId, SyncJobStatus, ConnectionStatus } from '../../domain/types';
+import { SocialPlatform, SocialAccountId, SyncJobStatus, ConnectionStatus } from '../../domain/types';
 import {
   SocialAccountRepository,
   SyncJobRepository,
@@ -7,7 +7,8 @@ import {
   MetricsRepository,
   UpsertContentInput,
 } from '../../ports/repositories.port';
-import { SocialMetricsProvider } from '../../ports/social-metrics.port';
+import { SocialMetricsProvider, SocialCredentials } from '../../ports/social-metrics.port';
+import { TokenEncryptionPort } from '../../ports/tokens.port';
 import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 
@@ -24,6 +25,8 @@ export class SyncAccountUseCase {
   constructor(
     @Inject(INJECTION_TOKENS.CLOCK)
     private readonly clock: ClockPort,
+    @Inject(INJECTION_TOKENS.TOKEN_ENCRYPTION)
+    private readonly encryption: TokenEncryptionPort,
     @Inject(INJECTION_TOKENS.SOCIAL_PROVIDER_FACTORY)
     private readonly providerFactory: any,
     @Inject(INJECTION_TOKENS.SOCIAL_ACCOUNT_REPOSITORY)
@@ -68,6 +71,8 @@ export class SyncAccountUseCase {
         account.platform,
         account.transport,
       );
+
+      const freshCreds = await this.refreshIfNeeded(account.platform, account.id, provider, creds);
       
       // Update account status
       await this.socialAccountRepo.update(account.id, {
@@ -85,7 +90,7 @@ export class SyncAccountUseCase {
       
       // Fetch all content with pagination
       while (pageCount < maxPages) {
-        const page = await provider.listContents(creds, cursor);
+        const page = await provider.listContents(freshCreds, cursor);
         
         for (const item of page.items) {
           const input: UpsertContentInput = {
@@ -134,7 +139,7 @@ export class SyncAccountUseCase {
       
       // Fetch account metrics
       try {
-        const accountMetrics = await provider.getAccountMetrics(creds);
+        const accountMetrics = await provider.getAccountMetrics(freshCreds);
         await this.metricsRepo.insertAccountSnapshot({
           socialAccountId: account.id,
           collectedAt: now,
@@ -214,6 +219,42 @@ export class SyncAccountUseCase {
       });
       
       throw error;
+    }
+  }
+
+  private async refreshIfNeeded(
+    platform: SocialPlatform,
+    accountId: SocialAccountId,
+    provider: SocialMetricsProvider,
+    creds: SocialCredentials,
+  ): Promise<SocialCredentials> {
+    if (!provider.refreshCredentials || !creds.expiresAt) return creds;
+
+    const leadMs =
+      platform === SocialPlatform.TikTok
+        ? 2 * 60 * 60 * 1000
+        : 7 * 24 * 60 * 60 * 1000;
+    if (creds.expiresAt.getTime() - this.clock.now().getTime() > leadMs) {
+      return creds;
+    }
+
+    try {
+      const next = await provider.refreshCredentials(creds);
+      await this.socialAccountRepo.saveCredentials(accountId, {
+        socialAccountId: accountId,
+        accessTokenCiphertext: await this.encryption.encrypt(next.accessToken),
+        refreshTokenCiphertext: next.refreshToken
+          ? await this.encryption.encrypt(next.refreshToken)
+          : null,
+        tokenExpiresAt: next.expiresAt || null,
+        refreshExpiresAt: next.refreshExpiresAt || null,
+        scopes: next.scopes,
+        encryptionKid: 'default',
+      });
+      return next;
+    } catch (error) {
+      this.logger.warn(`Token refresh failed: ${error}`);
+      return creds;
     }
   }
 }

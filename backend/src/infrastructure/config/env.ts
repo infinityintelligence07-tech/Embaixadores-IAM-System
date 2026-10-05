@@ -90,7 +90,7 @@ export function loadConfig(): AppConfig {
     },
     sync: {
       intervalMinutes: parseInt(
-        optionalEnv('SYNC_INTERVAL_MINUTES', '1'),
+        optionalEnv('SYNC_INTERVAL_MINUTES', '10'),
         10,
       ),
     },

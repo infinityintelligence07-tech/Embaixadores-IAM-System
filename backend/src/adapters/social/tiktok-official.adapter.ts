@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { readTikTokViewCount } from '../../domain/view-metrics';
+import { readTikTokViewCount, isTikTokFailure } from '../../domain/view-metrics';
+import { loadConfig } from '../../infrastructure/config/env';
 import {
   SocialMetricsProvider,
   SocialCredentials,
@@ -93,8 +94,8 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
     }
     
     const data = await response.json();
-    
-    if (data.error?.code) {
+
+    if (isTikTokFailure(data.error)) {
       this.logger.error('TikTok API error:', data.error);
       throw new Error(`TikTok API error: ${data.error.message}`);
     }
@@ -151,6 +152,9 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
       }
       
       const data = await response.json();
+      if (isTikTokFailure(data.error)) {
+        return { views: null, viewsAvailable: false };
+      }
       const video = (data.data?.videos || []).find(
         (item: { id?: string }) => item.id === platformContentId,
       );
@@ -166,6 +170,13 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
     if (!creds.refreshToken) {
       throw new Error('No refresh token available');
     }
+
+    const config = loadConfig();
+    const clientKey = config.social.tiktok.clientKey;
+    const clientSecret = config.social.tiktok.clientSecret;
+    if (!clientKey || !clientSecret) {
+      throw new Error('TikTok integration not configured');
+    }
     
     const response = await fetch(`${this.baseUrl}/v2/oauth/token/`, {
       method: 'POST',
@@ -173,27 +184,30 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
+        client_key: clientKey,
+        client_secret: clientSecret,
         grant_type: 'refresh_token',
         refresh_token: creds.refreshToken,
       }),
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      this.logger.error('Failed to refresh TikTok token:', error);
+    const data = await response.json().catch(() => null);
+    const tokenError = typeof data?.error === 'string' ? data.error : data?.error?.code;
+    if (!response.ok || (tokenError && tokenError !== 'ok') || !data?.access_token) {
+      this.logger.error('Failed to refresh TikTok token', data?.error);
       throw new Error('Failed to refresh TikTok credentials');
     }
     
-    const data = await response.json();
-    
+    const expiresIn = typeof data.expires_in === 'number' ? data.expires_in : 86_400;
+
     return {
       accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
+      refreshToken: data.refresh_token || creds.refreshToken,
+      expiresAt: new Date(Date.now() + expiresIn * 1000),
       refreshExpiresAt: data.refresh_expires_in
         ? new Date(Date.now() + data.refresh_expires_in * 1000)
-        : undefined,
-      scopes: data.scope?.split(',') || [],
+        : creds.refreshExpiresAt,
+      scopes: data.scope?.split(',') || creds.scopes,
     };
   }
   

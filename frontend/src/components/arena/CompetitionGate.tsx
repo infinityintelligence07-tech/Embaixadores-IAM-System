@@ -1,13 +1,10 @@
+import { PlatformMark } from '@/components/brand/PlatformMark';
 import type { SocialAccount, SocialPlatform } from '@/lib/api';
 import './arena.css';
 import { actionLabel, connectionDuty, dutyLine, gateHeadline } from '@/lib/connection';
 import { platformLabel } from '@/lib/format';
 
 const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
-
-function sealSrc(platform: SocialPlatform): string {
-  return platform === 'instagram' ? '/brand/seal-instagram.jpg' : '/brand/seal-tiktok.jpg';
-}
 
 export function CompetitionGate({
   accounts,
@@ -45,7 +42,7 @@ export function CompetitionGate({
 
           return (
             <article key={platform} className="gate-card" data-duty={duty}>
-              <img src={sealSrc(platform)} alt="" />
+              <PlatformMark platform={platform} size={48} />
               <div>
                 <strong>{platformLabel(platform)}</strong>
                 <p>{line}</p>

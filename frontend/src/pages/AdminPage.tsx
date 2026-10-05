@@ -418,17 +418,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
             {settings ? (
               <form className="admin-form" onSubmit={(event) => void handleSettingsSubmit(event)}>
                 <Input
-                  label="Intervalo de sincronização automática (minutos)"
+                  label="Coleta e ranking"
                   name="syncIntervalMinutes"
                   type="number"
-                  min={1}
-                  value={String(settings.syncIntervalMinutes)}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      syncIntervalMinutes: Number(event.target.value),
-                    })
-                  }
+                  value="10"
+                  disabled
+                  hint="A cada 10 minutos o sistema renova o acesso, lê as views e publica o ranking."
                 />
                 <Input
                   label="Tolerância de dados desatualizados (horas)"

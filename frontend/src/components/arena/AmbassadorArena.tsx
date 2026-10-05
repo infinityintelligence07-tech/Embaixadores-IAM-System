@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompetitionGate } from '@/components/arena/CompetitionGate';
+import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Alert } from '@/components/ui/Alert';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,7 +22,6 @@ import {
   categoryPhrase,
   firstName,
   formatViews,
-  ordinal,
   platformLabel,
   profileUrl,
 } from '@/lib/format';
@@ -320,7 +320,8 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           <h1 className="arena-standing">
             Você está na{' '}
             <span className="arena-ordinal" data-place={placeTone}>
-              {ordinal(standing.position)}
+              {standing.position}
+              <sup>ª</sup>
             </span>{' '}
             posição
           </h1>
@@ -684,9 +685,13 @@ function Pedestal({
       aria-current={entry.isCurrentUser ? 'true' : undefined}
     >
       <div className="pedestal-person">
-        <Avatar name={entry.publicName} url={entry.avatarUrl} size={place === 1 ? 'lg' : 'md'} />
-        <span className="place-coin">
-          <img src="/brand/medal-disc.jpg" alt="" />
+        <Avatar
+          name={entry.publicName}
+          url={entry.avatarUrl}
+          size={place === 1 ? 'lg' : 'md'}
+          views={entry.totalViews}
+        />
+        <span className="place-coin" aria-label={`${place}º lugar`}>
           <b>{place}</b>
         </span>
       </div>
@@ -716,7 +721,7 @@ function RankRow({
       aria-current={entry.isCurrentUser ? 'true' : undefined}
     >
       <span className="rank-pos">{entry.position}</span>
-      <Avatar name={entry.publicName} url={entry.avatarUrl} size="sm" />
+      <Avatar name={entry.publicName} url={entry.avatarUrl} size="sm" views={entry.totalViews} />
       <p className="rank-name">
         <span className="rank-label">{entry.publicName}</span>
         {entry.isCurrentUser ? <span className="rank-you">Você</span> : null}
@@ -739,22 +744,28 @@ function Avatar({
   name,
   url,
   size,
+  views,
 }: {
   name: string;
   url: string | null;
   size: 'lg' | 'md' | 'sm';
+  views: number;
 }) {
-  if (url) {
-    return <img className={`avatar avatar-${size}`} src={url} alt="" />;
-  }
+  const tier = patentFor(views).current;
   return (
-    <span className={`avatar avatar-${size}`} aria-hidden>
-      {initial(name)}
+    <span className={`avatar-wrap avatar-wrap-${size}`}>
+      {url ? (
+        <img className={`avatar avatar-${size}`} src={url} alt="" />
+      ) : (
+        <span className={`avatar avatar-${size}`} aria-hidden>
+          {initial(name)}
+        </span>
+      )}
+      <img className="tier-pip" src={tier.image} alt={tier.name} />
     </span>
   );
 }
 
 function NetworkGlyph({ platform }: { platform: SocialPlatform }) {
-  const src = platform === 'instagram' ? '/brand/seal-instagram.jpg' : '/brand/seal-tiktok.jpg';
-  return <img className="network-seal" src={src} alt="" />;
+  return <PlatformMark platform={platform} size={22} />;
 }

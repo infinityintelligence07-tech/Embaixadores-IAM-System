@@ -18,6 +18,25 @@ export function readInstagramViews(payload: unknown): number | null {
   return asViewCount(record.total_value?.value ?? record.values?.[0]?.value);
 }
 
+export const SYNC_INTERVAL_MINUTES = 10;
+export const SYNC_INTERVAL_MS = SYNC_INTERVAL_MINUTES * 60 * 1000;
+
+export function isSyncDue(
+  lastSuccessfulSyncAt: Date | null,
+  now: Date,
+  intervalMs = SYNC_INTERVAL_MS,
+): boolean {
+  if (!lastSuccessfulSyncAt) return true;
+  return now.getTime() - lastSuccessfulSyncAt.getTime() >= intervalMs;
+}
+
+export function isTikTokFailure(error: unknown): boolean {
+  if (typeof error === 'string') return error !== '' && error !== 'ok';
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code !== '' && code !== 'ok';
+}
+
 export function readTikTokViewCount(value: unknown): number | null {
   return asViewCount(value);
 }

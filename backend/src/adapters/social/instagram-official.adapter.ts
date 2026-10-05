@@ -65,14 +65,8 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
         let viewsAvailable = false;
         
         try {
-          const insightsUrl = `${this.baseUrl}/${item.id}/insights?metric=views&period=lifetime&access_token=${creds.accessToken}`;
-          const insightsResponse = await fetch(insightsUrl);
-          
-          if (insightsResponse.ok) {
-            const insightsData = await insightsResponse.json();
-            views = readInstagramViews(insightsData);
-            viewsAvailable = views !== null;
-          }
+          views = await this.fetchMediaViews(creds.accessToken, item.id);
+          viewsAvailable = views !== null;
         } catch (error) {
           this.logger.warn(`Failed to fetch insights for media ${item.id}:`, error);
         }
@@ -134,14 +128,7 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     platformContentId: string,
   ): Promise<ContentMetricsResult> {
     try {
-      const insightsUrl = `${this.baseUrl}/${platformContentId}/insights?metric=views&period=lifetime&access_token=${creds.accessToken}`;
-      const response = await fetch(insightsUrl);
-      
-      if (!response.ok) {
-        return { views: null, viewsAvailable: false };
-      }
-      
-      const views = readInstagramViews(await response.json());
+      const views = await this.fetchMediaViews(creds.accessToken, platformContentId);
       return { views, viewsAvailable: views !== null };
     } catch (error) {
       this.logger.warn(`Failed to get content metrics for ${platformContentId}:`, error);
@@ -177,6 +164,46 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
       name: data.name || null,
       avatarUrl: data.profile_picture_url || null,
     };
+  }
+
+  async refreshCredentials(creds: SocialCredentials): Promise<SocialCredentials> {
+    const url = new URL('https://graph.instagram.com/refresh_access_token');
+    url.searchParams.set('grant_type', 'ig_refresh_token');
+    url.searchParams.set('access_token', creds.accessToken);
+
+    const response = await fetch(url);
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.access_token) {
+      this.logger.error('Failed to refresh Instagram token', data?.error?.message);
+      throw new Error('Failed to refresh Instagram credentials');
+    }
+
+    return {
+      accessToken: data.access_token,
+      expiresAt: new Date(Date.now() + (data.expires_in || 5_184_000) * 1000),
+      scopes: creds.scopes,
+    };
+  }
+
+  private async fetchMediaViews(accessToken: string, mediaId: string): Promise<number | null> {
+    const primary = await this.requestMediaInsights(accessToken, mediaId, false);
+    if (primary !== null) return primary;
+    return this.requestMediaInsights(accessToken, mediaId, true);
+  }
+
+  private async requestMediaInsights(
+    accessToken: string,
+    mediaId: string,
+    withLifetime: boolean,
+  ): Promise<number | null> {
+    const url = new URL(`${this.baseUrl}/${mediaId}/insights`);
+    url.searchParams.set('metric', 'views');
+    if (withLifetime) url.searchParams.set('period', 'lifetime');
+    url.searchParams.set('access_token', accessToken);
+
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    return readInstagramViews(await response.json());
   }
 
   async disconnect(_creds: SocialCredentials): Promise<void> {

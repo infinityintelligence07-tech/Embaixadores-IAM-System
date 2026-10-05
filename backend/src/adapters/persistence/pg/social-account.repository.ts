@@ -67,6 +67,19 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
     );
     return result.rows.map(row => this.mapRow(row));
   }
+
+  async findDueForSync(olderThan: Date): Promise<SocialAccount[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM social_accounts
+       WHERE disconnected_at IS NULL
+         AND transport = 'official_api'
+         AND status IN ('connected', 'syncing')
+         AND (last_successful_sync_at IS NULL OR last_successful_sync_at <= $1)
+       ORDER BY last_successful_sync_at ASC NULLS FIRST`,
+      [olderThan],
+    );
+    return result.rows.map((row) => this.mapRow(row));
+  }
   
   async create(input: CreateSocialAccountInput): Promise<SocialAccount> {
     const result = await this.pool.query(

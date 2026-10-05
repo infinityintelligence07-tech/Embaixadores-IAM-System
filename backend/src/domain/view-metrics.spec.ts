@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   daysWithoutPosting,
+  isSyncDue,
+  isTikTokFailure,
   readInstagramViews,
   readTikTokViewCount,
+  SYNC_INTERVAL_MS,
 } from './view-metrics';
 
 describe('readInstagramViews', () => {
@@ -42,6 +45,31 @@ describe('readTikTokViewCount', () => {
   });
 });
 
+describe('isSyncDue', () => {
+  const now = new Date('2026-10-05T15:00:00.000Z');
+
+  it('pede coleta quando ainda não houve sucesso', () => {
+    expect(isSyncDue(null, now)).toBe(true);
+  });
+
+  it('espera os dez minutos', () => {
+    const recent = new Date(now.getTime() - 9 * 60 * 1000);
+    const due = new Date(now.getTime() - SYNC_INTERVAL_MS);
+    expect(isSyncDue(recent, now)).toBe(false);
+    expect(isSyncDue(due, now)).toBe(true);
+  });
+});
+
+describe('isTikTokFailure', () => {
+  it('aceita a resposta ok da lista de vídeos', () => {
+    expect(isTikTokFailure({ code: 'ok', message: '' })).toBe(false);
+  });
+
+  it('acusa erro real', () => {
+    expect(isTikTokFailure({ code: 'access_token_invalid' })).toBe(true);
+    expect(isTikTokFailure('invalid_grant')).toBe(true);
+  });
+});
 describe('daysWithoutPosting', () => {
   it('conta dias civis desde o último post', () => {
     const now = new Date('2026-10-02T15:00:00.000Z');
