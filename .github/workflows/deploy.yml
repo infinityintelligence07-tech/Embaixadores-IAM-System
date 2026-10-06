@@ -53,6 +53,18 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+      - name: Ler erro recente do Instagram
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'SH'
+          cd /opt/embaixadores
+          docker compose -f docker-compose.yml -f docker-compose.vps.yml logs --since 12h app \
+            | grep -E "Instagram token|OAuth callback|Failed to get Instagram|error_message|Invalid or expired|already connected" \
+            | tail -n 50
+          SH
+
       - name: Gravar credenciais do Instagram
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
