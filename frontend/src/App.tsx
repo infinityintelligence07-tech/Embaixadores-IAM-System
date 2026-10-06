@@ -3,6 +3,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/routing/ProtectedRoute';
 import { AdminPage } from '@/pages/AdminPage';
+import { CandidaturasPage } from '@/pages/CandidaturasPage';
+import { CapturePage } from '@/pages/CapturePage';
+import { CaptureSuccessPage } from '@/pages/CaptureSuccessPage';
 import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
 import { ConnectionsPage } from '@/pages/ConnectionsPage';
 import { ContentsPage } from '@/pages/ContentsPage';
@@ -24,6 +27,8 @@ const DevPreview = import.meta.env.DEV
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<CapturePage />} />
+      <Route path="/sucesso" element={<CaptureSuccessPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/cadastro" element={<RegisterPage />} />
       <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
@@ -51,6 +56,7 @@ export default function App() {
       <Route element={<ProtectedRoute requireApproved requireAdmin />}>
         <Route element={<AppShell />}>
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/candidaturas" element={<CandidaturasPage />} />
         </Route>
       </Route>
 
@@ -65,8 +71,7 @@ export default function App() {
         />
       ) : null}
 
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

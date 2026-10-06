@@ -2,6 +2,7 @@ import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Injec
 import { AuthPort } from '../../../ports/auth.port';
 import { ProfileRepository } from '../../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
+import { StaffAccessService } from '../../../application/identity/staff-access.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -10,6 +11,7 @@ export class AuthGuard implements CanActivate {
     private readonly auth: AuthPort,
     @Inject(INJECTION_TOKENS.PROFILE_REPOSITORY)
     private readonly profileRepo: ProfileRepository,
+    private readonly staff: StaffAccessService,
   ) {}
   
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -32,10 +34,11 @@ export class AuthGuard implements CanActivate {
       }
       
       // Attach to request with role from database
+      const role = await this.staff.apply(profile);
       request.user = {
         id: profile.id,
         email: profile.email,
-        role: profile.role, // From database, NOT from JWT
+        role,
       };
       
       return true;

@@ -25,6 +25,17 @@ export type ConnectionStatus =
 export type RankingView = 'top3' | 'top10' | 'all';
 export type RankingCategory = 'total_views' | 'best_video';
 
+export interface AmbassadorApplication {
+  id: string;
+  nome_completo: string;
+  email: string;
+  whatsapp: string;
+  nome_conta: string;
+  redes_sociais: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
 export interface MeResponse {
   id: string;
   email: string;
@@ -307,4 +318,15 @@ export const api = {
     }),
 
   adminAudit: () => fetchJson<AdminAuditEntry[]>('/api/admin/audit'),
+
+  applications: () => fetchJson<AmbassadorApplication[]>('/api/admin/applications'),
+
+  updateApplication: (id: string, status: AmbassadorApplication['status']) =>
+    fetchJson<AmbassadorApplication>(`/api/admin/applications/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  deleteApplication: (id: string) =>
+    fetchJson<{ ok: boolean }>(`/api/admin/applications/${id}`, { method: 'DELETE' }),
 };

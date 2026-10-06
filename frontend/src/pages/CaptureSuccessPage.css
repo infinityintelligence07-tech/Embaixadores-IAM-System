@@ -1,0 +1,81 @@
+.success {
+  --sky: #2f6bff;
+  --sky-bright: #5b8cff;
+  --white: #ffffff;
+  --fog: rgba(255, 255, 255, 0.78);
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --control-h: 52px;
+  color: #fff;
+  font-family: var(--font-body);
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 28px 20px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 50% at 80% 10%, rgba(47, 107, 255, 0.32), transparent 55%),
+    linear-gradient(180deg, #000428, #0034b8);
+}
+
+.success__panel {
+  position: relative;
+  z-index: 1;
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.success__kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sky-bright);
+}
+
+.success h1 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(1.65rem, 5.5vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  text-transform: none;
+  overflow: visible;
+  padding-block: 0;
+}
+
+.success__text {
+  margin: 0;
+  color: var(--fog);
+  line-height: 1.6;
+  font-size: 16px;
+}
+
+.success .btn {
+  appearance: none;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  margin-top: 8px;
+  min-height: 56px;
+  padding: 0 28px;
+  border-radius: 14px;
+  background: var(--sky);
+  color: var(--white);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+@media (min-width: 480px) {
+  .success .btn {
+    align-self: flex-start;
+    min-width: 200px;
+  }
+}

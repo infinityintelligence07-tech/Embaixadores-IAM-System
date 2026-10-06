@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { ProfileId } from '../../domain/types';
 import { ProfileRepository, MembershipRepository } from '../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
+import { StaffAccessService } from './staff-access.service';
 
 export interface GetMeResult {
   id: string;
@@ -22,6 +23,7 @@ export class GetMeUseCase {
     private readonly profileRepo: ProfileRepository,
     @Inject(INJECTION_TOKENS.MEMBERSHIP_REPOSITORY)
     private readonly membershipRepo: MembershipRepository,
+    private readonly staff: StaffAccessService,
   ) {}
 
   async execute(profileId: ProfileId): Promise<GetMeResult> {
@@ -30,6 +32,7 @@ export class GetMeUseCase {
       throw new NotFoundException('Perfil não encontrado');
     }
 
+    const role = await this.staff.apply(profile);
     const membership = await this.membershipRepo.findByProfileId(profileId);
 
     return {
@@ -38,9 +41,9 @@ export class GetMeUseCase {
       fullName: profile.fullName,
       publicName: profile.publicName,
       avatarUrl: profile.avatarUrl,
-      role: profile.role,
+      role,
       status: membership?.status || 'pending',
-      onboardingCompleted: profile.onboardingCompleted,
+      onboardingCompleted: role === 'admin' ? true : profile.onboardingCompleted,
       createdAt: profile.createdAt,
     };
   }

@@ -20,12 +20,16 @@ export function PrivacyPage() {
         <p className="text-sm text-text-muted">Última atualização: {updated}</p>
         <p>
           Esta política descreve como a plataforma <strong>Embaixadores Acorde Sua Mente</strong>{' '}
-          (https://areaembaixadores.iamcontrol.com.br) trata dados pessoais e dados obtidos via
+          (https://embaixadores.iamcontrol.com.br) trata dados pessoais e dados obtidos via
           integrações sociais.
         </p>
         <h2 className="text-xl text-text">1. Dados que coletamos</h2>
         <ul className="list-disc space-y-2 pl-5">
           <li>Cadastro: nome, nome público, e-mail (autenticação via Supabase Auth).</li>
+          <li>
+            Candidatura: nome, e-mail, WhatsApp e o @ do Instagram ou TikTok, usados pela equipe
+            IAM para analisar o pedido de entrada.
+          </li>
           <li>
             Contas sociais (com seu consentimento OAuth): identificador da plataforma, username,
             avatar, URL do perfil, lista de vídeos/Reels e contadores de visualizações disponíveis

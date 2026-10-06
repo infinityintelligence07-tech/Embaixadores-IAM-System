@@ -28,6 +28,8 @@ import { PgOAuthStateRepository } from './adapters/persistence/pg/oauth-state.re
 
 // Application - Use Cases
 import { GetMeUseCase } from './application/identity/get-me.use-case';
+import { StaffAccessService } from './application/identity/staff-access.service';
+import { ApplicationsService } from './application/applications/applications.service';
 import { UpdateMeUseCase } from './application/identity/update-me.use-case';
 import { GetDashboardUseCase } from './application/dashboard/get-dashboard.use-case';
 import { StartOAuthUseCase } from './application/social/start-oauth.use-case';
@@ -43,6 +45,10 @@ import { SocialController } from './adapters/http/controllers/social.controller'
 import { RankingsController } from './adapters/http/controllers/rankings.controller';
 import { ContentsController } from './adapters/http/controllers/contents.controller';
 import { AdminController } from './adapters/http/controllers/admin.controller';
+import {
+  AdminApplicationsController,
+  ApplicationsController,
+} from './adapters/http/controllers/applications.controller';
 import { AuthGuard } from './adapters/http/guards/auth.guard';
 import { AdminGuard } from './adapters/http/guards/admin.guard';
 
@@ -127,6 +133,8 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     
     // Use cases
     GetMeUseCase,
+    StaffAccessService,
+    ApplicationsService,
     UpdateMeUseCase,
     GetDashboardUseCase,
     StartOAuthUseCase,
@@ -149,6 +157,8 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     RankingsController,
     ContentsController,
     AdminController,
+    ApplicationsController,
+    AdminApplicationsController,
   ],
 })
 export class AppModule {}

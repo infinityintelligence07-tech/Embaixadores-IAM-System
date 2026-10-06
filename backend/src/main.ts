@@ -36,6 +36,21 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );  
+  app.use((req: { headers: Record<string, string | undefined>; method: string; path: string; originalUrl: string }, res: { redirect: (code: number, url: string) => void }, next: () => void) => {
+    const host = req.headers.host ?? '';
+    const proxied = req.headers['x-embaixadores-proxy'] === '1';
+    if (
+      !proxied &&
+      host.startsWith('areaembaixadores.') &&
+      req.method === 'GET' &&
+      !req.path.startsWith('/api')
+    ) {
+      res.redirect(301, `https://embaixadores.iamcontrol.com.br${req.originalUrl}`);
+      return;
+    }
+    next();
+  });
+
   // CORS
   app.enableCors({
     origin: config.app.corsOrigin,

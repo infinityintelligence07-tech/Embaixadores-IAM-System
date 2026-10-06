@@ -70,6 +70,7 @@ export function ProtectedRoute({
   }
 
   if (
+    !requireAdmin &&
     profile &&
     !profile.onboardingCompleted &&
     location.pathname !== '/onboarding' &&

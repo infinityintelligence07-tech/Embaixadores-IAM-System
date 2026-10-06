@@ -38,6 +38,12 @@ export function AppShell() {
             </NavLink>
           ))}
           {isAdmin ? (
+            <NavLink to="/candidaturas">
+              <Shield className="size-4" aria-hidden />
+              Candidaturas
+            </NavLink>
+          ) : null}
+          {isAdmin ? (
             <NavLink to="/admin">
               <Shield className="size-4" aria-hidden />
               Administração
