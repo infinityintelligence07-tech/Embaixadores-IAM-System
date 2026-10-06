@@ -19,6 +19,22 @@ import {
 } from '../../../domain/types';
 import { getPool } from '../../../infrastructure/db/pool';
 
+function readJson(value: unknown): Record<string, unknown> | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === 'object'
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === 'object') return value as Record<string, unknown>;
+  return null;
+}
+
 @Injectable()
 export class PgSyncJobRepository implements SyncJobRepository {
   private pool: Pool;
@@ -52,6 +68,22 @@ export class PgSyncJobRepository implements SyncJobRepository {
   async enqueue(input: EnqueueSyncJobInput): Promise<SyncJob> {
     const existing = await this.findActiveByAccount(input.socialAccountId);
     if (existing) {
+      if ((input.priority ?? 100) >= 200) {
+        const woken = await this.pool.query(
+          `UPDATE sync_jobs
+           SET status = 'pending',
+               locked_at = NULL,
+               locked_by = NULL,
+               next_attempt_at = NULL,
+               scheduled_at = $2,
+               priority = $3,
+               updated_at = NOW()
+           WHERE id = $1
+           RETURNING *`,
+          [existing.id, input.scheduledAt || new Date(), input.priority ?? 200],
+        );
+        return this.mapJobRow(woken.rows[0]);
+      }
       return existing;
     }
 
@@ -219,7 +251,7 @@ export class PgSyncJobRepository implements SyncJobRepository {
       scheduledAt: new Date(row.scheduled_at),
       lockedAt: row.locked_at ? new Date(row.locked_at) : null,
       lockedBy: row.locked_by,
-      checkpoint: row.checkpoint ? JSON.parse(row.checkpoint) : null,
+      checkpoint: readJson(row.checkpoint),
       attempts: row.attempts,
       maxAttempts: row.max_attempts,
       nextAttemptAt: row.next_attempt_at ? new Date(row.next_attempt_at) : null,
@@ -241,7 +273,7 @@ export class PgSyncJobRepository implements SyncJobRepository {
       itemsUpserted: row.items_upserted,
       coverageRatio: row.coverage_ratio,
       errorMessage: row.error_message,
-      metadata: row.metadata ? JSON.parse(row.metadata) : null,
+      metadata: readJson(row.metadata),
     };
   }
 }

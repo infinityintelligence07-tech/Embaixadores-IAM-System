@@ -177,7 +177,10 @@ export class SyncAccountUseCase {
         lastSyncedAt: now,
         lastSuccessfulSyncAt: now,
         syncCoverageRatio: coverageRatio,
-        syncMessage: `Synced ${totalFetched} items successfully`,
+        syncMessage:
+          totalFetched === 0
+            ? 'Coleta concluída. Nenhum conteúdo encontrado.'
+            : `Coleta concluída. ${totalFetched} conteúdos.`,
       });
       
       this.logger.log(
@@ -215,7 +218,7 @@ export class SyncAccountUseCase {
       // Update account
       await this.socialAccountRepo.update(account.id, {
         status: ConnectionStatus.Connected,
-        syncMessage: `Sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        syncMessage: 'A coleta falhou. Tente sincronizar de novo.',
       });
       
       throw error;
