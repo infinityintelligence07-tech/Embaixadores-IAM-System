@@ -81,6 +81,7 @@ const CALLBACK_ERRORS: Record<string, string> = {
   missing_parameters: 'A conexão foi interrompida antes de terminar. Tente de novo.',
   invalid_platform: 'Essa rede não está disponível.',
   connection_failed: 'Não foi possível concluir a entrada. Tente de novo.',
+  instagram_review_required: 'A Meta aceitou a permissão, mas a leitura do perfil ainda está só em teste. Uma conta comum entra depois que a análise do app for aprovada.',
   instagram_not_professional: 'Essa conta do Instagram precisa ser profissional. Troque para criador ou empresa e conecte de novo.',
 };
 

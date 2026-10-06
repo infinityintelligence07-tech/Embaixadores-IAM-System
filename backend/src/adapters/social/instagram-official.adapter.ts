@@ -198,6 +198,10 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
       else this.logger.warn(line);
     }
 
+    if (needsId && /unsupported request - method type: get/i.test(lastDetail)) {
+      throw new Error('instagram_review_required');
+    }
+
     if (needsId && /professional|business account|creator account|not eligible|personal account/i.test(lastDetail)) {
       throw new Error('instagram_not_professional');
     }

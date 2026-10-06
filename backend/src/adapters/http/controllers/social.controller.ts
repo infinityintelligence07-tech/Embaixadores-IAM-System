@@ -116,6 +116,9 @@ export class SocialController {
     } catch (error) {
       console.error('OAuth callback error:', error);
       const message = error instanceof Error ? error.message : '';
+      if (message.includes('instagram_review_required')) {
+        return res.redirect('/conexoes?error=instagram_review_required');
+      }
       if (message.includes('instagram_not_professional')) {
         return res.redirect('/conexoes?error=instagram_not_professional');
       }
