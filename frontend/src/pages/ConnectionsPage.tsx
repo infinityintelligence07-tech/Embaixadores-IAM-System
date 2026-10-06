@@ -86,7 +86,7 @@ const CALLBACK_ERRORS: Record<string, string> = {
 };
 
 export function ConnectionsPage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const callbackError = params.get('error');
   const connected = params.get('connected') === 'true';
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
@@ -113,6 +113,19 @@ export function ConnectionsPage() {
   useEffect(() => {
     void loadAccounts();
   }, [loadAccounts]);
+
+  const instagramConnected = accounts.some(
+    (account) => account.platform === 'instagram' && account.status !== 'disconnected',
+  );
+  const visibleCallbackError =
+    callbackError === 'connection_failed' && instagramConnected ? null : callbackError;
+
+  useEffect(() => {
+    if (loading || callbackError !== 'connection_failed' || !instagramConnected) return;
+    const next = new URLSearchParams(params);
+    next.delete('error');
+    setParams(next, { replace: true });
+  }, [callbackError, instagramConnected, loading, params, setParams]);
 
   async function handleConnect(platform: SocialPlatform) {
     setActionId(platform);
@@ -169,9 +182,9 @@ export function ConnectionsPage() {
         </p>
       </header>
 
-      {error || callbackError ? (
+      {error || visibleCallbackError ? (
         <Alert variant="error" role="alert">
-          {error ?? CALLBACK_ERRORS[callbackError ?? ''] ?? 'Não foi possível concluir a conexão.'}
+          {error ?? CALLBACK_ERRORS[visibleCallbackError ?? ''] ?? 'Não foi possível concluir a conexão.'}
         </Alert>
       ) : connected ? (
         <Alert variant="success" role="status">
