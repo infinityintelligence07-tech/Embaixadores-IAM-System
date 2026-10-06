@@ -142,28 +142,67 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     name: string | null;
     avatarUrl: string | null;
   }> {
-    const url = new URL(`${this.baseUrl}/me`);
-    url.searchParams.set('fields', 'user_id,username,name,profile_picture_url');
-    url.searchParams.set('access_token', accessToken);
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      this.logger.error('Failed to get Instagram profile', { status: response.status });
+    const primary = await this.requestMe(accessToken, 'user_id,username', true);
+    if (!primary) {
       throw new Error('Failed to get Instagram profile');
     }
 
-    const data = await response.json();
-    const id = String(data.user_id || data.id || '');
-    if (!id) {
-      throw new Error('Failed to get Instagram profile');
-    }
-
+    const extra = await this.requestMe(accessToken, 'name,profile_picture_url', false);
     return {
-      id,
-      username: data.username || null,
-      name: data.name || null,
-      avatarUrl: data.profile_picture_url || null,
+      id: primary.id,
+      username: primary.username,
+      name: extra?.name ?? null,
+      avatarUrl: extra?.avatarUrl ?? null,
     };
+  }
+
+  private async requestMe(
+    accessToken: string,
+    fields: string,
+    required: boolean,
+  ): Promise<{
+    id: string;
+    username: string | null;
+    name: string | null;
+    avatarUrl: string | null;
+  } | null> {
+    const needsId = fields.includes('user_id');
+    let lastDetail = 'sem resposta';
+
+    for (const version of ['v25.0', 'v22.0']) {
+      const url = new URL(`https://graph.instagram.com/${version}/me`);
+      url.searchParams.set('fields', fields);
+      url.searchParams.set('access_token', accessToken);
+
+      const response = await fetch(url);
+      const data = await response.json().catch(() => null);
+      if (response.ok && data && !data.error) {
+        const id = String(data.user_id || data.id || '');
+        if (needsId && !id) {
+          lastDetail = 'perfil sem identificador';
+          continue;
+        }
+        return {
+          id,
+          username: data.username ? String(data.username) : null,
+          name: data.name ? String(data.name) : null,
+          avatarUrl: data.profile_picture_url ? String(data.profile_picture_url) : null,
+        };
+      }
+
+      const graphMessage = typeof data?.error?.message === 'string' ? data.error.message : '';
+      const graphCode = data?.error?.code ?? '';
+      lastDetail = graphMessage || `HTTP ${response.status}`;
+      const line = `Instagram profile ${version} fields=${fields} status=${response.status} code=${graphCode} ${graphMessage.slice(0, 180)}`;
+      if (required) this.logger.error(line);
+      else this.logger.warn(line);
+    }
+
+    if (needsId && /professional|business account|creator account|not eligible|personal account/i.test(lastDetail)) {
+      throw new Error('instagram_not_professional');
+    }
+
+    return null;
   }
 
   async refreshCredentials(creds: SocialCredentials): Promise<SocialCredentials> {

@@ -115,6 +115,10 @@ export class SocialController {
       return res.redirect('/conexoes?connected=true');
     } catch (error) {
       console.error('OAuth callback error:', error);
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('instagram_not_professional')) {
+        return res.redirect('/conexoes?error=instagram_not_professional');
+      }
       return res.redirect('/conexoes?error=connection_failed');
     }
   }
