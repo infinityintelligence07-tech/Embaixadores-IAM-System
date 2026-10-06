@@ -14,18 +14,16 @@ export function AuthLayout({
   useSurfaceTheme('apple');
 
   return (
-    <div className="min-h-screen bg-surface px-4 py-10">
-      <div className="mx-auto w-full max-w-md">
-        <div className="mb-8 text-center">
-          <p className="mb-4 text-[15px] font-semibold tracking-[-0.02em] text-text">
-            Embaixadores
-          </p>
-          <h1 className="mt-2 font-display text-3xl text-text">{title}</h1>
-          <p className="mt-2 text-sm text-text-muted">{subtitle}</p>
+    <div className="auth-screen">
+      <div className="auth-wrap">
+        <div className="auth-brand">
+          <img src="/brand/apple-touch-icon.png" alt="" width={56} height={56} />
+          <p>Embaixadores</p>
+          <p>Acorde Sua Mente</p>
+          <h1>{title}</h1>
+          <p>{subtitle}</p>
         </div>
-        <div className="rounded-2xl border border-border bg-surface-card p-6 shadow-xl shadow-black/20">
-          {children}
-        </div>
+        <div className="auth-card">{children}</div>
         <LegalLinks className="mt-6" />
       </div>
     </div>

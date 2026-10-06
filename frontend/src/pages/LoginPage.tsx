@@ -45,8 +45,8 @@ export function LoginPage() {
 
   return (
     <AuthLayout
-      title="Acorde Sua Mente"
-      subtitle="Entre para ver sua posição no ranking."
+      title="Entrar"
+      subtitle="Use o e-mail e a senha da sua conta de embaixador."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error ? (

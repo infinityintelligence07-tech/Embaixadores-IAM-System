@@ -170,6 +170,79 @@ html {
   background: transparent;
 }
 
+.shell-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.auth-screen {
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 40px 16px;
+}
+
+.auth-wrap {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.auth-brand {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.auth-brand img {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 14px;
+}
+
+.auth-brand p {
+  margin: 0;
+}
+
+.auth-brand p:first-of-type {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.auth-brand p:nth-of-type(2) {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.auth-brand h1 {
+  margin: 22px 0 0;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.auth-brand p:last-of-type {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.auth-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-card);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 640px) {
+  .auth-brand h1 {
+    font-size: 28px;
+  }
+}
+
 .shell {
   min-height: 100vh;
 }

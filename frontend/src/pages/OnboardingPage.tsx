@@ -75,7 +75,7 @@ export function OnboardingPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
-        <h1 className="font-display text-3xl text-text">Guia de onboarding</h1>
+        <h1 className="font-display text-3xl text-text">Seu cadastro</h1>
         <p className="mt-2 text-text-muted">
           Siga os passos abaixo para começar a participar do programa.
         </p>

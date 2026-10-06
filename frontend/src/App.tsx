@@ -38,8 +38,8 @@ export default function App() {
       <Route path="/privacidade" element={<PrivacyPage />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/onboarding" element={<OnboardingPage />} />
         <Route element={<AppShell />}>
+          <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/conexoes" element={<ConnectionsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
         </Route>

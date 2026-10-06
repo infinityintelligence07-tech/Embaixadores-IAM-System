@@ -25,7 +25,10 @@ export function AppShell() {
       <header className="shell-bar">
         <NavLink to="/dashboard" className="shell-brand">
           {apple ? (
-            <span className="shell-brand-name">Embaixadores</span>
+            <>
+              <img className="shell-brand-mark" src="/brand/apple-touch-icon.png" alt="" />
+              <span className="shell-brand-name">Embaixadores</span>
+            </>
           ) : (
             <BrandMark variant="wordmark" />
           )}
