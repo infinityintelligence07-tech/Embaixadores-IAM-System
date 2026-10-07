@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './adapters/http/guards/app-throttler.guard';
 
 // Infrastructure
 import { INJECTION_TOKENS } from './infrastructure/tokens/injection-tokens';
@@ -67,7 +68,7 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     // Limite de requisições por IP (configurado no ThrottlerModule)
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: AppThrottlerGuard,
     },
 
     // Ports

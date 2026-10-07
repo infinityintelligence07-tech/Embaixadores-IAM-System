@@ -15,8 +15,11 @@ export function ProtectedRoute({
   requireApproved = false,
   requireAdmin = false,
 }: ProtectedRouteProps) {
-  const { state, profile, profileError, isAdmin, refreshProfile, signOut } = useAuth();
+  const { state, profile, profileError, profileLoading, isAdmin, refreshProfile, signOut } =
+    useAuth();
   const location = useLocation();
+  // Barra final não muda a tela: /conexoes/ é a mesma coisa que /conexoes
+  const pathname = location.pathname.replace(/\/+$/, '') || '/';
 
   if (state === 'loading') {
     return (
@@ -57,7 +60,11 @@ export function ProtectedRoute({
           {profileError}
         </Alert>
         <div className="flex flex-wrap gap-2.5">
-          <Button variant="secondary" onClick={() => void refreshProfile()}>
+          <Button
+            variant="secondary"
+            loading={profileLoading}
+            onClick={() => void refreshProfile()}
+          >
             Tentar de novo
           </Button>
           <Button variant="ghost" onClick={() => void signOut()}>
@@ -87,10 +94,7 @@ export function ProtectedRoute({
     return <Navigate to="/dashboard" replace />;
   }
 
-  if (
-    profile?.status === 'approved' &&
-    location.pathname === '/onboarding'
-  ) {
+  if (profile?.status === 'approved' && pathname === '/onboarding') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -105,8 +109,8 @@ export function ProtectedRoute({
     profile &&
     profile.status !== 'approved' &&
     !profile.onboardingCompleted &&
-    location.pathname !== '/onboarding' &&
-    !PENDING_ALLOWED_PATHS.includes(location.pathname)
+    pathname !== '/onboarding' &&
+    !PENDING_ALLOWED_PATHS.includes(pathname)
   ) {
     return <Navigate to="/onboarding" replace />;
   }

@@ -134,10 +134,17 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
       viewsAvailable: video.view_count !== undefined && video.view_count !== null,
     }));
     
-    return {
-      items,
-      nextCursor: data.data?.has_more ? String(data.data.cursor) : null,
-    };
+    // Guard the cursor: a missing or non numeric value would send the next
+    // request without a cursor and loop on the first page.
+    const hasMore = Boolean(data.data?.has_more);
+    const c = Number(data.data?.cursor);
+    const nextCursor = hasMore && Number.isFinite(c) ? String(c) : null;
+    if (hasMore && nextCursor === null) {
+      this.logger.error('TikTok video list reported has_more without a valid cursor');
+      throw new Error('TikTok paging cursor missing');
+    }
+
+    return { items, nextCursor };
   }
   
   async getAccountMetrics(_creds: SocialCredentials): Promise<AccountMetricsResult> {

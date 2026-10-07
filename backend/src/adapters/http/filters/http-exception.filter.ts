@@ -107,6 +107,10 @@ export class AppExceptionFilter implements ExceptionFilter {
           message = STATUS_MESSAGES[status] ?? STATUS_MESSAGES[500];
         }
       }
+      // O ThrottlerGuard devolve "ThrottlerException: Too Many Requests"
+      if (status === HttpStatus.TOO_MANY_REQUESTS && /throttler|too many/i.test(message)) {
+        message = STATUS_MESSAGES[429];
+      }
       if (looksEnglishGeneric(message)) {
         message = STATUS_MESSAGES[status] ?? STATUS_MESSAGES[500];
       }

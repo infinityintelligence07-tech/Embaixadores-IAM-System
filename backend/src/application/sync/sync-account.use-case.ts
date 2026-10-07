@@ -24,6 +24,11 @@ const SNAPSHOT_MIN_INTERVAL_MS = 60 * 60 * 1000; // Skip duplicate snapshots wit
 const RATE_LIMIT_BACKOFF_MS = 30 * 60 * 1000; // At least 30 minutes
 const ASSUMED_TOKEN_LIFETIME_MS = 60 * 60 * 1000; // Credentials without expiresAt
 
+interface RunCounters {
+  itemsFetched: number;
+  itemsUpserted: number;
+}
+
 const MESSAGES = {
   authExpired: 'A autorização expirou. Conecte a conta de novo para voltar ao ranking.',
   rateLimited: 'A rede limitou as consultas. A coleta continua em breve.',
@@ -68,6 +73,13 @@ export class SyncAccountUseCase {
     
     const account = await this.socialAccountRepo.findById(job.socialAccountId);
     if (!account) {
+      // claimNext already marked the job as running; close it so it is not
+      // reclaimed forever for an account that no longer exists.
+      await this.syncJobRepo.update(job.id, {
+        status: SyncJobStatus.Cancelled,
+        nextAttemptAt: null,
+        lastError: 'Conta desconectada antes da coleta.',
+      });
       throw new NotFoundException('Conta não encontrada.');
     }
     
@@ -104,11 +116,21 @@ export class SyncAccountUseCase {
         status: ConnectionStatus.Syncing,
       });
       
-      let cursor: string | null = 
-        (job.checkpoint && typeof job.checkpoint === 'object' && 'cursor' in job.checkpoint)
-          ? (job.checkpoint as any).cursor || null
+      const checkpoint =
+        job.checkpoint && typeof job.checkpoint === 'object'
+          ? (job.checkpoint as Record<string, unknown>)
+          : null;
+      let cursor: string | null =
+        checkpoint && typeof checkpoint.cursor === 'string' && checkpoint.cursor
+          ? checkpoint.cursor
           : null;
       const resumedFromCheckpoint = cursor !== null;
+      if (resumedFromCheckpoint) {
+        // Carry the counters of the interrupted run so the final message
+        // reflects everything collected, not only the pages after resume.
+        totalFetched = Number(checkpoint?.totalFetched) || 0;
+        totalUpserted = Number(checkpoint?.totalUpserted) || 0;
+      }
       const seenPlatformIds = new Set<string>();
       let pagesFetched = 0;
       let completed = false;
@@ -206,13 +228,15 @@ export class SyncAccountUseCase {
         `Sync completed: ${account.platform} account ${account.id}, fetched ${totalFetched} items in ${pagesFetched} pages (completed=${completed})`,
       );
     } catch (error) {
+      const counters = { itemsFetched: totalFetched, itemsUpserted: totalUpserted };
+
       if (error instanceof SocialAuthError) {
-        await this.handleAuthExpired(job, run, account, error);
+        await this.handleAuthExpired(job, run, account, error, counters);
         return;
       }
 
       if (error instanceof SocialRateLimitError) {
-        await this.handleRateLimited(job, run, account, error, now);
+        await this.handleRateLimited(job, run, account, error, now, counters);
         return;
       }
 
@@ -239,9 +263,11 @@ export class SyncAccountUseCase {
       const newStatus =
         job.attempts >= job.maxAttempts ? SyncJobStatus.Failed : SyncJobStatus.Pending;
       
+      // lastError is shown in the admin UI: keep it in Portuguese. The
+      // technical message stays in the logs and in sync_runs.error_message.
       await this.syncJobRepo.update(job.id, {
         status: newStatus,
-        lastError: errorMessage,
+        lastError: MESSAGES.failed,
         nextAttemptAt: newStatus === SyncJobStatus.Pending ? nextAttemptAt : null,
       });
       
@@ -323,16 +349,17 @@ export class SyncAccountUseCase {
     run: SyncRun,
     account: SocialAccount,
     error: SocialAuthError,
+    counters: RunCounters,
   ): Promise<void> {
     this.logger.warn(
-      `Authorization expired for ${account.platform} account ${account.id} (code=${error.code ?? '-'})`,
+      `Authorization expired for ${account.platform} account ${account.id} (code=${error.code ?? '-'}): ${error.message}`,
     );
 
     await this.syncJobRepo.finishRun(run.id, {
       status: SyncJobStatus.Failed,
       finishedAt: this.clock.now(),
-      itemsFetched: 0,
-      itemsUpserted: 0,
+      itemsFetched: counters.itemsFetched,
+      itemsUpserted: counters.itemsUpserted,
       coverageRatio: null,
       errorMessage: error.message,
     });
@@ -342,7 +369,7 @@ export class SyncAccountUseCase {
       status: SyncJobStatus.Failed,
       attempts: Math.max(job.attempts, job.maxAttempts),
       nextAttemptAt: null,
-      lastError: error.message,
+      lastError: MESSAGES.authExpired,
     });
 
     await this.socialAccountRepo.update(account.id, {
@@ -358,9 +385,10 @@ export class SyncAccountUseCase {
     account: SocialAccount,
     error: SocialRateLimitError,
     now: Date,
+    counters: RunCounters,
   ): Promise<void> {
     this.logger.warn(
-      `Rate limited on ${account.platform} account ${account.id} (code=${error.code ?? '-'})`,
+      `Rate limited on ${account.platform} account ${account.id} (code=${error.code ?? '-'}): ${error.message}`,
     );
 
     // Longer backoff than regular failures: at least 30 minutes, growing
@@ -372,8 +400,8 @@ export class SyncAccountUseCase {
     await this.syncJobRepo.finishRun(run.id, {
       status: SyncJobStatus.Failed,
       finishedAt: this.clock.now(),
-      itemsFetched: 0,
-      itemsUpserted: 0,
+      itemsFetched: counters.itemsFetched,
+      itemsUpserted: counters.itemsUpserted,
       coverageRatio: null,
       errorMessage: error.message,
     });
@@ -382,7 +410,7 @@ export class SyncAccountUseCase {
     await this.syncJobRepo.update(job.id, {
       status: exhausted ? SyncJobStatus.Failed : SyncJobStatus.Pending,
       nextAttemptAt: exhausted ? null : nextAttemptAt,
-      lastError: error.message,
+      lastError: MESSAGES.rateLimited,
     });
 
     await this.socialAccountRepo.update(account.id, {

@@ -1,6 +1,5 @@
 import { LogOut, Trash2 } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -12,7 +11,6 @@ import { api } from '@/lib/api';
 
 export function ProfilePage() {
   const { profile, refreshProfile, signOut } = useAuth();
-  const navigate = useNavigate();
 
   const [fullName, setFullName] = useState('');
   const [publicName, setPublicName] = useState('');
@@ -64,8 +62,8 @@ export function ProfilePage() {
   }
 
   async function handleLogout() {
+    // Ao encerrar a sessão, a rota protegida já leva para o login
     await signOut();
-    navigate('/login', { replace: true });
   }
 
   async function handleDeleteRequest() {

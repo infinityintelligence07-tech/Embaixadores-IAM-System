@@ -21,17 +21,27 @@ const pendingNavItems = [
 ];
 
 export function AppShell() {
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin: hasAdminRole } = useAuth();
   const location = useLocation();
   const apple = !isRankingPath(location.pathname);
   const approved = profile?.status === 'approved';
+  // As telas de administração exigem cadastro aprovado, então o link só aparece nesse caso
+  const isAdmin = hasAdminRole && approved;
   const navItems = approved ? approvedNavItems : pendingNavItems;
   const homePath = approved ? '/dashboard' : '/onboarding';
 
   useSurfaceTheme(apple ? 'apple' : 'arena');
 
   return (
-    <div className={apple ? 'shell shell-apple' : 'shell shell-arena'}>
+    <div
+      className={[
+        'shell',
+        apple ? 'shell-apple' : 'shell-arena',
+        isAdmin ? 'shell-has-admin-links' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <header className="shell-bar">
         <NavLink to={homePath} className="shell-brand">
           {apple ? (
@@ -77,7 +87,7 @@ export function AppShell() {
         <LegalLinks />
       </footer>
 
-      <nav className="shell-tabbar" aria-label="Navegação principal">
+      <nav className="shell-tabbar" aria-label="Atalhos">
         <ul>
           {navItems.map((item) => (
             <li key={item.to}>

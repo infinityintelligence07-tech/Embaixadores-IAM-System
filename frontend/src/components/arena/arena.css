@@ -919,6 +919,11 @@ body:has(.tier-layer[open]) {
   text-align: center;
 }
 
+/* O título recebe foco programático ao abrir; o anel só aparece via teclado. */
+.tier-sheet h2:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .tier-kicker {
   text-align: center;
 }

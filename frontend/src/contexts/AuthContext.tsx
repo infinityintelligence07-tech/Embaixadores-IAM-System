@@ -38,6 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sessionUserId = session?.user.id ?? null;
   const requestSeq = useRef(0);
+  // Verdadeiro enquanto encerramos uma sessão que o servidor recusou (401).
+  const expiringRef = useRef(false);
 
   const refreshProfile = useCallback(async () => {
     if (!sessionUserId) {
@@ -57,10 +59,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (seq !== requestSeq.current) return;
       if (error instanceof ApiError && error.status === 401) {
-        // A sessão local não vale mais no servidor: encerra para não entrar em loop
-        await supabase.auth.signOut().catch(() => undefined);
-        setState('expired');
+        // A sessão local não vale mais no servidor: encerra para não entrar em loop.
+        // O listener de autenticação lê esta flag e marca o estado como expirado.
+        expiringRef.current = true;
         setProfileError('Sua sessão expirou. Entre de novo para continuar.');
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+        }
+        setSession(null);
+        setUser(null);
+        setState('expired');
       } else {
         setProfileError(
           error instanceof Error ? error.message : 'Não foi possível carregar seu perfil.',
@@ -87,7 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
-      setState(nextSession ? 'authenticated' : 'unauthenticated');
+      if (nextSession) {
+        expiringRef.current = false;
+        setState('authenticated');
+      } else {
+        setState(expiringRef.current ? 'expired' : 'unauthenticated');
+      }
     });
 
     return () => {

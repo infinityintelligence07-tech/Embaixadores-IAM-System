@@ -58,9 +58,10 @@ export class PgSyncJobRepository implements SyncJobRepository {
     for (let attempt = 0; attempt < 2; attempt++) {
       const existing = await this.findActiveByAccount(input.socialAccountId);
       if (existing) {
-        if (isManual) {
-          // Manual sync: wake the job and drop the stale checkpoint so it
-          // starts again from the first page.
+        if (isManual && existing.status === SyncJobStatus.Pending) {
+          // Manual sync: wake the pending job and drop the stale checkpoint
+          // so it starts again from the first page. A running job is left
+          // alone, otherwise its worker would keep writing to a reset job.
           const woken = await this.pool.query(
             `UPDATE sync_jobs
              SET status = 'pending',
@@ -71,11 +72,12 @@ export class PgSyncJobRepository implements SyncJobRepository {
                  scheduled_at = $2,
                  priority = $3,
                  updated_at = NOW()
-             WHERE id = $1
+             WHERE id = $1 AND status = 'pending'
              RETURNING *`,
             [existing.id, input.scheduledAt || new Date(), input.priority ?? 200],
           );
-          return this.mapJobRow(woken.rows[0]);
+          // No row: the job started running between the SELECT and the UPDATE.
+          return woken.rows[0] ? this.mapJobRow(woken.rows[0]) : existing;
         }
         return existing;
       }
@@ -141,11 +143,37 @@ export class PgSyncJobRepository implements SyncJobRepository {
          RETURNING *`,
         [now, workerId],
       );
-      
-      return result.rows[0] ? this.mapJobRow(result.rows[0]) : null;
+
+      if (!result.rows[0]) return null;
+      const job = this.mapJobRow(result.rows[0]);
+
+      // A reclaimed job may have left a run open when its worker died.
+      // Close it so the run history does not show a sync running forever.
+      await client.query(
+        `UPDATE sync_runs
+         SET status = 'failed',
+             finished_at = NOW(),
+             error_message = 'Coleta reiniciada após interrupção.'
+         WHERE sync_job_id = $1 AND status = 'running'`,
+        [job.id],
+      );
+
+      return job;
     } finally {
       client.release();
     }
+  }
+
+  async cancelActiveForAccount(socialAccountId: SocialAccountId): Promise<void> {
+    await this.pool.query(
+      `UPDATE sync_jobs
+       SET status = 'cancelled',
+           next_attempt_at = NULL,
+           locked_at = NULL,
+           updated_at = NOW()
+       WHERE social_account_id = $1 AND status IN ('pending', 'running')`,
+      [socialAccountId],
+    );
   }
   
   async update(id: SyncJobId, input: UpdateSyncJobInput): Promise<SyncJob> {

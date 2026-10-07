@@ -74,7 +74,19 @@ export function humanizeReason(reason: string | null | undefined): string {
     case 'Not eligible':
     case 'Fora do ranking no momento':
       return 'Você ainda não entrou neste ranking.';
+    case 'Cadastro suspenso':
+      return 'Sua conta está suspensa. Fale com a equipe do programa.';
     default:
-      return /^[A-Za-z ]+$/.test(reason) ? 'Sua posição ainda não está disponível.' : reason;
+      return LEGACY_ENGLISH_REASONS.has(reason) ? 'Sua posição ainda não está disponível.' : reason;
   }
 }
+
+// Motivos antigos em inglês que ainda podem existir em rankings publicados antes da tradução.
+const LEGACY_ENGLISH_REASONS = new Set([
+  'Ranking not published',
+  'Account not synced',
+  'Stale data',
+  'Insufficient coverage',
+  'Suspended',
+  'Pending approval',
+]);

@@ -12,6 +12,9 @@ import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 import { loadConfig } from '../../infrastructure/config/env';
 
+/** The OAuth state was not found, already used, expired or belongs to another platform. */
+export class OAuthStateExpiredException extends BadRequestException {}
+
 @Injectable()
 export class OAuthCallbackUseCase {
   private readonly config = loadConfig();
@@ -43,10 +46,10 @@ export class OAuthCallbackUseCase {
     // Consume state
     const oauthState = await this.oauthStateRepo.consume(state, now);
     if (!oauthState) {
-      throw new BadRequestException('A conexão expirou antes de terminar. Tente de novo.');
+      throw new OAuthStateExpiredException('A conexão expirou antes de terminar. Tente de novo.');
     }
     if (oauthState.platform !== platform) {
-      throw new BadRequestException('A conexão não confere com a rede escolhida. Tente de novo.');
+      throw new OAuthStateExpiredException('A conexão não confere com a rede escolhida. Tente de novo.');
     }
     
     // Exchange code for tokens
@@ -131,10 +134,11 @@ export class OAuthCallbackUseCase {
       encryptionKid: 'default',
     });
     
-    // Enqueue initial sync
+    // Enqueue initial sync. Same priority as a manual request so an existing
+    // pending job is woken and its checkpoint reset for the new credentials.
     await this.syncJobRepo.enqueue({
       socialAccountId: accountId as any,
-      priority: 10,
+      priority: 200,
     });
     
     // Audit log

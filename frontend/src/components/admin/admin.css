@@ -129,6 +129,12 @@
   color: white;
 }
 
+/* Filtro de ordenação ativo */
+.admin-actions button[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
 .admin .is-stop {
   color: var(--bad);
   background: var(--bad-soft);

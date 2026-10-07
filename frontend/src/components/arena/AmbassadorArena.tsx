@@ -92,6 +92,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const picked = useRef(false);
   const patentRef = useRef<HTMLLIElement | null>(null);
   const ladderRef = useRef<HTMLDialogElement | null>(null);
+  const tierTitleRef = useRef<HTMLHeadingElement | null>(null);
 
   const retry = useCallback(() => {
     setLoading(true);
@@ -165,7 +166,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
       }
       setConnectError(
         accountResult.status === 'rejected'
-          ? 'Não foi possível carregar suas conexões. Recarregue a página para tentar de novo.'
+          ? 'Não foi possível carregar suas conexões.'
           : null,
       );
       setLoading(false);
@@ -252,6 +253,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     if (!dialog) return;
     if (ladderOpen && !dialog.open) {
       dialog.showModal();
+      tierTitleRef.current?.focus({ preventScroll: true });
     } else if (!ladderOpen && dialog.open) {
       dialog.close();
     }
@@ -390,6 +392,9 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
       {connectError ? (
         <Alert variant="error" role="alert">
           {connectError}
+          <button type="button" className="arena-retry" onClick={retry}>
+            Tentar de novo
+          </button>
         </Alert>
       ) : null}
 
@@ -650,7 +655,8 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
       <dialog
         ref={ladderRef}
         className="tier-layer"
-        aria-labelledby="tier-title"
+        aria-labelledby={ladderOpen ? 'tier-title' : undefined}
+        aria-label={ladderOpen ? undefined : 'Progressão de níveis'}
         onCancel={(event) => {
           event.preventDefault();
           setLadderOpen(false);
@@ -663,7 +669,10 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         {ladderOpen ? (
           <div className="tier-sheet">
             <p className="tier-kicker">Guerreiros embaixadores</p>
-            <h2 id="tier-title">Progressão de níveis</h2>
+            {/* O foco começa no título para a folha abrir no topo e o leitor de tela anunciar o contexto */}
+            <h2 id="tier-title" tabIndex={-1} ref={tierTitleRef}>
+              Progressão de níveis
+            </h2>
             <ol className="tier-row">
               {PATENTS.map((item) => {
                 const state =

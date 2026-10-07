@@ -34,11 +34,19 @@ async function mapWithConcurrency<T, R>(
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let nextIndex = 0;
+  // Once one call rejects, the other workers stop picking up new items so
+  // Promise.all settles without a burst of pointless requests.
+  let failed = false;
 
   const worker = async (): Promise<void> => {
-    while (nextIndex < items.length) {
+    while (!failed && nextIndex < items.length) {
       const current = nextIndex++;
-      results[current] = await fn(items[current], current);
+      try {
+        results[current] = await fn(items[current], current);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
 
@@ -86,13 +94,14 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     creds: SocialCredentials,
     cursor?: string | null,
   ): Promise<SocialContentPage> {
-    // Legacy checkpoints stored the full `paging.next` URL (which embeds the
-    // access token). Accept it for one more run so in-flight jobs finish;
-    // new cursors are only the opaque `after` value.
-    const url =
+    // Legacy checkpoints stored the full `paging.next` URL (which embeds an
+    // old access token). Only its `after` value is reused, with the current
+    // token; new cursors are only the opaque `after` value.
+    const after =
       cursor && cursor.startsWith('http')
-        ? cursor
-        : this.buildMediaUrl(creds.accessToken, cursor ?? null);
+        ? this.extractAfterParam(cursor)
+        : cursor ?? null;
+    const url = this.buildMediaUrl(creds.accessToken, after);
 
     const response = await fetch(url);
     const data = await response.json().catch(() => null);
@@ -144,12 +153,27 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
 
     // Only advance when Graph says there is a next page; the `after` cursor
     // is also present on the last page and would cause an empty extra fetch.
-    const nextCursor: string | null =
-      media.length > 0 && data.paging?.next
-        ? data.paging?.cursors?.after ?? null
-        : null;
+    let nextCursor: string | null = null;
+    if (media.length > 0 && typeof data.paging?.next === 'string') {
+      nextCursor =
+        data.paging?.cursors?.after ?? this.extractAfterParam(data.paging.next);
+      if (!nextCursor) {
+        // Completing here would look like a full pass and wrongly mark the
+        // remaining posts as removed.
+        throw new Error('Instagram paging cursor missing');
+      }
+    }
 
     return { items, nextCursor };
+  }
+
+  /** Reads the `after` query param of a Graph paging URL. Never logs the URL. */
+  private extractAfterParam(pagingUrl: string): string | null {
+    try {
+      return new URL(pagingUrl).searchParams.get('after') || null;
+    } catch {
+      return null;
+    }
   }
 
   private buildMediaUrl(accessToken: string, after: string | null): string {

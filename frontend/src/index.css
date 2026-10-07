@@ -50,15 +50,6 @@
   --radius: 14px;
 }
 
-[data-theme='apple'] .cta,
-:root .cta {
-  color: #fff;
-}
-
-[data-theme='arena'] .cta {
-  color: #062014;
-}
-
 @theme inline {
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
@@ -195,7 +186,7 @@ html {
   border: 0;
   border-radius: 999px;
   background: var(--good);
-  color: #062014;
+  color: #fff;
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
@@ -207,9 +198,9 @@ html {
   cursor: progress;
 }
 
-/* Na superfície clara o verde é escuro, então o texto vira branco. */
-[data-theme='apple'] .cta {
-  color: #fff;
+/* No palco escuro o verde é claro, então o texto fica escuro para manter o contraste. */
+[data-theme='arena'] .cta {
+  color: #062014;
 }
 
 .shell-brand-mark {
@@ -364,7 +355,13 @@ html {
 }
 
 .shell {
+  /* Folga para a barra de abas fixa no mobile. Quem administra tem uma segunda linha. */
+  --tabbar-clearance: 88px;
   min-height: 100vh;
+}
+
+.shell-has-admin-links {
+  --tabbar-clearance: 150px;
 }
 
 .shell-arena {
@@ -466,7 +463,7 @@ html {
 .shell-foot {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 8px 0 calc(112px + env(safe-area-inset-bottom));
+  padding: 8px 0 calc(var(--tabbar-clearance) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
 }
 

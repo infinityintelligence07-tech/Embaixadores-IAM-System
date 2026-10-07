@@ -283,6 +283,8 @@ export interface SyncJobRepository {
   findActiveByAccount(socialAccountId: SocialAccountId): Promise<SyncJob | null>;
   enqueue(input: EnqueueSyncJobInput): Promise<SyncJob>;
   claimNext(workerId: string, now: Date): Promise<SyncJob | null>;
+  /** Cancels pending and running jobs of an account (used on disconnect). */
+  cancelActiveForAccount(socialAccountId: SocialAccountId): Promise<void>;
   update(id: SyncJobId, input: UpdateSyncJobInput): Promise<SyncJob>;
   createRun(input: CreateSyncRunInput): Promise<SyncRun>;
   finishRun(runId: SyncRunId, input: FinishSyncRunInput): Promise<SyncRun>;

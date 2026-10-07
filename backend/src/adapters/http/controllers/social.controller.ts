@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   BadRequestException,
+  ConflictException,
   NotFoundException,
   HttpException,
   HttpStatus,
@@ -24,7 +25,10 @@ import {
 } from '../../../ports/repositories.port';
 import { ClockPort } from '../../../ports/clock.port';
 import { StartOAuthUseCase } from '../../../application/social/start-oauth.use-case';
-import { OAuthCallbackUseCase } from '../../../application/social/oauth-callback.use-case';
+import {
+  OAuthCallbackUseCase,
+  OAuthStateExpiredException,
+} from '../../../application/social/oauth-callback.use-case';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { uuidPipe } from '../pipes/uuid.pipe';
 import { SocialMetricsProvider } from '../../../ports/social-metrics.port';
@@ -129,6 +133,12 @@ export class SocialController {
       if (message.includes('instagram_not_professional')) {
         return res.redirect('/conexoes?error=instagram_not_professional');
       }
+      if (error instanceof ConflictException) {
+        return res.redirect('/conexoes?error=already_connected');
+      }
+      if (error instanceof OAuthStateExpiredException) {
+        return res.redirect('/conexoes?error=state_expired');
+      }
       return res.redirect('/conexoes?error=connection_failed');
     }
   }
@@ -158,6 +168,10 @@ export class SocialController {
         message: error instanceof Error ? error.message : 'unknown',
       });
     }
+
+    // Cancela coletas pendentes ou em andamento antes de remover as credenciais,
+    // para o worker não tentar coletar uma conta sem token.
+    await this.syncJobRepo.cancelActiveForAccount(id as never);
 
     await this.socialAccountRepo.update(id as never, {
       status: ConnectionStatus.Disconnected,

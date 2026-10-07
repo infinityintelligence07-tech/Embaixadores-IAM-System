@@ -105,6 +105,7 @@ export class PgContentRepository implements ContentRepository {
         permalink = COALESCE($6, contents.permalink),
         published_at = COALESCE($7, contents.published_at),
         media_type = COALESCE($8, contents.media_type),
+        removed_on_platform = false,
         latest_views = CASE 
           WHEN $9 IS NOT NULL THEN $9
           ELSE contents.latest_views

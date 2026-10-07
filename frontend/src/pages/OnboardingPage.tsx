@@ -45,16 +45,20 @@ export function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [accounts, setAccounts] = useState<SocialAccount[] | null>(null);
+  const [accountsFailed, setAccountsFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
     api
       .socialAccounts()
       .then((data) => {
-        if (active) setAccounts(data);
+        if (active) {
+          setAccounts(data);
+          setAccountsFailed(false);
+        }
       })
       .catch(() => {
-        if (active) setAccounts([]);
+        if (active) setAccountsFailed(true);
       });
     return () => {
       active = false;
@@ -75,6 +79,7 @@ export function OnboardingPage() {
 
     setLoading(true);
     setError(null);
+    setSaved(false);
 
     try {
       await api.updateProfile({
@@ -129,6 +134,12 @@ export function OnboardingPage() {
                 </div>
                 <h2 className="font-display text-lg text-text">{step.title}</h2>
                 <p className="mt-1 text-sm text-text-muted">{step.description}</p>
+                {step.id === 'connections' && accountsFailed ? (
+                  <p className="mt-2 text-sm text-text-muted" role="status">
+                    Não foi possível verificar as conexões agora. Abra a página de conexões para
+                    conferir.
+                  </p>
+                ) : null}
                 {step.id === 'connections' ? (
                   <div className="mt-3">
                     <Link
@@ -149,12 +160,6 @@ export function OnboardingPage() {
         <Alert variant="info" title="Aguardando aprovação">
           Seu perfil foi enviado. Você receberá acesso completo assim que a equipe
           confirmar sua participação.
-        </Alert>
-      ) : null}
-
-      {profile?.status === 'suspended' ? (
-        <Alert variant="warning" role="alert" title="Conta suspensa">
-          Entre em contato com a equipe para mais informações.
         </Alert>
       ) : null}
 

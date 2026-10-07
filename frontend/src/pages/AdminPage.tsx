@@ -102,6 +102,20 @@ function syncStatusLabel(status: AdminSyncJob['status']): string {
   }
 }
 
+// Cancelada é um estado final neutro, não uma espera
+function jobTone(status: AdminSyncJob['status']): 'ok' | 'wait' | 'stop' | undefined {
+  switch (status) {
+    case 'succeeded':
+      return 'ok';
+    case 'failed':
+      return 'stop';
+    case 'cancelled':
+      return undefined;
+    default:
+      return 'wait';
+  }
+}
+
 function platformName(platform: SocialPlatform): string {
   return platform === 'instagram' ? 'Instagram' : 'TikTok';
 }
@@ -268,6 +282,8 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   async function handleRequestSync(userId: string, platform: SocialPlatform) {
     const key = `${userId}-${platform}`;
     setActionLoading(key);
+    setError(null);
+    setMessage(null);
     try {
       if (!preview) {
         await api.adminRequestSync(userId, platform);
@@ -283,19 +299,23 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     }
   }
 
-  async function handleExcludeContent(contentId: string, reason: string) {
-    if (!contentId.trim() || !reason.trim()) return;
+  async function handleExcludeContent(contentId: string, reason: string): Promise<boolean> {
+    if (!contentId.trim() || !reason.trim()) return false;
     setActionLoading(`exclude-${contentId}`);
+    setError(null);
+    setMessage(null);
     try {
       if (!preview) {
         await api.adminExcludeContent(contentId.trim(), reason.trim());
         await loadAll();
       }
       setMessage('Conteúdo retirado do ranking.');
+      return true;
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Não foi possível retirar o conteúdo. Tente de novo.',
       );
+      return false;
     } finally {
       setActionLoading(null);
     }
@@ -303,6 +323,8 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
 
   async function handleRecalculate() {
     setActionLoading('recalculate');
+    setError(null);
+    setMessage(null);
     try {
       if (!preview) {
         await api.adminRecalculateRankings();
@@ -310,7 +332,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
       }
       setMessage('Recálculo de rankings iniciado.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha no recálculo.');
+      setError(err instanceof Error ? err.message : 'Não foi possível recalcular. Tente de novo.');
     } finally {
       setActionLoading(null);
     }
@@ -322,14 +344,14 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     setActionLoading('settings');
     try {
       if (preview) {
-        setMessage('Configurações salvas.');
+        setMessage('Regras salvas.');
       } else {
         const updated = await api.adminUpdateSettings({
           staleToleranceHours: settings.staleToleranceHours,
           manualSyncCooldownSeconds: settings.manualSyncCooldownSeconds,
         });
         setSettings(updated);
-        setMessage('Configurações salvas.');
+        setMessage('Regras salvas.');
         await loadAll();
       }
     } catch (err) {
@@ -458,14 +480,14 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                       disabled={actionLoading === `${user.id}-instagram`}
                       onClick={() => void handleRequestSync(user.id, 'instagram')}
                     >
-                      Sincronizar Instagram
+                      Coletar Instagram
                     </button>
                     <button
                       type="button"
                       disabled={actionLoading === `${user.id}-tiktok`}
                       onClick={() => void handleRequestSync(user.id, 'tiktok')}
                     >
-                      Sincronizar TikTok
+                      Coletar TikTok
                     </button>
                   </div>
                 </article>
@@ -493,7 +515,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                     <strong>
                       {platformName(job.platform)}
                       {job.username ? ` @${job.username.replace(/^@/, '')}` : ''}
-                      <span className="admin-status" data-tone={job.status === 'failed' ? 'stop' : job.status === 'succeeded' ? 'ok' : 'wait'}>
+                      <span className="admin-status" data-tone={jobTone(job.status)}>
                         <i />
                         {syncStatusLabel(job.status)}
                       </span>
@@ -636,7 +658,7 @@ function ExcludeContentSection({
   onExclude,
   loadingId,
 }: {
-  onExclude: (contentId: string, reason: string) => void;
+  onExclude: (contentId: string, reason: string) => Promise<boolean>;
   loadingId: string | null;
 }) {
   const [contentId, setContentId] = useState('');
@@ -649,7 +671,12 @@ function ExcludeContentSection({
         className="admin-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onExclude(contentId, reason);
+          void onExclude(contentId, reason).then((done) => {
+            if (done) {
+              setContentId('');
+              setReason('');
+            }
+          });
         }}
       >
         <p className="admin-meta">

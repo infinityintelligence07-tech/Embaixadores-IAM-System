@@ -82,6 +82,8 @@ const CALLBACK_ERRORS: Record<string, string> = {
   missing_parameters: 'A conexão foi interrompida antes de terminar. Tente de novo.',
   invalid_platform: 'Essa rede não está disponível.',
   connection_failed: 'Não foi possível concluir a entrada. Tente de novo.',
+  already_connected: 'Essa conta já está conectada a outro embaixador. Use outra conta ou fale com a equipe.',
+  state_expired: 'A conexão demorou demais e expirou. Comece de novo.',
   instagram_review_required: 'A Meta aceitou a permissão, mas a leitura do perfil ainda está só em teste. Uma conta comum entra depois que a análise do app for aprovada.',
   instagram_not_professional: 'Essa conta do Instagram precisa ser profissional. Troque para criador ou empresa e conecte de novo.',
 };
@@ -92,6 +94,7 @@ export function ConnectionsPage() {
   const connected = params.get('connected') === 'true';
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -209,7 +212,14 @@ export function ConnectionsPage() {
 
       {loadFailed && accounts.length === 0 ? (
         <div>
-          <Button variant="secondary" onClick={() => void loadAccounts()}>
+          <Button
+            variant="secondary"
+            loading={retrying}
+            onClick={() => {
+              setRetrying(true);
+              void loadAccounts().finally(() => setRetrying(false));
+            }}
+          >
             Tentar de novo
           </Button>
         </div>
@@ -263,18 +273,18 @@ export function ConnectionsPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="min-h-[42px]"
+                    className="min-h-[44px]"
                     loading={actionId === account.id}
                     onClick={() => handleSync(account.id)}
-                    aria-label={`Sincronizar ${platformLabel(account.platform)}`}
+                    aria-label={`Coletar agora no ${platformLabel(account.platform)}`}
                   >
                     <RefreshCw className="size-4" aria-hidden />
-                    Sincronizar
+                    Coletar agora
                   </Button>
                   <Button
                     variant="danger"
                     size="sm"
-                    className="min-h-[42px] min-w-[42px]"
+                    className="min-h-[44px] min-w-[44px]"
                     disabled={actionId === account.id}
                     onClick={() => setPendingDisconnect(account)}
                     aria-label={`Desconectar ${platformLabel(account.platform)}`}
