@@ -7,6 +7,7 @@ import {
 import { AuditLog } from '../../../domain/entities';
 import { asAuditLogId, asProfileId } from '../../../domain/types';
 import { getPool } from '../../../infrastructure/db/pool';
+import { readJson } from './read-json';
 
 @Injectable()
 export class PgAuditRepository implements AuditRepository {
@@ -62,7 +63,7 @@ export class PgAuditRepository implements AuditRepository {
       entityType: row.entity_type,
       entityId: row.entity_id,
       reason: row.reason,
-      metadata: row.metadata ? JSON.parse(row.metadata) : null,
+      metadata: readJson(row.metadata),
       createdAt: new Date(row.created_at),
     };
   }

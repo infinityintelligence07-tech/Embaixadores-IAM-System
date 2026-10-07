@@ -264,7 +264,7 @@ function withoutConnections(source: ArenaSnapshot): ArenaSnapshot {
         ? {
             ...value,
             eligible: false,
-            reason: 'Account not connected',
+            reason: 'Conta não conectada',
             position: null,
             score: null,
             gapToAbove: null,

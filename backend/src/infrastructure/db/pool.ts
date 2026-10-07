@@ -1,7 +1,15 @@
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
 import { loadConfig } from '../config/env';
 
 let pool: Pool | null = null;
+
+// O driver devolve BIGINT (int8) e NUMERIC como texto para não perder precisão.
+// Views e scores cabem com folga em Number, então convertemos na borda do banco
+// para a API nunca entregar "291505" em vez de 291505.
+const INT8_OID = 20;
+const NUMERIC_OID = 1700;
+types.setTypeParser(INT8_OID, (value) => (value === null ? null : Number.parseInt(value, 10)));
+types.setTypeParser(NUMERIC_OID, (value) => (value === null ? null : Number.parseFloat(value)));
 
 export function getPool(): Pool {
   if (!pool) {

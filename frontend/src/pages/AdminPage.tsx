@@ -126,22 +126,30 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     }
     setLoading(true);
     setError(null);
-    try {
-      const [usersData, syncsData, auditData, settingsData] = await Promise.all([
-        api.adminUsers(),
-        api.adminSyncs(),
-        api.adminAudit(),
-        api.adminSettings(),
-      ]);
-      setUsers(usersData);
-      setSyncs(syncsData);
-      setAudit(auditData);
-      setSettings(settingsData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar a administração.');
-    } finally {
-      setLoading(false);
+    // Cada bloco carrega por conta própria: uma falha não derruba a página inteira.
+    const [usersData, syncsData, auditData, settingsData] = await Promise.allSettled([
+      api.adminUsers(),
+      api.adminSyncs(),
+      api.adminAudit(),
+      api.adminSettings(),
+    ]);
+    if (usersData.status === 'fulfilled') setUsers(usersData.value);
+    if (syncsData.status === 'fulfilled') setSyncs(syncsData.value);
+    if (auditData.status === 'fulfilled') setAudit(auditData.value);
+    if (settingsData.status === 'fulfilled') setSettings(settingsData.value);
+
+    const failed = [
+      usersData.status === 'rejected' ? 'pessoas' : null,
+      syncsData.status === 'rejected' ? 'sincronização' : null,
+      auditData.status === 'rejected' ? 'auditoria' : null,
+      settingsData.status === 'rejected' ? 'regras' : null,
+    ].filter((item): item is string => item !== null);
+    if (failed.length > 0) {
+      setError(
+        `Não foi possível carregar ${failed.join(', ')}. Atualize a página para tentar de novo.`,
+      );
     }
+    setLoading(false);
   }, [preview]);
 
   useEffect(() => {

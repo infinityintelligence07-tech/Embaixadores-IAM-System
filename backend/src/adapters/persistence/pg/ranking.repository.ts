@@ -163,10 +163,10 @@ export class PgRankingRepository implements RankingRepository {
       profileId: asProfileId(row.profile_id),
       publicName: row.public_name,
       avatarUrl: row.avatar_url,
-      totalViews: row.total_views,
-      bestVideoViews: row.best_video_views,
+      totalViews: Number(row.total_views ?? 0),
+      bestVideoViews: Number(row.best_video_views ?? 0),
       bestContentId: row.best_content_id ? asContentId(row.best_content_id) : null,
-      score: row.score,
+      score: Number(row.score ?? 0),
       lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
       isStale: row.is_stale,
     };

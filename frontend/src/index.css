@@ -192,7 +192,11 @@ html {
 }
 
 .confirm-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
   width: min(100% - 32px, 420px);
+  max-height: calc(100% - 32px);
   padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -203,6 +207,11 @@ html {
 
 .confirm-dialog::backdrop {
   background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-dialog:not([open]) {
+  display: none;
 }
 
 .confirm-dialog-body {

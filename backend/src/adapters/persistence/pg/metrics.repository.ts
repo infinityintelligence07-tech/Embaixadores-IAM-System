@@ -18,6 +18,7 @@ import {
   asProfileId,
 } from '../../../domain/types';
 import { getPool } from '../../../infrastructure/db/pool';
+import { readJson } from './read-json';
 
 @Injectable()
 export class PgMetricsRepository implements MetricsRepository {
@@ -152,7 +153,7 @@ export class PgMetricsRepository implements MetricsRepository {
       viewsAvailable: row.views_available,
       source: row.source,
       periodLabel: row.period_label,
-      payload: row.payload ? JSON.parse(row.payload) : null,
+      payload: readJson(row.payload),
       syncRunId: row.sync_run_id ? asSyncRunId(row.sync_run_id) : null,
     };
   }
@@ -167,7 +168,7 @@ export class PgMetricsRepository implements MetricsRepository {
       periodLabel: row.period_label,
       definitionLabel: row.definition_label,
       source: row.source,
-      payload: row.payload ? JSON.parse(row.payload) : null,
+      payload: readJson(row.payload),
       syncRunId: row.sync_run_id ? asSyncRunId(row.sync_run_id) : null,
     };
   }

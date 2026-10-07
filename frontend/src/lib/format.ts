@@ -64,11 +64,15 @@ export function humanizeReason(reason: string | null | undefined): string {
       return 'O ranking desta rede ainda não foi publicado.';
     case 'Social account not connected':
     case 'Account not connected':
-    case 'Not eligible for ranking':
+    case 'Conta não conectada':
       return 'Para entrar na competição, conecte esta rede com a sua conta.';
     case 'Membership not approved':
+    case 'Cadastro ainda não aprovado':
+    case 'Aguardando aprovação da equipe.':
       return 'Sua participação ainda não foi aprovada.';
+    case 'Not eligible for ranking':
     case 'Not eligible':
+    case 'Fora do ranking no momento':
       return 'Você ainda não entrou neste ranking.';
     default:
       return reason;

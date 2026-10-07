@@ -63,7 +63,7 @@ export class GetDashboardUseCase {
           positionTotal: null,
           positionBest: null,
           totalParticipants: null,
-          ineligibilityReason: 'Account not connected',
+          ineligibilityReason: 'Conta não conectada',
           monitoredViewsTotal: null,
           bestVideo: null,
           officialAccountViews: null,
@@ -113,7 +113,7 @@ export class GetDashboardUseCase {
         positionTotal: totalEntry?.position || null,
         positionBest: bestEntry?.position || null,
         totalParticipants: totalRanking?.version.participantCount || null,
-        ineligibilityReason: !totalEntry ? 'Not eligible for ranking' : null,
+        ineligibilityReason: !totalEntry ? 'Fora do ranking no momento' : null,
         monitoredViewsTotal: aggregate?.totalViews || null,
         bestVideo: bestContent
           ? {
