@@ -26,7 +26,11 @@ export function ForgotPasswordPage() {
     setLoading(false);
 
     if (authError) {
-      setError('Não foi possível enviar o e-mail de recuperação.');
+      setError(
+        /rate limit|too many/i.test(authError.message)
+          ? 'Muitas tentativas em pouco tempo. Aguarde um minuto e tente de novo.'
+          : 'Não foi possível enviar o e-mail de recuperação. Confira o endereço e tente de novo.',
+      );
       return;
     }
 

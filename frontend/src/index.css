@@ -442,8 +442,11 @@ html {
 }
 
 .shell-user strong {
+  overflow: hidden;
   font-size: 14px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shell-user span {
@@ -479,7 +482,8 @@ html {
 
 .shell-tabbar ul {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   margin: 0;
   padding: 0;
   list-style: none;

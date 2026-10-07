@@ -155,9 +155,11 @@ export function CapturePage() {
       navigate("/sucesso");
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Não foi possível enviar sua candidatura. Tente de novo.",
+        err instanceof TypeError
+          ? "Sem conexão com o servidor. Verifique a internet e tente de novo."
+          : err instanceof Error && err.message
+            ? err.message
+            : "Não foi possível enviar sua candidatura. Tente de novo.",
       );
     } finally {
       setLoading(false);
@@ -364,7 +366,11 @@ export function CapturePage() {
               </div>
             ) : null}
 
-            {error ? <div className="form-error">{error}</div> : null}
+            {error ? (
+              <div className="form-error" role="alert">
+                {error}
+              </div>
+            ) : null}
 
             <button
               className="btn btn--primary btn--lg lp-submit"

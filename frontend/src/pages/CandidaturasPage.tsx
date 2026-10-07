@@ -133,6 +133,7 @@ export function CandidaturasPage() {
             type="button"
             size="sm"
             variant={filter === item.id ? 'primary' : 'secondary'}
+            aria-pressed={filter === item.id}
             onClick={() => {
               setFilter(item.id);
               setVisibleCount(PAGE_SIZE);

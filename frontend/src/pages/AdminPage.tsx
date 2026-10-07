@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -27,7 +27,7 @@ export interface AdminPreview {
 
 const sections: { id: AdminSection; label: string }[] = [
   { id: 'pessoas', label: 'Pessoas' },
-  { id: 'sincronizacao', label: 'Sincronização' },
+  { id: 'sincronizacao', label: 'Coletas' },
   { id: 'regras', label: 'Regras' },
   { id: 'conteudo', label: 'Conteúdo' },
   { id: 'auditoria', label: 'Auditoria' },
@@ -42,7 +42,7 @@ function postingLine(user: AdminUser): string {
         ? '1 post nos últimos 30 dias'
         : `${posts} posts nos últimos 30 dias`;
   if (user.daysWithoutPosting == null) {
-    return `${frequency}. Ainda não há post sincronizado.`;
+    return `${frequency}. Ainda não há post coletado.`;
   }
   if (user.daysWithoutPosting === 0) {
     return `${frequency}. Postou hoje.`;
@@ -112,7 +112,7 @@ const AUDIT_ACTIONS: Record<string, string> = {
   connect_social_account: 'Rede conectada',
   exclude_content: 'Conteúdo retirado do ranking',
   recalculate_rankings: 'Rankings recalculados',
-  request_sync: 'Sincronização solicitada',
+  request_sync: 'Coleta solicitada',
   update_settings: 'Regras alteradas',
 };
 
@@ -181,13 +181,15 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [visibleUsers, setVisibleUsers] = useState(PAGE_SIZE);
   const [visibleSyncs, setVisibleSyncs] = useState(PAGE_SIZE);
   const [visibleAudit, setVisibleAudit] = useState(PAGE_SIZE);
+  const hasLoadedRef = useRef(false);
 
   const loadAll = useCallback(async () => {
     if (preview) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // O spinner de página inteira só aparece na primeira carga; depois a tela atualiza no lugar.
+    setLoading((current) => current && !hasLoadedRef.current);
     setError(null);
     // Cada bloco carrega por conta própria: uma falha não derruba a página inteira.
     const [usersData, syncsData, auditData, settingsData] = await Promise.allSettled([
@@ -203,7 +205,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
 
     const failed = [
       usersData.status === 'rejected' ? 'pessoas' : null,
-      syncsData.status === 'rejected' ? 'sincronização' : null,
+      syncsData.status === 'rejected' ? 'coletas' : null,
       auditData.status === 'rejected' ? 'auditoria' : null,
       settingsData.status === 'rejected' ? 'regras' : null,
     ].filter((item): item is string => item !== null);
@@ -212,6 +214,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         `Não foi possível carregar ${failed.join(', ')}. Atualize a página para tentar de novo.`,
       );
     }
+    hasLoadedRef.current = true;
     setLoading(false);
   }, [preview]);
 
@@ -221,6 +224,8 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
 
   async function handleApprove(id: string) {
     setActionLoading(id);
+    setError(null);
+    setMessage(null);
     try {
       if (preview) {
         setUsers((current) =>
@@ -230,9 +235,9 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminApproveUser(id);
         await loadAll();
       }
-      setMessage('Usuário aprovado.');
+      setMessage('Embaixador aprovado. O acesso completo foi liberado.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao aprovar.');
+      setError(err instanceof Error ? err.message : 'Não foi possível aprovar. Tente de novo.');
     } finally {
       setActionLoading(null);
     }
@@ -268,9 +273,11 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminRequestSync(userId, platform);
         await loadAll();
       }
-      setMessage('Sincronização solicitada.');
+      setMessage('Coleta solicitada. Os dados chegam em alguns minutos.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao solicitar sincronização.');
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível pedir a coleta. Tente de novo.',
+      );
     } finally {
       setActionLoading(null);
     }
@@ -284,9 +291,11 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminExcludeContent(contentId.trim(), reason.trim());
         await loadAll();
       }
-      setMessage('Conteúdo excluído do ranking.');
+      setMessage('Conteúdo retirado do ranking.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao excluir conteúdo.');
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível retirar o conteúdo. Tente de novo.',
+      );
     } finally {
       setActionLoading(null);
     }
@@ -324,7 +333,9 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await loadAll();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao salvar configurações.');
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível salvar as regras. Tente de novo.',
+      );
     } finally {
       setActionLoading(null);
     }
@@ -341,9 +352,9 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   return (
     <div className="admin">
       <header>
-        <h1 className="admin-title">Administração</h1>
+        <h1 className="page-title">Administração</h1>
         <p className="admin-lead">
-          Aprove embaixadores, acompanhe a sincronização e ajuste as regras do programa.
+          Aprove embaixadores, acompanhe as coletas e ajuste as regras do programa.
         </p>
       </header>
 
@@ -360,7 +371,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
             <button
               key={item.id}
               type="button"
-              aria-current={section === item.id ? 'page' : undefined}
+              aria-pressed={section === item.id}
               onClick={() => {
                 setSection(item.id);
                 setMessage(null);
@@ -425,7 +436,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                     {user.status !== 'approved' ? (
                       <button
                         type="button"
-                        className="is-go"
+                        className="admin-primary"
                         disabled={actionLoading === user.id}
                         onClick={() => void handleApprove(user.id)}
                       >
@@ -469,7 +480,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         ) : null}
 
         {section === 'sincronizacao' ? (
-          <section className="admin-panel" aria-label="Sincronização">
+          <section className="admin-panel" aria-label="Coletas">
             <h2>Coletas recentes</h2>
             {syncs.length === 0 ? (
               <p className="admin-row admin-meta">
@@ -545,7 +556,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                   }
                 />
                 <Input
-                  label="Espera para sincronizar de novo (segundos)"
+                  label="Espera entre coletas manuais (segundos)"
                   name="manualSyncCooldownSeconds"
                   type="number"
                   min={0}

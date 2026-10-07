@@ -39,6 +39,7 @@ export function Input({
           className={clsx(
             'w-full rounded-xl border bg-surface-elevated px-3 py-2.5 text-sm text-text placeholder:text-text-muted',
             'border-border',
+            'disabled:cursor-not-allowed disabled:bg-surface disabled:text-text-muted disabled:opacity-70',
             leading && 'pl-10',
             error && 'border-danger',
             className,

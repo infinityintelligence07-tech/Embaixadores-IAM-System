@@ -75,6 +75,6 @@ export function humanizeReason(reason: string | null | undefined): string {
     case 'Fora do ranking no momento':
       return 'Você ainda não entrou neste ranking.';
     default:
-      return reason;
+      return /^[A-Za-z ]+$/.test(reason) ? 'Sua posição ainda não está disponível.' : reason;
   }
 }

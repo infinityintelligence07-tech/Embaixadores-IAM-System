@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompetitionGate } from '@/components/arena/CompetitionGate';
 import { PlatformMark } from '@/components/brand/PlatformMark';
@@ -58,7 +58,7 @@ function initial(name: string): string {
 }
 
 function formatWhen(value: string | null): string {
-  if (!value) return 'Indisponível';
+  if (!value) return 'Sem dados';
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
@@ -88,8 +88,15 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [ladderOpen, setLadderOpen] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const picked = useRef(false);
   const patentRef = useRef<HTMLLIElement | null>(null);
+  const ladderRef = useRef<HTMLDialogElement | null>(null);
+
+  const retry = useCallback(() => {
+    setLoading(true);
+    setAttempt((current) => current + 1);
+  }, []);
 
   useEffect(() => {
     if (locked) return;
@@ -124,7 +131,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                 ? error.message
                 : error instanceof Error
                   ? error.message
-                  : 'Erro ao carregar ranking.';
+                  : 'Não foi possível carregar o ranking. Tente de novo.';
             return { id, error: message };
           }
         }),
@@ -168,7 +175,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     return () => {
       active = false;
     };
-  }, [locked]);
+  }, [locked, attempt]);
 
   useEffect(() => {
     if (picked.current || loading) return;
@@ -190,6 +197,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   );
 
   const standingScore = standing?.score ?? null;
+  const total = board?.total ?? standing?.total ?? 0;
   const me = items.find((item) => item.isCurrentUser);
   const below = me ? items.find((item) => item.position === me.position + 1) : undefined;
   const belowGap =
@@ -198,7 +206,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     eligible: standing?.eligible ?? false,
     reason: standing?.reason ?? null,
     position: standing?.position ?? null,
-    total: standing?.total ?? board?.total ?? 0,
+    total,
     gapToAbove: standing?.gapToAbove ?? null,
     myScore: standingScore,
     belowGap,
@@ -237,21 +245,22 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const visibleTail = query.trim()
     ? tail.filter((item) => item.publicName.toLowerCase().includes(query.trim().toLowerCase()))
     : tail;
-  const total = board?.total ?? standing?.total ?? 0;
   const youAreInTail = (standing?.position ?? 0) > 10;
 
   useEffect(() => {
+    const dialog = ladderRef.current;
+    if (!dialog) return;
+    if (ladderOpen && !dialog.open) {
+      dialog.showModal();
+    } else if (!ladderOpen && dialog.open) {
+      dialog.close();
+    }
     if (!ladderOpen) return;
     const node = patentRef.current;
     const row = node?.parentElement;
     if (node && row && row.scrollWidth > row.clientWidth + 1) {
       row.scrollTo({ left: Math.max(0, node.offsetLeft - (row.clientWidth - node.offsetWidth) / 2) });
     }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setLadderOpen(false);
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
   }, [ladderOpen]);
 
   useEffect(() => {
@@ -288,6 +297,12 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         ...current,
         [activeKey]: [...(current[activeKey] ?? []), ...page.items],
       }));
+      setErrors((current) => {
+        if (!current[activeKey]) return current;
+        const next = { ...current };
+        delete next[activeKey];
+        return next;
+      });
     } catch {
       setErrors((current) => ({
         ...current,
@@ -331,7 +346,9 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
             <i />
             <i />
           </div>
-        ) : blocked ? null : standing?.eligible && standing.position != null ? (
+        ) : blocked ? (
+          <h1 className="arena-standing">Entre na competição</h1>
+        ) : standing?.eligible && standing.position != null ? (
           <h1 className="arena-standing">
             Você está na{' '}
             <span className="arena-ordinal" data-place={placeTone}>
@@ -393,20 +410,19 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
             <div>
               <p>Seu vídeo com mais views</p>
               <strong>{featured.title}</strong>
-              <span>{formatViews(featured.views)} views. O link ainda não chegou na sincronização.</span>
+              <span>{formatViews(featured.views)} views. O link ainda não chegou na coleta.</span>
             </div>
           </article>
         )
       ) : null}
 
       <div className="arena-controls">
-        <div className="arena-switch" role="tablist" aria-label="Tipo de ranking">
+        <div className="arena-switch" role="group" aria-label="Tipo de ranking">
           {CATEGORIES.map((item) => (
             <button
               key={item}
               type="button"
-              role="tab"
-              aria-selected={category === item}
+              aria-pressed={category === item}
               onClick={() => selectCategory(item)}
             >
               {item === 'total_views' ? 'Views totais' : 'Vídeo com mais views'}
@@ -432,7 +448,12 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                   {platformLabel(item)}
                 </button>
                 {href && !needsLogin ? (
-                  <a href={href} target="_blank" rel="noreferrer">
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Abrir perfil no ${platformLabel(item)}`}
+                  >
                     Abrir
                   </a>
                 ) : (
@@ -459,7 +480,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         <section id="videos-mais-acessados" aria-label="Vídeos mais acessados">
           {videos.length === 0 ? (
             <EmptyState
-              title="Nenhum vídeo sincronizado"
+              title="Nenhum vídeo coletado"
               description="Conecte a rede e aguarde a coleta para ver os vídeos com mais views."
               action={
                 <Link className="arena-link" to="/conexoes">
@@ -503,6 +524,11 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
       ) : errors[activeKey] && !board ? (
         <Alert variant="error" role="alert">
           {errors[activeKey]}
+          {locked ? null : (
+            <button type="button" className="arena-retry" onClick={retry}>
+              Tentar de novo
+            </button>
+          )}
         </Alert>
       ) : !board || total === 0 ? (
         <EmptyState
@@ -587,6 +613,19 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                       {loadingMore ? 'Carregando' : 'Carregar mais'}
                     </button>
                   ) : null}
+                  {errors[activeKey] ? (
+                    <Alert variant="error" role="alert">
+                      {errors[activeKey]}
+                      <button
+                        type="button"
+                        className="arena-retry"
+                        onClick={() => void loadMore()}
+                        disabled={loadingMore}
+                      >
+                        Tentar de novo
+                      </button>
+                    </Alert>
+                  ) : null}
                 </div>
               ) : null}
             </section>
@@ -608,9 +647,20 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           </span>
         </button>
       </section>
-      {ladderOpen ? (
-        <div className="tier-layer" role="dialog" aria-modal="true" aria-labelledby="tier-title">
-          <button type="button" className="tier-scrim" aria-label="Fechar" onClick={() => setLadderOpen(false)} />
+      <dialog
+        ref={ladderRef}
+        className="tier-layer"
+        aria-labelledby="tier-title"
+        onCancel={(event) => {
+          event.preventDefault();
+          setLadderOpen(false);
+        }}
+        onClose={() => setLadderOpen(false)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) setLadderOpen(false);
+        }}
+      >
+        {ladderOpen ? (
           <div className="tier-sheet">
             <p className="tier-kicker">Guerreiros embaixadores</p>
             <h2 id="tier-title">Progressão de níveis</h2>
@@ -647,15 +697,15 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
               Fechar
             </button>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </dialog>
 
       {slice && !blocked ? (
         <p className="arena-note">
           {slice.officialAccountViews == null
             ? `${slice.officialAccountViewsLabel}.`
             : `${slice.officialAccountViewsLabel}: ${formatViews(slice.officialAccountViews)}.`}{' '}
-          Última sincronização: {formatWhen(slice.lastSyncAt)}. Agora você vê{' '}
+          Última coleta: {formatWhen(slice.lastSyncAt)}. Agora você vê{' '}
           {categoryPhrase(category)} no {platformLabel(platform)}.
         </p>
       ) : (

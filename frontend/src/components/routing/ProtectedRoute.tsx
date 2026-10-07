@@ -27,7 +27,17 @@ export function ProtectedRoute({
   }
 
   if (state === 'unauthenticated' || state === 'expired') {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{
+          from: location.pathname,
+          reason:
+            state === 'expired' ? 'Sua sessão expirou. Entre de novo para continuar.' : undefined,
+        }}
+      />
+    );
   }
 
   // A sessão existe, mas o perfil ainda não chegou. Sem ele não dá para decidir
@@ -58,10 +68,7 @@ export function ProtectedRoute({
     );
   }
 
-  if (requireAdmin && !isAdmin) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
+  // Suspensão vale para todo mundo, inclusive quem tem papel de administração
   if (profile?.status === 'suspended') {
     return (
       <div className="mx-auto max-w-lg space-y-4 px-4 py-16">
@@ -76,6 +83,10 @@ export function ProtectedRoute({
     );
   }
 
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   if (
     profile?.status === 'approved' &&
     location.pathname === '/onboarding'
@@ -83,12 +94,7 @@ export function ProtectedRoute({
     return <Navigate to="/dashboard" replace />;
   }
 
-  if (
-    requireApproved &&
-    profile &&
-    profile.status === 'pending' &&
-    !PENDING_ALLOWED_PATHS.includes(location.pathname)
-  ) {
+  if (requireApproved && profile && profile.status !== 'approved') {
     return <Navigate to="/onboarding" replace />;
   }
 

@@ -8,11 +8,26 @@ import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
+function loginErrorMessage(message: string): string {
+  if (/not confirmed/i.test(message)) {
+    return 'Confirme seu e-mail antes de entrar. Procure a mensagem de confirmação na sua caixa de entrada.';
+  }
+  if (/rate limit|too many/i.test(message)) {
+    return 'Muitas tentativas em pouco tempo. Aguarde um minuto e tente de novo.';
+  }
+  if (/network|fetch/i.test(message)) {
+    return 'Sem conexão com o servidor. Verifique a internet e tente de novo.';
+  }
+  return 'E-mail ou senha inválidos. Confira os dados e tente de novo.';
+}
+
 export function LoginPage() {
   const { state } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard';
+  const routeState = location.state as { from?: string; reason?: string } | null;
+  const from = routeState?.from ?? '/dashboard';
+  const reason = routeState?.reason ?? null;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,7 +51,7 @@ export function LoginPage() {
     setLoading(false);
 
     if (authError) {
-      setError('E-mail ou senha inválidos. Verifique seus dados e tente novamente.');
+      setError(loginErrorMessage(authError.message));
       return;
     }
 
@@ -52,6 +67,10 @@ export function LoginPage() {
         {error ? (
           <Alert variant="error" role="alert">
             {error}
+          </Alert>
+        ) : reason ? (
+          <Alert variant="warning" role="status">
+            {reason}
           </Alert>
         ) : null}
 

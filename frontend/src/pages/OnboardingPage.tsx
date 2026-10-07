@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock, Link2, UserRound } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSurfaceTheme } from '@/lib/theme';
-import { api } from '@/lib/api';
+import { api, type SocialAccount } from '@/lib/api';
+import { gateHeadline } from '@/lib/connection';
 
 const steps = [
   {
@@ -43,8 +44,25 @@ export function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [accounts, setAccounts] = useState<SocialAccount[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .socialAccounts()
+      .then((data) => {
+        if (active) setAccounts(data);
+      })
+      .catch(() => {
+        if (active) setAccounts([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const profileDone = Boolean(profile?.fullName && profile?.publicName);
+  const connectionsDone = accounts !== null && gateHeadline(accounts) === null;
   const approved = profile?.status === 'approved';
 
   async function handleSubmit(event: FormEvent) {
@@ -90,6 +108,7 @@ export function OnboardingPage() {
           const Icon = step.icon;
           const done =
             (step.id === 'profile' && profileDone) ||
+            (step.id === 'connections' && connectionsDone) ||
             (step.id === 'approval' && approved);
 
           return (
@@ -112,8 +131,11 @@ export function OnboardingPage() {
                 <p className="mt-1 text-sm text-text-muted">{step.description}</p>
                 {step.id === 'connections' ? (
                   <div className="mt-3">
-                    <Link to="/conexoes" className="cta">
-                      Conectar Instagram e TikTok
+                    <Link
+                      to="/conexoes"
+                      className="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-brand-violet px-4 text-sm font-medium text-white hover:bg-brand-violet/90"
+                    >
+                      {connectionsDone ? 'Ver conexões' : 'Conectar Instagram e TikTok'}
                     </Link>
                   </div>
                 ) : null}

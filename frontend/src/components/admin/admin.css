@@ -5,13 +5,6 @@
   color: var(--ink);
 }
 
-.admin-title {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-}
-
 .admin-lead {
   margin: 6px 0 0;
   max-width: 62ch;
@@ -45,7 +38,7 @@
   cursor: pointer;
 }
 
-.admin-nav button[aria-current='page'] {
+.admin-nav button[aria-pressed='true'] {
   background: white;
   color: var(--ink);
   box-shadow: var(--shadow);
@@ -62,7 +55,7 @@
 .admin-panel h2 {
   margin: 0;
   padding: 14px 18px 4px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 650;
   color: var(--ink-muted);
 }
@@ -119,8 +112,7 @@
 
 .admin-actions button,
 .admin-primary,
-.admin .is-stop,
-.admin .is-go {
+.admin .is-stop {
   min-height: 42px;
   padding: 0 12px;
   border-radius: 10px;
@@ -130,11 +122,6 @@
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
-}
-
-.admin .is-go {
-  background: var(--good);
-  color: white;
 }
 
 .admin-primary {

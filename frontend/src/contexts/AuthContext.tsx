@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -35,23 +36,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  const sessionUserId = session?.user.id ?? null;
+  const requestSeq = useRef(0);
+
   const refreshProfile = useCallback(async () => {
-    if (!session) {
+    if (!sessionUserId) {
       setProfile(null);
       setProfileError(null);
       setProfileLoading(false);
       return;
     }
 
+    const seq = ++requestSeq.current;
     setProfileLoading(true);
     try {
       const me = await api.me();
+      if (seq !== requestSeq.current) return;
       setProfile(me);
       setProfileError(null);
     } catch (error) {
+      if (seq !== requestSeq.current) return;
       if (error instanceof ApiError && error.status === 401) {
+        // A sessão local não vale mais no servidor: encerra para não entrar em loop
+        await supabase.auth.signOut().catch(() => undefined);
         setState('expired');
-        setProfileError('Sua sessão expirou. Faça login novamente.');
+        setProfileError('Sua sessão expirou. Entre de novo para continuar.');
       } else {
         setProfileError(
           error instanceof Error ? error.message : 'Não foi possível carregar seu perfil.',
@@ -59,9 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setProfile(null);
     } finally {
-      setProfileLoading(false);
+      if (seq === requestSeq.current) setProfileLoading(false);
     }
-  }, [session]);
+  }, [sessionUserId]);
 
   useEffect(() => {
     let mounted = true;
@@ -88,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (state === 'authenticated' && session) {
+    if (state === 'authenticated' && sessionUserId) {
       void refreshProfile();
     }
 
@@ -96,12 +105,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setProfileError(null);
     }
-  }, [state, session, refreshProfile]);
+  }, [state, sessionUserId, refreshProfile]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      // Mesmo com falha remota, limpa a sessão local para a pessoa conseguir sair
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    }
     setProfile(null);
     setProfileError(null);
+    setSession(null);
+    setUser(null);
     setState('unauthenticated');
   }, []);
 

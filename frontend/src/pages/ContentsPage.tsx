@@ -109,13 +109,13 @@ export function ContentsPage() {
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="truncate font-medium text-text">{item.title}</h2>
+                  <h2 className="min-w-0 max-w-full truncate font-medium text-text">{item.title}</h2>
                   <Badge tone={item.platform === 'instagram' ? 'violet' : 'gold'}>
                     {item.platform === 'instagram' ? 'Instagram' : 'TikTok'}
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-text-muted">
-                  {formatViews(item.views)} visualizações ·{' '}
+                  {formatViews(item.views)} views ·{' '}
                   {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(
                     new Date(item.publishedAt),
                   )}
@@ -124,7 +124,7 @@ export function ContentsPage() {
                   href={item.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-sm text-brand-violet underline-offset-4 hover:underline"
+                  className="mt-2 inline-flex min-h-[44px] items-center gap-1 text-sm text-brand-violet underline-offset-4 hover:underline"
                 >
                   Abrir conteúdo
                   <ExternalLink className="size-3.5" aria-hidden />

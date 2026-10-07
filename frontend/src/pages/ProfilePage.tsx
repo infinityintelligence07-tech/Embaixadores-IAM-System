@@ -17,6 +17,7 @@ export function ProfilePage() {
   const [fullName, setFullName] = useState('');
   const [publicName, setPublicName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [avatarBroken, setAvatarBroken] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -54,7 +55,9 @@ export function ProfilePage() {
       await refreshProfile();
       setSuccess('Perfil atualizado com sucesso.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar perfil.');
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível salvar o perfil. Tente de novo.',
+      );
     } finally {
       setLoading(false);
     }
@@ -74,7 +77,11 @@ export function ProfilePage() {
       await api.requestAccountDeletion();
       setSuccess('Solicitação de exclusão enviada. Nossa equipe entrará em contato.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível enviar a solicitação.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível enviar a solicitação. Tente de novo em instantes.',
+      );
     } finally {
       setDeleting(false);
       setConfirmDelete(false);
@@ -104,12 +111,13 @@ export function ProfilePage() {
         </p>
       </header>
 
-      <div className="flex items-center gap-4 rounded-2xl border border-border bg-surface-card p-4">
-        {avatarUrl ? (
+      <div className="flex items-center gap-4 rounded-[14px] border border-border bg-surface-card p-4">
+        {avatarUrl && !avatarBroken ? (
           <img
             src={avatarUrl}
             alt=""
             className="size-16 rounded-full border border-border object-cover"
+            onError={() => setAvatarBroken(true)}
           />
         ) : (
           <div className="flex size-16 items-center justify-center rounded-full bg-brand-violet/20 text-xl font-semibold text-brand-violet">
@@ -117,7 +125,7 @@ export function ProfilePage() {
           </div>
         )}
         <div>
-          <p className="font-medium text-text">{publicName}</p>
+          <p className="font-medium text-text">{profile.publicName}</p>
           <p className="text-sm text-text-muted">{profile.email}</p>
           <Badge tone={statusTone} className="mt-2">
             {statusLabel}
@@ -134,7 +142,7 @@ export function ProfilePage() {
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-2xl border border-border bg-surface-card p-5"
+        className="space-y-4 rounded-[14px] border border-border bg-surface-card p-5"
       >
         <Input
           label="Nome completo"
@@ -160,7 +168,10 @@ export function ProfilePage() {
           type="url"
           placeholder="https://..."
           value={avatarUrl}
-          onChange={(e) => setAvatarUrl(e.target.value)}
+          onChange={(e) => {
+            setAvatarUrl(e.target.value);
+            setAvatarBroken(false);
+          }}
         />
 
         <Button type="submit" loading={loading}>
@@ -168,9 +179,9 @@ export function ProfilePage() {
         </Button>
       </form>
 
-      <section className="space-y-3 rounded-2xl border border-border bg-surface-card p-5">
+      <section className="space-y-3 rounded-[14px] border border-border bg-surface-card p-5">
         <h2 className="font-display text-lg text-text">Ações da conta</h2>
-        <Button variant="secondary" className="w-full" onClick={handleLogout}>
+        <Button variant="secondary" className="w-full" onClick={() => void handleLogout()}>
           <LogOut className="size-4" aria-hidden />
           Sair da conta
         </Button>

@@ -45,8 +45,10 @@ export function RegisterPage() {
       setError(
         raw.includes('already registered') || raw.includes('already exists')
           ? 'Já existe uma conta com este e-mail. Entre ou recupere a senha.'
-          : raw.includes('password')
+          : raw.includes('password') && (raw.includes('at least') || raw.includes('characters'))
             ? 'A senha precisa ter pelo menos 8 caracteres.'
+            : raw.includes('password')
+              ? 'Essa senha é fraca demais. Use letras, números e pelo menos 8 caracteres.'
             : raw.includes('rate limit') || raw.includes('too many')
               ? 'Muitas tentativas em pouco tempo. Aguarde um pouco e tente de novo.'
               : raw.includes('invalid') && raw.includes('email')
@@ -65,10 +67,18 @@ export function RegisterPage() {
       subtitle="Junte-se ao programa de embaixadores digitais."
     >
       {success ? (
-        <Alert variant="success" title="Conta criada">
-          Verifique seu e-mail para confirmar o cadastro. Depois, faça login e
-          complete seu perfil.
-        </Alert>
+        <div className="space-y-4">
+          <Alert variant="success" title="Conta criada">
+            Verifique seu e-mail para confirmar o cadastro. Depois, entre e complete
+            seu perfil.
+          </Alert>
+          <Link
+            to="/login"
+            className="inline-flex min-h-[42px] w-full items-center justify-center rounded-xl bg-brand-violet px-4 text-sm font-medium text-white hover:bg-brand-violet/90"
+          >
+            Ir para o login
+          </Link>
+        </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {error ? (

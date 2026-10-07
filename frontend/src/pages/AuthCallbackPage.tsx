@@ -12,12 +12,17 @@ export function AuthCallbackPage() {
     let active = true;
 
     async function handleCallback() {
-      const { error: authError } = await supabase.auth.getSession();
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const hashError = hash.get('error_description') || hash.get('error');
+
+      const { data, error: authError } = await supabase.auth.getSession();
 
       if (!active) return;
 
-      if (authError) {
-        setError('O link de confirmação expirou ou já foi usado. Entre com seu e-mail e senha ou peça um novo link.');
+      if (hashError || authError || !data.session) {
+        setError(
+          'O link de confirmação expirou ou já foi usado. Entre com seu e-mail e senha ou peça um novo link.',
+        );
         return;
       }
 

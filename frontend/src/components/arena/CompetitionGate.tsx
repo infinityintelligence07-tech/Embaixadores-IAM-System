@@ -53,7 +53,7 @@ export function CompetitionGate({
                     disabled={busy === platform}
                     onClick={() => onConnect(platform)}
                   >
-                    {busy === platform ? 'Abrindo…' : label}
+                    {busy === platform ? 'Abrindo...' : label}
                   </button>
                 ) : null}
               </div>

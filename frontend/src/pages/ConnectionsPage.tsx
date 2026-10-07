@@ -61,7 +61,7 @@ function statusLabel(status: ConnectionStatus): string {
     case 'disconnected':
       return 'Desconectado';
     case 'syncing':
-      return 'Sincronizando';
+      return 'Em coleta';
     case 'authorization_expired':
       return 'Autorização expirada';
     case 'insufficient_permission':
@@ -91,6 +91,7 @@ export function ConnectionsPage() {
   const callbackError = params.get('error');
   const connected = params.get('connected') === 'true';
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -101,7 +102,9 @@ export function ConnectionsPage() {
     try {
       const data = await api.socialAccounts();
       setAccounts(data);
+      setLoadFailed(false);
     } catch (err) {
+      setLoadFailed(true);
       if (err instanceof ApiError && err.status === 401) {
         setError('Sua sessão expirou. Entre de novo para ver as conexões.');
       } else {
@@ -153,7 +156,7 @@ export function ConnectionsPage() {
       await loadAccounts();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'A sincronização falhou. Tente de novo em instantes.',
+        err instanceof Error ? err.message : 'A coleta falhou. Tente de novo em instantes.',
       );
     } finally {
       setActionId(null);
@@ -204,12 +207,20 @@ export function ConnectionsPage() {
         </Alert>
       ) : null}
 
-      <CompetitionGate
-        accounts={accounts}
-        persist
-        busy={actionId === 'instagram' || actionId === 'tiktok' ? actionId : null}
-        onConnect={(platform) => void handleConnect(platform)}
-      />
+      {loadFailed && accounts.length === 0 ? (
+        <div>
+          <Button variant="secondary" onClick={() => void loadAccounts()}>
+            Tentar de novo
+          </Button>
+        </div>
+      ) : (
+        <CompetitionGate
+          accounts={accounts}
+          persist
+          busy={actionId === 'instagram' || actionId === 'tiktok' ? actionId : null}
+          onConnect={(platform) => void handleConnect(platform)}
+        />
+      )}
 
       {accounts.length === 0 ? null : (
         <ul className="space-y-3">
@@ -238,7 +249,9 @@ export function ConnectionsPage() {
                           dateStyle: 'short',
                           timeStyle: 'short',
                         }).format(new Date(account.lastSyncAt))}`
-                      : ' · Em coleta'}
+                      : account.status === 'connected' || account.status === 'syncing'
+                        ? ' · Em coleta'
+                        : ' · Sem dados'}
                   </p>
                   {account.syncMessage ? (
                     <p className="mt-2 text-sm text-text-muted" role="status">

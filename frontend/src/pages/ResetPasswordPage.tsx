@@ -39,13 +39,22 @@ export function ResetPasswordPage() {
     setLoading(false);
 
     if (authError) {
-      setError('Não foi possível redefinir sua senha.');
+      setError(
+        /at least|characters|weak|password/i.test(authError.message)
+          ? 'A senha precisa ter pelo menos 8 caracteres. Escolha uma senha mais forte.'
+          : 'Não foi possível redefinir sua senha. Tente de novo ou peça um novo link.',
+      );
       return;
     }
 
     setSuccess(true);
-    setTimeout(() => navigate('/login', { replace: true }), 1500);
   }
+
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => navigate('/dashboard', { replace: true }), 1500);
+    return () => clearTimeout(timer);
+  }, [success, navigate]);
 
   if (checking) {
     return (
@@ -79,7 +88,7 @@ export function ResetPasswordPage() {
     >
       {success ? (
         <Alert variant="success" title="Senha atualizada">
-          Redirecionando para o login...
+          Levando você para o início...
         </Alert>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
