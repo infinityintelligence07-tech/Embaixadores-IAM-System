@@ -51,48 +51,70 @@ export class PgSyncJobRepository implements SyncJobRepository {
   }
   
   async enqueue(input: EnqueueSyncJobInput): Promise<SyncJob> {
-    const existing = await this.findActiveByAccount(input.socialAccountId);
-    if (existing) {
-      if ((input.priority ?? 100) >= 200) {
-        const woken = await this.pool.query(
-          `UPDATE sync_jobs
-           SET status = 'pending',
-               locked_at = NULL,
-               locked_by = NULL,
-               next_attempt_at = NULL,
-               scheduled_at = $2,
-               priority = $3,
-               updated_at = NOW()
-           WHERE id = $1
-           RETURNING *`,
-          [existing.id, input.scheduledAt || new Date(), input.priority ?? 200],
-        );
-        return this.mapJobRow(woken.rows[0]);
+    const isManual = (input.priority ?? 100) >= 200;
+
+    // Two attempts cover the race where another worker finishes or creates
+    // the active job between our SELECT and INSERT.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const existing = await this.findActiveByAccount(input.socialAccountId);
+      if (existing) {
+        if (isManual) {
+          // Manual sync: wake the job and drop the stale checkpoint so it
+          // starts again from the first page.
+          const woken = await this.pool.query(
+            `UPDATE sync_jobs
+             SET status = 'pending',
+                 locked_at = NULL,
+                 locked_by = NULL,
+                 next_attempt_at = NULL,
+                 checkpoint = NULL,
+                 scheduled_at = $2,
+                 priority = $3,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING *`,
+            [existing.id, input.scheduledAt || new Date(), input.priority ?? 200],
+          );
+          return this.mapJobRow(woken.rows[0]);
+        }
+        return existing;
       }
-      return existing;
+
+      // sync_jobs_active_account_uq is a partial unique index on
+      // (social_account_id) WHERE status IN ('pending', 'running'), so the
+      // conflict target must repeat the same predicate.
+      const result = await this.pool.query(
+        `INSERT INTO sync_jobs (
+          social_account_id, job_type, priority, scheduled_at
+        )
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (social_account_id) WHERE status IN ('pending', 'running') DO NOTHING
+        RETURNING *`,
+        [
+          input.socialAccountId,
+          input.jobType || 'full_sync',
+          input.priority || 100,
+          input.scheduledAt || new Date(),
+        ],
+      );
+      if (result.rows[0]) {
+        return this.mapJobRow(result.rows[0]);
+      }
+      // Lost the race: someone else inserted an active job. Loop to pick it up.
     }
 
-    const result = await this.pool.query(
-      `INSERT INTO sync_jobs (
-        social_account_id, job_type, priority, scheduled_at
-      )
-      VALUES ($1, $2, $3, $4)
-      RETURNING *`,
-      [
-        input.socialAccountId,
-        input.jobType || 'full_sync',
-        input.priority || 100,
-        input.scheduledAt || new Date(),
-      ],
-    );
-    return this.mapJobRow(result.rows[0]);
+    const active = await this.findActiveByAccount(input.socialAccountId);
+    if (active) return active;
+    throw new Error('Não foi possível agendar a coleta. Tente de novo.');
   }
   
   async claimNext(workerId: string, now: Date): Promise<SyncJob | null> {
     const client = await this.pool.connect();
     
     try {
-      // Use SKIP LOCKED to avoid contention between workers
+      // Use SKIP LOCKED to avoid contention between workers.
+      // Jobs stuck in 'running' for more than 30 minutes (worker crashed or
+      // restarted mid-sync) are reclaimed: the lock moves to this worker.
       const result = await client.query(
         `UPDATE sync_jobs
          SET status = 'running',
@@ -102,9 +124,16 @@ export class PgSyncJobRepository implements SyncJobRepository {
              updated_at = NOW()
          WHERE id = (
            SELECT id FROM sync_jobs
-           WHERE status = 'pending'
-             AND scheduled_at <= $1
-             AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+           WHERE (
+                   status = 'pending'
+                   AND scheduled_at <= $1
+                   AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+                 )
+              OR (
+                   status = 'running'
+                   AND locked_at IS NOT NULL
+                   AND locked_at < $1::timestamptz - interval '30 minutes'
+                 )
            ORDER BY priority DESC, scheduled_at ASC
            LIMIT 1
            FOR UPDATE SKIP LOCKED

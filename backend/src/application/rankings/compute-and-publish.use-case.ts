@@ -106,7 +106,7 @@ export class ComputeAndPublishRankingUseCase {
         totalViews: aggregate.totalViews,
         bestVideoViews: aggregate.bestVideoViews,
         bestContentId: aggregate.bestContentId,
-        approvedAt: membership.approvedAt!,
+        approvedAt: membership.approvedAt ?? membership.createdAt,
         lastSyncedAt: account.lastSyncedAt,
         isStale: eligibility.isStale || false,
       });

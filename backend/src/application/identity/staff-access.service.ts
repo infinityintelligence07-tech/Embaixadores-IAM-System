@@ -27,7 +27,9 @@ export class StaffAccessService implements OnModuleInit {
     if (!STAFF_EMAILS.has(profile.email.trim().toLowerCase())) {
       return profile.role as AppRole;
     }
-    await this.grant(profile.id);
+    if (profile.role !== AppRole.Admin) {
+      await this.grant(profile.id);
+    }
     return AppRole.Admin;
   }
 

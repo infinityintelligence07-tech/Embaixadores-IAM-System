@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 // Infrastructure
 import { INJECTION_TOKENS } from './infrastructure/tokens/injection-tokens';
@@ -57,12 +58,18 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
-        ttl: 60000,
-        limit: 100,
+        ttl: 60_000,
+        limit: 300,
       },
     ]),
   ],
   providers: [
+    // Limite de requisições por IP (configurado no ThrottlerModule)
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+
     // Ports
     {
       provide: INJECTION_TOKENS.CLOCK,

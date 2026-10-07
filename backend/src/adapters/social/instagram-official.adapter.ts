@@ -7,7 +7,48 @@ import {
   SocialContentPage,
   AccountMetricsResult,
   ContentMetricsResult,
+  SocialAuthError,
+  SocialRateLimitError,
 } from '../../ports/social-metrics.port';
+
+interface GraphErrorInfo {
+  status: number;
+  code: number | null;
+  subcode: number | null;
+  type: string | null;
+  message: string;
+}
+
+const MEDIA_FIELDS = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp';
+const MEDIA_PAGE_SIZE = 100;
+const INSIGHTS_CONCURRENCY = 5;
+const GRAPH_AUTH_CODES = new Set([190]);
+const GRAPH_OAUTH_CODES = new Set([102, 190]);
+const GRAPH_RATE_LIMIT_CODES = new Set([4, 17, 32, 613]);
+
+/** Runs `fn` over `items` with at most `limit` promises in flight. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < items.length) {
+      const current = nextIndex++;
+      results[current] = await fn(items[current], current);
+    }
+  };
+
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return results;
+}
 
 /**
  * Instagram Official API adapter (Graph API).
@@ -45,49 +86,118 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     creds: SocialCredentials,
     cursor?: string | null,
   ): Promise<SocialContentPage> {
-    const url = cursor ||
-      `${this.baseUrl}/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=100&access_token=${encodeURIComponent(creds.accessToken)}`;
-    
+    // Legacy checkpoints stored the full `paging.next` URL (which embeds the
+    // access token). Accept it for one more run so in-flight jobs finish;
+    // new cursors are only the opaque `after` value.
+    const url =
+      cursor && cursor.startsWith('http')
+        ? cursor
+        : this.buildMediaUrl(creds.accessToken, cursor ?? null);
+
     const response = await fetch(url);
-    
-    if (!response.ok) {
-      const error = await response.text();
-      this.logger.error('Failed to list Instagram media:', error);
-      throw new Error('Failed to list Instagram content');
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.error) {
+      const info = this.parseGraphError(data, response.status);
+      this.logGraphError('list media', info);
+      throw this.mapGraphError(info, 'Failed to list Instagram content');
     }
-    
-    const data = await response.json();
-    
-    const items = await Promise.all(
-      (data.data || []).map(async (item: any) => {
-        // Fetch insights for each media item
-        let views: number | null = null;
-        let viewsAvailable = false;
-        
+
+    const media: any[] = Array.isArray(data?.data) ? data.data : [];
+
+    // Once the API throttles us, stop asking for insights on the remaining
+    // media of this page instead of hammering it with more calls.
+    let rateLimited = false;
+
+    const items = await mapWithConcurrency(media, INSIGHTS_CONCURRENCY, async (item: any) => {
+      let views: number | null = null;
+      let viewsAvailable = false;
+
+      if (!rateLimited) {
         try {
           views = await this.fetchMediaViews(creds.accessToken, item.id);
           viewsAvailable = views !== null;
         } catch (error) {
-          this.logger.warn(`Failed to fetch insights for media ${item.id}:`, error);
+          if (error instanceof SocialAuthError) throw error;
+          if (error instanceof SocialRateLimitError) {
+            rateLimited = true;
+            this.logger.warn(
+              `Instagram rate limit while fetching insights (code=${error.code}); skipping the rest of this page`,
+            );
+          } else {
+            this.logger.warn(`Failed to fetch insights for media ${item.id}: ${error}`);
+          }
         }
-        
-        return {
-          platformContentId: item.id,
-          title: item.caption || null,
-          thumbnailUrl: item.thumbnail_url || item.media_url || null,
-          permalink: item.permalink || null,
-          publishedAt: item.timestamp ? new Date(item.timestamp) : null,
-          mediaType: item.media_type || null,
-          views,
-          viewsAvailable,
-        };
-      }),
-    );
-    
+      }
+
+      return {
+        platformContentId: item.id,
+        title: item.caption || null,
+        thumbnailUrl: item.thumbnail_url || item.media_url || null,
+        permalink: item.permalink || null,
+        publishedAt: item.timestamp ? new Date(item.timestamp) : null,
+        mediaType: item.media_type || null,
+        views,
+        viewsAvailable,
+      };
+    });
+
+    // Only advance when Graph says there is a next page; the `after` cursor
+    // is also present on the last page and would cause an empty extra fetch.
+    const nextCursor: string | null =
+      media.length > 0 && data.paging?.next
+        ? data.paging?.cursors?.after ?? null
+        : null;
+
+    return { items, nextCursor };
+  }
+
+  private buildMediaUrl(accessToken: string, after: string | null): string {
+    const url = new URL(`${this.baseUrl}/me/media`);
+    url.searchParams.set('fields', MEDIA_FIELDS);
+    url.searchParams.set('limit', String(MEDIA_PAGE_SIZE));
+    if (after) url.searchParams.set('after', after);
+    url.searchParams.set('access_token', accessToken);
+    return url.toString();
+  }
+
+  private parseGraphError(data: any, status: number): GraphErrorInfo {
+    const error = data && typeof data === 'object' ? data.error : null;
+    const code = Number(error?.code);
+    const subcode = Number(error?.error_subcode);
     return {
-      items,
-      nextCursor: data.paging?.next || null,
+      status,
+      code: Number.isFinite(code) ? code : null,
+      subcode: Number.isFinite(subcode) ? subcode : null,
+      type: typeof error?.type === 'string' ? error.type : null,
+      message: typeof error?.message === 'string' ? error.message : '',
     };
+  }
+
+  private isGraphAuthError(info: GraphErrorInfo): boolean {
+    if (info.code !== null && GRAPH_AUTH_CODES.has(info.code)) return true;
+    return info.type === 'OAuthException' && info.code !== null && GRAPH_OAUTH_CODES.has(info.code);
+  }
+
+  private isGraphRateLimit(info: GraphErrorInfo): boolean {
+    return info.code !== null && GRAPH_RATE_LIMIT_CODES.has(info.code);
+  }
+
+  /** Logs status/code/subcode only. Never logs the URL or the token. */
+  private logGraphError(context: string, info: GraphErrorInfo, level: 'warn' | 'error' = 'error'): void {
+    const line = `Instagram ${context} failed status=${info.status} code=${info.code ?? '-'} subcode=${info.subcode ?? '-'} type=${info.type ?? '-'} ${info.message.slice(0, 180)}`;
+    if (level === 'warn') this.logger.warn(line);
+    else this.logger.error(line);
+  }
+
+  private mapGraphError(info: GraphErrorInfo, fallback: string): Error {
+    if (this.isGraphAuthError(info)) {
+      return new SocialAuthError(undefined, info.code);
+    }
+    if (this.isGraphRateLimit(info)) {
+      return new SocialRateLimitError(undefined, info.code);
+    }
+    return new Error(fallback);
   }
   
   async getAccountMetrics(creds: SocialCredentials): Promise<AccountMetricsResult> {
@@ -131,7 +241,8 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
       const views = await this.fetchMediaViews(creds.accessToken, platformContentId);
       return { views, viewsAvailable: views !== null };
     } catch (error) {
-      this.logger.warn(`Failed to get content metrics for ${platformContentId}:`, error);
+      if (error instanceof SocialAuthError) throw error;
+      this.logger.warn(`Failed to get content metrics for ${platformContentId}: ${error}`);
       return { views: null, viewsAvailable: false };
     }
   }
@@ -216,9 +327,10 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
 
     const response = await fetch(url);
     const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.access_token) {
-      this.logger.error('Failed to refresh Instagram token', data?.error?.message);
-      throw new Error('Failed to refresh Instagram credentials');
+    if (!response.ok || data?.error || !data?.access_token) {
+      const info = this.parseGraphError(data, response.status);
+      this.logGraphError('token refresh', info);
+      throw this.mapGraphError(info, 'Failed to refresh Instagram credentials');
     }
 
     return {
@@ -228,25 +340,30 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     };
   }
 
+  /**
+   * Single insights call per media. Media insights reject `period`, so there
+   * is no lifetime fallback. Auth and rate limit errors are thrown; anything
+   * else resolves to null so one bad media does not fail the whole page.
+   */
   private async fetchMediaViews(accessToken: string, mediaId: string): Promise<number | null> {
-    const primary = await this.requestMediaInsights(accessToken, mediaId, false);
-    if (primary !== null) return primary;
-    return this.requestMediaInsights(accessToken, mediaId, true);
-  }
-
-  private async requestMediaInsights(
-    accessToken: string,
-    mediaId: string,
-    withLifetime: boolean,
-  ): Promise<number | null> {
     const url = new URL(`${this.baseUrl}/${mediaId}/insights`);
     url.searchParams.set('metric', 'views');
-    if (withLifetime) url.searchParams.set('period', 'lifetime');
     url.searchParams.set('access_token', accessToken);
 
     const response = await fetch(url);
-    if (!response.ok) return null;
-    return readInstagramViews(await response.json());
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || data?.error) {
+      const info = this.parseGraphError(data, response.status);
+      if (this.isGraphAuthError(info) || this.isGraphRateLimit(info)) {
+        this.logGraphError(`media insights ${mediaId}`, info);
+        throw this.mapGraphError(info, 'Failed to fetch Instagram media insights');
+      }
+      this.logGraphError(`media insights ${mediaId}`, info, 'warn');
+      return null;
+    }
+
+    return readInstagramViews(data);
   }
 
   async disconnect(_creds: SocialCredentials): Promise<void> {

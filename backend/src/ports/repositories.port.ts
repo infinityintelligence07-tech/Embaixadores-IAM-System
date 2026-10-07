@@ -95,6 +95,7 @@ export interface CreateSocialAccountInput {
 }
 
 export interface UpdateSocialAccountInput {
+  platformUserId?: string;
   username?: string | null;
   displayName?: string | null;
   avatarUrl?: string | null;
@@ -124,6 +125,14 @@ export interface SocialAccountRepository {
     platform: SocialPlatform,
   ): Promise<SocialAccount | null>;
   findByPlatformUserId(
+    platform: SocialPlatform,
+    platformUserId: string,
+  ): Promise<SocialAccount | null>;
+  findAnyByProfileAndPlatform(
+    profileId: ProfileId,
+    platform: SocialPlatform,
+  ): Promise<SocialAccount | null>;
+  findAnyByPlatformUserId(
     platform: SocialPlatform,
     platformUserId: string,
   ): Promise<SocialAccount | null>;

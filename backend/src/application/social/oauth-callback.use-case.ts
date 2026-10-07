@@ -45,6 +45,9 @@ export class OAuthCallbackUseCase {
     if (!oauthState) {
       throw new BadRequestException('A conexão expirou antes de terminar. Tente de novo.');
     }
+    if (oauthState.platform !== platform) {
+      throw new BadRequestException('A conexão não confere com a rede escolhida. Tente de novo.');
+    }
     
     // Exchange code for tokens
     const tokens = await this.exchangeCode(platform, code, oauthState.codeVerifier);
@@ -58,8 +61,8 @@ export class OAuthCallbackUseCase {
     // Get profile
     const authorizedProfile = await provider.getAuthorizedProfile(tokens);
     
-    // Check for existing account with same platform_user_id (enforce UNIQUE)
-    const existingByPlatformUser = await this.socialAccountRepo.findByPlatformUserId(
+    // A unicidade (platform, platform_user_id) vale também para contas desconectadas
+    const existingByPlatformUser = await this.socialAccountRepo.findAnyByPlatformUserId(
       platform,
       authorizedProfile.platformUserId,
     );
@@ -70,8 +73,8 @@ export class OAuthCallbackUseCase {
       );
     }
     
-    // Check if this profile already has an account for this platform
-    const existingByProfile = await this.socialAccountRepo.findByProfileAndPlatform(
+    // Reaproveita a linha do perfil nesta rede, mesmo se foi desconectada antes
+    const existingByProfile = await this.socialAccountRepo.findAnyByProfileAndPlatform(
       oauthState.profileId,
       platform,
     );
@@ -79,8 +82,9 @@ export class OAuthCallbackUseCase {
     let accountId: string;
     
     if (existingByProfile) {
-      // Update existing
+      // Update existing (também cobre reconexão e troca de conta na mesma rede)
       await this.socialAccountRepo.update(existingByProfile.id, {
+        platformUserId: authorizedProfile.platformUserId,
         username: authorizedProfile.username,
         displayName: authorizedProfile.displayName,
         avatarUrl: authorizedProfile.avatarUrl,
@@ -183,19 +187,21 @@ export class OAuthCallbackUseCase {
       longLivedUrl.searchParams.set('access_token', shortToken);
       const longLivedResponse = await fetch(longLivedUrl);
 
+      // Token curto vale 1 hora. Registramos a validade para o refresh tentar renovar a tempo.
+      const shortLived = {
+        accessToken: shortToken,
+        expiresAt: new Date(Date.now() + 3600 * 1000),
+        scopes: [],
+      };
+
       if (!longLivedResponse.ok) {
-        return {
-          accessToken: shortToken,
-          scopes: [],
-        };
+        console.error('Instagram long-lived exchange failed', { status: longLivedResponse.status });
+        return shortLived;
       }
 
-      const longLivedData = await longLivedResponse.json();
+      const longLivedData = await longLivedResponse.json().catch(() => null);
       if (!longLivedData?.access_token) {
-        return {
-          accessToken: shortToken,
-          scopes: [],
-        };
+        return shortLived;
       }
 
       return {

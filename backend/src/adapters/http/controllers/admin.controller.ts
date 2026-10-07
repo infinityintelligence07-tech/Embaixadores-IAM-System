@@ -8,8 +8,16 @@ import {
   UseGuards,
   Req,
   BadRequestException,
+  NotFoundException,
   Inject,
 } from '@nestjs/common';
+import { uuidPipe } from '../pipes/uuid.pipe';
+import {
+  ExcludeContentDto,
+  ReasonDto,
+  RequestSyncDto,
+  UpdateSettingsDto,
+} from '../dto/admin.dto';
 import { AuthGuard } from '../guards/auth.guard';
 import { AdminGuard } from '../guards/admin.guard';
 import {
@@ -30,6 +38,7 @@ import {
   ProfileId,
   RankingCategory,
   SocialPlatform,
+  SyncJobStatus,
 } from '../../../domain/types';
 
 @Controller('api/admin')
@@ -91,8 +100,13 @@ export class AdminController {
   @Post('users/:id/approve')
   async approveUser(
     @Req() req: { user: { id: string } },
-    @Param('id') userId: string,
+    @Param('id', uuidPipe('Pessoa inválida.')) userId: string,
   ) {
+    const profile = await this.profileRepo.findById(userId as never);
+    if (!profile) {
+      throw new NotFoundException('Pessoa não encontrada.');
+    }
+
     const membership = await this.membershipRepo.approve(
       userId as never,
       req.user.id as never,
@@ -106,28 +120,35 @@ export class AdminController {
       entityId: membership.id,
     });
 
-    const profile = await this.profileRepo.findById(userId as never);
-
     return {
-      id: profile!.id,
-      email: profile!.email,
-      fullName: profile!.fullName,
-      publicName: profile!.publicName,
+      id: profile.id,
+      email: profile.email,
+      fullName: profile.fullName,
+      publicName: profile.publicName,
       status: membership.status,
-      role: profile!.role,
-      createdAt: profile!.createdAt.toISOString(),
+      role: profile.role,
+      createdAt: profile.createdAt.toISOString(),
     };
   }
 
   @Post('users/:id/suspend')
   async suspendUser(
     @Req() req: { user: { id: string } },
-    @Param('id') userId: string,
-    @Body() body?: { reason?: string },
+    @Param('id', uuidPipe('Pessoa inválida.')) userId: string,
+    @Body() body?: ReasonDto,
   ) {
+    const profile = await this.profileRepo.findById(userId as never);
+    if (!profile) {
+      throw new NotFoundException('Pessoa não encontrada.');
+    }
+    if (profile.id === req.user.id) {
+      throw new BadRequestException('Você não pode suspender a sua própria conta.');
+    }
+
+    const reason = body?.reason?.trim() || 'Suspenso pela administração';
     const membership = await this.membershipRepo.suspend(
       userId as never,
-      body?.reason || 'Suspenso pela administração',
+      reason,
       this.clock.now(),
     );
 
@@ -136,19 +157,17 @@ export class AdminController {
       action: 'suspend_membership',
       entityType: 'membership',
       entityId: membership.id,
-      reason: body?.reason || 'Suspenso pela administração',
+      reason,
     });
 
-    const profile = await this.profileRepo.findById(userId as never);
-
     return {
-      id: profile!.id,
-      email: profile!.email,
-      fullName: profile!.fullName,
-      publicName: profile!.publicName,
+      id: profile.id,
+      email: profile.email,
+      fullName: profile.fullName,
+      publicName: profile.publicName,
       status: membership.status,
-      role: profile!.role,
-      createdAt: profile!.createdAt.toISOString(),
+      role: profile.role,
+      createdAt: profile.createdAt.toISOString(),
     };
   }
 
@@ -158,9 +177,17 @@ export class AdminController {
     const result = [];
 
     const names = new Map<string, string>();
+    const accounts = new Map<string, Awaited<ReturnType<SocialAccountRepository['findById']>>>();
     for (const job of jobs) {
-      const account = await this.socialAccountRepo.findById(job.socialAccountId);
-      const run = await this.syncJobRepo.findLatestRunByAccount(job.socialAccountId);
+      if (!accounts.has(job.socialAccountId)) {
+        accounts.set(job.socialAccountId, await this.socialAccountRepo.findById(job.socialAccountId));
+      }
+      const account = accounts.get(job.socialAccountId) ?? null;
+      // Datas do próprio job: início quando foi reservado, fim na última atualização após concluir ou falhar
+      const finished =
+        job.status === SyncJobStatus.Succeeded ||
+        job.status === SyncJobStatus.Failed ||
+        job.status === SyncJobStatus.Cancelled;
       let publicName: string | null = null;
       if (account?.profileId) {
         if (!names.has(account.profileId)) {
@@ -176,9 +203,9 @@ export class AdminController {
         username: account?.username ?? null,
         platform: account?.platform ?? null,
         status: job.status,
-        startedAt: run?.startedAt?.toISOString() ?? job.lockedAt?.toISOString() ?? null,
-        finishedAt: run?.finishedAt?.toISOString() ?? null,
-        errorMessage: job.lastError ?? run?.errorMessage ?? null,
+        startedAt: job.lockedAt?.toISOString() ?? null,
+        finishedAt: finished ? job.updatedAt.toISOString() : null,
+        errorMessage: job.lastError ?? null,
       });
     }
 
@@ -188,19 +215,15 @@ export class AdminController {
   @Post('syncs')
   async requestSync(
     @Req() req: { user: { id: string } },
-    @Body() body: { userId: string; platform: string },
+    @Body() body: RequestSyncDto,
   ) {
-    if (body.platform !== 'instagram' && body.platform !== 'tiktok') {
-      throw new BadRequestException('Plataforma inválida');
-    }
-
     const account = await this.socialAccountRepo.findByProfileAndPlatform(
       body.userId as never,
       body.platform as SocialPlatform,
     );
 
     if (!account) {
-      throw new BadRequestException('Conta social não encontrada');
+      throw new NotFoundException('Essa pessoa não tem conta conectada nessa rede.');
     }
 
     const job = await this.syncJobRepo.enqueue({
@@ -235,11 +258,11 @@ export class AdminController {
   @Post('contents/:id/exclude')
   async excludeContent(
     @Req() req: { user: { id: string } },
-    @Param('id') contentId: string,
-    @Body() body: { reason: string },
+    @Param('id', uuidPipe('Conteúdo inválido.')) contentId: string,
+    @Body() body: ExcludeContentDto,
   ) {
-    if (!body?.reason?.trim()) {
-      throw new BadRequestException('Justificativa obrigatória');
+    if (!body.reason.trim()) {
+      throw new BadRequestException('Informe a justificativa da exclusão.');
     }
 
     const content = await this.contentRepo.exclude(
@@ -314,20 +337,9 @@ export class AdminController {
   @Patch('settings')
   async updateSettings(
     @Req() req: { user: { id: string } },
-    @Body()
-    body: Partial<{
-      syncIntervalMinutes: number;
-      staleToleranceHours: number;
-      manualSyncCooldownSeconds: number;
-    }>,
+    @Body() body: UpdateSettingsDto,
   ) {
-    if (body.syncIntervalMinutes !== undefined) {
-      await this.settingsRepo.set(
-        'sync_interval_minutes',
-        10,
-        req.user.id as never,
-      );
-    }
+    // O intervalo de coleta é fixo (SYNC_INTERVAL_MINUTES); o DTO só aceita o valor atual.
 
     if (body.staleToleranceHours !== undefined) {
       await this.settingsRepo.set(
@@ -349,7 +361,10 @@ export class AdminController {
       actorId: req.user.id as never,
       action: 'update_settings',
       entityType: 'settings',
-      metadata: body,
+      metadata: {
+        staleToleranceHours: body.staleToleranceHours,
+        manualSyncCooldownSeconds: body.manualSyncCooldownSeconds,
+      },
     });
 
     return this.getSettings();
@@ -368,6 +383,23 @@ export class AdminController {
       return names.get(id) ?? null;
     };
 
+    const entityNameOf = async (log: { entityType: string; entityId: string | null }) => {
+      if (!log.entityId) return null;
+      if (log.entityType === 'profile' || log.entityType === 'membership') {
+        return nameOf(log.entityId);
+      }
+      if (log.entityType === 'social_account') {
+        const account = await this.socialAccountRepo.findById(log.entityId as never);
+        if (!account) return null;
+        const platform = account.platform === SocialPlatform.Instagram ? 'Instagram' : 'TikTok';
+        const owner = await nameOf(account.profileId);
+        return account.username
+          ? `${platform} @${account.username}${owner ? ` de ${owner}` : ''}`
+          : `${platform}${owner ? ` de ${owner}` : ''}`;
+      }
+      return null;
+    };
+
     const result = [];
     for (const log of logs) {
       result.push({
@@ -377,10 +409,7 @@ export class AdminController {
         actorName: await nameOf(log.actorId),
         entityType: log.entityType,
         entityId: log.entityId,
-        entityName:
-          log.entityType === 'profile' || log.entityType === 'membership'
-            ? await nameOf(log.entityId)
-            : null,
+        entityName: await entityNameOf(log),
         reason: log.reason,
         createdAt: log.createdAt.toISOString(),
       });

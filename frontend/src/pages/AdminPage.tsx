@@ -131,6 +131,7 @@ function auditActionLabel(action: string): string {
 
 function auditEntityLabel(entry: AdminAuditEntry): string {
   const type = AUDIT_ENTITIES[entry.entityType] ?? entry.entityType;
+  if (entry.entityName && entry.entityType === 'social_account') return entry.entityName;
   if (entry.entityName) return `${type} ${entry.entityName}`;
   if (entry.entityType === 'ranking' || entry.entityType === 'settings') return type;
   return entry.entityId ? `${type} ${entry.entityId.slice(0, 8)}` : type;
@@ -314,7 +315,10 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
       if (preview) {
         setMessage('Configurações salvas.');
       } else {
-        const updated = await api.adminUpdateSettings(settings);
+        const updated = await api.adminUpdateSettings({
+          staleToleranceHours: settings.staleToleranceHours,
+          manualSyncCooldownSeconds: settings.manualSyncCooldownSeconds,
+        });
         setSettings(updated);
         setMessage('Configurações salvas.');
         await loadAll();

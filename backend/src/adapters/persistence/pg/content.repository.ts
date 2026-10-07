@@ -16,6 +16,7 @@ import {
   asProfileId,
 } from '../../../domain/types';
 import { getPool } from '../../../infrastructure/db/pool';
+import { firstRowOrThrow } from './first-row';
 
 @Injectable()
 export class PgContentRepository implements ContentRepository {
@@ -154,7 +155,7 @@ export class PgContentRepository implements ContentRepository {
        RETURNING *`,
       [id, excludedAt, reason, excludedBy],
     );
-    return this.mapRow(result.rows[0]);
+    return this.mapRow(firstRowOrThrow(result, 'Conteúdo não encontrado.'));
   }
   
   async restore(id: ContentId): Promise<ContentItem> {
@@ -169,7 +170,7 @@ export class PgContentRepository implements ContentRepository {
        RETURNING *`,
       [id],
     );
-    return this.mapRow(result.rows[0]);
+    return this.mapRow(firstRowOrThrow(result, 'Conteúdo não encontrado.'));
   }
   
   private mapRow(row: any): ContentItem {

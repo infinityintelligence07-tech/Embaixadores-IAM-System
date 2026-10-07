@@ -8,6 +8,7 @@ import {
 import { Profile } from '../../../domain/entities';
 import { AppRole, ProfileId, asProfileId } from '../../../domain/types';
 import { getPool } from '../../../infrastructure/db/pool';
+import { firstRowOrThrow } from './first-row';
 
 @Injectable()
 export class PgProfileRepository implements ProfileRepository {
@@ -83,7 +84,7 @@ export class PgProfileRepository implements ProfileRepository {
       values,
     );
     
-    return this.mapRow(result.rows[0]);
+    return this.mapRow(firstRowOrThrow(result, 'Perfil não encontrado.'));
   }
   
   async softDelete(id: ProfileId): Promise<void> {

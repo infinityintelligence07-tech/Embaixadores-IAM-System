@@ -42,6 +42,34 @@ export interface ContentMetricsResult {
   viewsAvailable: boolean;
 }
 
+/**
+ * Thrown when the platform rejects the credentials (expired, revoked or invalid token).
+ * The sync pipeline must stop retrying and ask the user to reconnect.
+ */
+export class SocialAuthError extends Error {
+  readonly code: string | number | null;
+
+  constructor(message = 'A autorização da rede social expirou.', code: string | number | null = null) {
+    super(message);
+    this.name = 'SocialAuthError';
+    this.code = code;
+  }
+}
+
+/**
+ * Thrown when the platform throttles our requests.
+ * The sync pipeline should retry later with a longer backoff.
+ */
+export class SocialRateLimitError extends Error {
+  readonly code: string | number | null;
+
+  constructor(message = 'A rede social limitou as consultas.', code: string | number | null = null) {
+    super(message);
+    this.name = 'SocialRateLimitError';
+    this.code = code;
+  }
+}
+
 export interface SocialMetricsProvider {
   readonly platform: 'instagram' | 'tiktok';
   readonly transport: 'official_api' | 'mcp' | 'demo';

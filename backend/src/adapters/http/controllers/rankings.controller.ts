@@ -7,6 +7,34 @@ import { ClockPort } from '../../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { Inject } from '@nestjs/common';
 
+const PLATFORMS = new Set<string>(Object.values(SocialPlatform));
+const CATEGORIES = new Set<string>(Object.values(RankingCategory));
+const VIEWS = new Set(['all', 'top3', 'top10']);
+
+function parsePlatform(value?: string): SocialPlatform {
+  if (!value) return SocialPlatform.Instagram;
+  if (!PLATFORMS.has(value)) throw new BadRequestException('Plataforma inválida.');
+  return value as SocialPlatform;
+}
+
+function parseCategory(value?: string): RankingCategory {
+  if (!value) return RankingCategory.TotalViews;
+  if (!CATEGORIES.has(value)) throw new BadRequestException('Categoria inválida.');
+  return value as RankingCategory;
+}
+
+function parseView(value?: string): 'all' | 'top3' | 'top10' {
+  if (!value) return 'all';
+  if (!VIEWS.has(value)) throw new BadRequestException('Visualização inválida.');
+  return value as 'all' | 'top3' | 'top10';
+}
+
+function clampInt(value: string | undefined, fallback: number, min: number, max: number): number {
+  const parsed = parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
 @Controller('api/rankings')
 @UseGuards(AuthGuard)
 export class RankingsController {
@@ -31,11 +59,11 @@ export class RankingsController {
     @Query('page') pageParam?: string,
     @Query('pageSize') pageSizeParam?: string,
   ) {
-    const platform = (platformParam || 'instagram') as SocialPlatform;
-    const category = (categoryParam || 'total_views') as RankingCategory;
-    const view = viewParam || 'all';
-    const page = parseInt(pageParam || '1', 10);
-    const pageSize = parseInt(pageSizeParam || '50', 10);
+    const platform = parsePlatform(platformParam);
+    const category = parseCategory(categoryParam);
+    const view = parseView(viewParam);
+    const page = clampInt(pageParam, 1, 1, 10_000);
+    const pageSize = clampInt(pageSizeParam, 50, 1, 100);
     
     const published = await this.rankingRepo.findPublished(platform, category);
     
@@ -98,8 +126,8 @@ export class RankingsController {
     @Query('platform') platformParam?: string,
     @Query('category') categoryParam?: string,
   ) {
-    const platform = (platformParam || 'instagram') as SocialPlatform;
-    const category = (categoryParam || 'total_views') as RankingCategory;
+    const platform = parsePlatform(platformParam);
+    const category = parseCategory(categoryParam);
     
     const published = await this.rankingRepo.findPublished(platform, category);
     

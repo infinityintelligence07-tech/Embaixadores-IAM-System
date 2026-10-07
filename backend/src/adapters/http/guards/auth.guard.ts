@@ -43,7 +43,8 @@ export class AuthGuard implements CanActivate {
       
       return true;
     } catch (error) {
-      throw new UnauthorizedException('Sua sessão expirou. Entre de novo para continuar.');
+      // Erros de banco ou infraestrutura não podem virar logout no cliente
+      throw error;
     }
   }
 }

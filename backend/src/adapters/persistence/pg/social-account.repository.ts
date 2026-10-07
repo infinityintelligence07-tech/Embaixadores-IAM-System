@@ -19,6 +19,7 @@ import {
 import { SocialCredentials } from '../../../ports/social-metrics.port';
 import { TokenEncryptionPort } from '../../../ports/tokens.port';
 import { getPool } from '../../../infrastructure/db/pool';
+import { firstRowOrThrow } from './first-row';
 
 @Injectable()
 export class PgSocialAccountRepository implements SocialAccountRepository {
@@ -47,6 +48,30 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
   }
   
+  /** Inclui contas desconectadas. Usado na reconexão para reaproveitar a linha. */
+  async findAnyByProfileAndPlatform(
+    profileId: ProfileId,
+    platform: SocialPlatform,
+  ): Promise<SocialAccount | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM social_accounts WHERE profile_id = $1 AND platform = $2`,
+      [profileId, platform],
+    );
+    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+  }
+
+  /** Inclui contas desconectadas. A unicidade (platform, platform_user_id) vale para todas. */
+  async findAnyByPlatformUserId(
+    platform: SocialPlatform,
+    platformUserId: string,
+  ): Promise<SocialAccount | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM social_accounts WHERE platform = $1 AND platform_user_id = $2`,
+      [platform, platformUserId],
+    );
+    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+  }
+
   async findByPlatformUserId(
     platform: SocialPlatform,
     platformUserId: string,
@@ -111,6 +136,10 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
     const values: any[] = [];
     let paramIndex = 1;
     
+    if (input.platformUserId !== undefined) {
+      setClauses.push(`platform_user_id = $${paramIndex++}`);
+      values.push(input.platformUserId);
+    }
     if (input.username !== undefined) {
       setClauses.push(`username = $${paramIndex++}`);
       values.push(input.username);
@@ -163,7 +192,7 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
       values,
     );
     
-    return this.mapRow(result.rows[0]);
+    return this.mapRow(firstRowOrThrow(result, 'Conta não encontrada.'));
   }
   
   async saveCredentials(

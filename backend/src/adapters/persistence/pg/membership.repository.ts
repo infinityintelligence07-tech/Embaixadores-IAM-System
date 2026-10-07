@@ -10,6 +10,7 @@ import {
   asProfileId 
 } from '../../../domain/types';
 import { getPool } from '../../../infrastructure/db/pool';
+import { firstRowOrThrow } from './first-row';
 
 @Injectable()
 export class PgMembershipRepository implements MembershipRepository {
@@ -85,7 +86,7 @@ export class PgMembershipRepository implements MembershipRepository {
        RETURNING *`,
       [profileId, suspendedAt, reason],
     );
-    return this.mapRow(result.rows[0]);
+    return this.mapRow(firstRowOrThrow(result, 'Cadastro não encontrado.'));
   }
   
   async reinstate(profileId: ProfileId): Promise<AmbassadorMembership> {
@@ -99,7 +100,7 @@ export class PgMembershipRepository implements MembershipRepository {
        RETURNING *`,
       [profileId],
     );
-    return this.mapRow(result.rows[0]);
+    return this.mapRow(firstRowOrThrow(result, 'Cadastro não encontrado.'));
   }
   
   private mapRow(row: any): AmbassadorMembership {

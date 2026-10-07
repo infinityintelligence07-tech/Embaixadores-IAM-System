@@ -8,7 +8,24 @@ import {
   SocialContentPage,
   AccountMetricsResult,
   ContentMetricsResult,
+  SocialAuthError,
+  SocialRateLimitError,
 } from '../../ports/social-metrics.port';
+
+const TIKTOK_AUTH_ERROR_CODES = new Set([
+  'access_token_invalid',
+  'invalid_grant',
+  'token_expired',
+  'access_token_expired',
+]);
+const TIKTOK_RATE_LIMIT_CODES = new Set(['rate_limit_exceeded', 'too_many_requests']);
+
+function readTikTokErrorCode(error: unknown): string | null {
+  if (typeof error === 'string') return error || null;
+  if (!error || typeof error !== 'object') return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code !== '' ? code : null;
+}
 
 /**
  * TikTok Official API adapter (Display API v2).
@@ -38,18 +55,20 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
       },
     });
     
+    const data = await response.json().catch(() => null);
+
     if (!response.ok) {
-      const error = await response.text();
-      this.logger.error('Failed to get TikTok user:', error);
+      this.throwIfAuthFailure(data?.error, response.status, 'user info');
+      this.logger.error(`Failed to get TikTok user: status=${response.status} code=${readTikTokErrorCode(data?.error) ?? '-'}`);
       throw new Error('Failed to get TikTok profile');
     }
-    
-    const data = await response.json();
-    if (data.error?.code && data.error.code !== 'ok') {
-      this.logger.error('TikTok profile error', data.error.code);
+
+    if (isTikTokFailure(data?.error)) {
+      this.throwIfAuthFailure(data.error, response.status, 'user info');
+      this.logger.error(`TikTok profile error code=${readTikTokErrorCode(data.error)}`);
       throw new Error('Failed to get TikTok profile');
     }
-    const user = data.data?.user;
+    const user = data?.data?.user;
     
     if (!user) {
       throw new Error('Invalid TikTok profile response');
@@ -87,20 +106,22 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
       body: JSON.stringify(body),
     });
     
+    const data = await response.json().catch(() => null);
+
     if (!response.ok) {
-      const error = await response.text();
-      this.logger.error('Failed to list TikTok videos:', error);
+      this.throwIfAuthFailure(data?.error, response.status, 'video list');
+      this.logger.error(`Failed to list TikTok videos: status=${response.status} code=${readTikTokErrorCode(data?.error) ?? '-'}`);
       throw new Error('Failed to list TikTok content');
     }
-    
-    const data = await response.json();
 
-    if (isTikTokFailure(data.error)) {
-      this.logger.error('TikTok API error:', data.error);
-      throw new Error(`TikTok API error: ${data.error.message}`);
+    if (isTikTokFailure(data?.error)) {
+      this.throwIfAuthFailure(data.error, response.status, 'video list');
+      const code = readTikTokErrorCode(data.error);
+      this.logger.error(`TikTok API error code=${code} ${String(data.error?.message ?? '').slice(0, 180)}`);
+      throw new Error(`TikTok API error: ${data.error?.message ?? code}`);
     }
     
-    const videos = data.data?.videos || [];
+    const videos = data?.data?.videos || [];
     
     const items = videos.map((video: any) => ({
       platformContentId: video.id,
@@ -194,7 +215,8 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
     const data = await response.json().catch(() => null);
     const tokenError = typeof data?.error === 'string' ? data.error : data?.error?.code;
     if (!response.ok || (tokenError && tokenError !== 'ok') || !data?.access_token) {
-      this.logger.error('Failed to refresh TikTok token', data?.error);
+      this.throwIfAuthFailure(data?.error, response.status, 'token refresh');
+      this.logger.error(`Failed to refresh TikTok token status=${response.status} code=${tokenError ?? '-'}`);
       throw new Error('Failed to refresh TikTok credentials');
     }
     
@@ -213,17 +235,51 @@ export class TikTokOfficialAdapter implements SocialMetricsProvider {
   
   async disconnect(creds: SocialCredentials): Promise<void> {
     try {
-      await fetch(`${this.baseUrl}/v2/oauth/revoke/`, {
+      const config = loadConfig();
+      const clientKey = config.social.tiktok.clientKey;
+      const clientSecret = config.social.tiktok.clientSecret;
+      if (!clientKey || !clientSecret) {
+        this.logger.warn('TikTok revoke skipped: integration not configured');
+        return;
+      }
+
+      // The revoke endpoint requires the app credentials along with the token.
+      const response = await fetch(`${this.baseUrl}/v2/oauth/revoke/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
+          client_key: clientKey,
+          client_secret: clientSecret,
           token: creds.accessToken,
         }),
       });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        this.logger.warn(
+          `TikTok revoke failed status=${response.status} code=${readTikTokErrorCode(data?.error) ?? '-'}`,
+        );
+      }
     } catch (error) {
-      this.logger.warn('Failed to revoke TikTok token:', error);
+      this.logger.warn(`Failed to revoke TikTok token: ${error}`);
+    }
+  }
+
+  /**
+   * Converts TikTok auth and throttling failures into typed errors so the
+   * sync pipeline can stop retrying or back off accordingly.
+   */
+  private throwIfAuthFailure(error: unknown, status: number, context: string): void {
+    const code = readTikTokErrorCode(error);
+    if (status === 401 || (code && TIKTOK_AUTH_ERROR_CODES.has(code))) {
+      this.logger.error(`TikTok ${context} authorization failed status=${status} code=${code ?? '-'}`);
+      throw new SocialAuthError(undefined, code);
+    }
+    if (status === 429 || (code && TIKTOK_RATE_LIMIT_CODES.has(code))) {
+      this.logger.warn(`TikTok ${context} rate limited status=${status} code=${code ?? '-'}`);
+      throw new SocialRateLimitError(undefined, code);
     }
   }
 }

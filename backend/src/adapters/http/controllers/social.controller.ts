@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   BadRequestException,
+  NotFoundException,
   HttpException,
   HttpStatus,
   Inject,
@@ -25,6 +26,8 @@ import { ClockPort } from '../../../ports/clock.port';
 import { StartOAuthUseCase } from '../../../application/social/start-oauth.use-case';
 import { OAuthCallbackUseCase } from '../../../application/social/oauth-callback.use-case';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
+import { uuidPipe } from '../pipes/uuid.pipe';
+import { SocialMetricsProvider } from '../../../ports/social-metrics.port';
 
 @Controller('api/social')
 export class SocialController {
@@ -37,6 +40,10 @@ export class SocialController {
     private readonly syncJobRepo: SyncJobRepository,
     @Inject(INJECTION_TOKENS.SETTINGS_REPOSITORY)
     private readonly settingsRepo: SettingsRepository,
+    @Inject(INJECTION_TOKENS.SOCIAL_PROVIDER_FACTORY)
+    private readonly providerFactory: {
+      getProvider: (platform: SocialPlatform, transport: string) => SocialMetricsProvider;
+    },
     private readonly startOAuthUseCase: StartOAuthUseCase,
     private readonly oauthCallbackUseCase: OAuthCallbackUseCase,
   ) {}
@@ -130,12 +137,26 @@ export class SocialController {
   @UseGuards(AuthGuard)
   async disconnect(
     @Req() req: { user: { id: string } },
-    @Param('id') id: string,
+    @Param('id', uuidPipe('Conta inválida.')) id: string,
   ) {
     const account = await this.socialAccountRepo.findById(id as never);
 
     if (!account || account.profileId !== req.user.id) {
-      throw new BadRequestException('Conta não encontrada');
+      throw new NotFoundException('Conta não encontrada.');
+    }
+
+    // Revoga o token na rede (melhor esforço). A desconexão local acontece de todo jeito.
+    try {
+      const creds = await this.socialAccountRepo.getDecryptedCredentials(id as never);
+      if (creds) {
+        const provider = this.providerFactory.getProvider(account.platform, account.transport);
+        await provider.disconnect(creds);
+      }
+    } catch (error) {
+      console.warn('social_revoke_failed', {
+        platform: account.platform,
+        message: error instanceof Error ? error.message : 'unknown',
+      });
     }
 
     await this.socialAccountRepo.update(id as never, {
@@ -150,12 +171,12 @@ export class SocialController {
   @UseGuards(AuthGuard)
   async syncAccount(
     @Req() req: { user: { id: string } },
-    @Param('id') id: string,
+    @Param('id', uuidPipe('Conta inválida.')) id: string,
   ) {
     const account = await this.socialAccountRepo.findById(id as never);
 
     if (!account || account.profileId !== req.user.id) {
-      throw new BadRequestException('Conta não encontrada');
+      throw new NotFoundException('Conta não encontrada.');
     }
 
     const cooldownSeconds = await this.settingsRepo.getNumber(
@@ -171,7 +192,7 @@ export class SocialController {
           (cooldownSeconds * 1000 - elapsedMs) / 1000,
         );
         throw new HttpException(
-          `Aguarde ${waitSec}s antes de solicitar nova sincronização`,
+          `Aguarde ${waitSec} segundos antes de pedir uma nova coleta.`,
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }

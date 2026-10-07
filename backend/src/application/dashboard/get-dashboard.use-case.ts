@@ -114,7 +114,7 @@ export class GetDashboardUseCase {
         positionBest: bestEntry?.position || null,
         totalParticipants: totalRanking?.version.participantCount || null,
         ineligibilityReason: !totalEntry ? 'Fora do ranking no momento' : null,
-        monitoredViewsTotal: aggregate?.totalViews || null,
+        monitoredViewsTotal: aggregate?.totalViews ?? null,
         bestVideo: bestContent
           ? {
               id: bestContent.id,

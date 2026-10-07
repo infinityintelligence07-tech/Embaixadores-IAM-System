@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AppExceptionFilter } from './adapters/http/filters/http-exception.filter';
@@ -11,7 +12,9 @@ import * as express from 'express';
 async function bootstrap() {
   const config = loadConfig();
   
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Atrás do nginx (host ou rede do Docker): o IP real vem em X-Forwarded-For (usado pelo limite de requisições)
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
   
   // Security — CSP precisa permitir Auth/API do Supabase no browser
   app.use(
@@ -52,9 +55,19 @@ async function bootstrap() {
     next();
   });
 
-  // CORS
+  // CORS: sem curinga junto com credenciais. Sem CORS_ORIGIN, só as origens do próprio app.
+  const corsOrigins =
+    config.app.corsOrigin && config.app.corsOrigin !== '*'
+      ? config.app.corsOrigin.split(',').map((item) => item.trim()).filter(Boolean)
+      : Array.from(
+          new Set([
+            config.app.baseUrl,
+            'https://embaixadores.iamcontrol.com.br',
+            'https://areaembaixadores.iamcontrol.com.br',
+          ]),
+        );
   app.enableCors({
-    origin: config.app.corsOrigin,
+    origin: corsOrigins,
     credentials: true,
   });
   
