@@ -29,20 +29,20 @@ export function isEligibleForRanking(
   }
 
   if (input.membershipStatus !== MembershipStatus.Approved) {
-    return { eligible: false, reason: 'Aguardando aprovação administrativa' };
+    return { eligible: false, reason: 'Aguardando aprovação da equipe.' };
   }
 
   if (input.connectionStatus !== ConnectionStatus.Connected) {
     return {
       eligible: false,
-      reason: 'Conta social não conectada ou com autorização inválida',
+      reason: 'Conta não conectada ou com autorização inválida.',
     };
   }
 
   if (input.firstSyncIncomplete) {
     return {
       eligible: false,
-      reason: 'Primeira sincronização incompleta — classificação ainda não definitiva',
+      reason: 'Primeira coleta ainda incompleta. A posição aparece quando ela terminar.',
     };
   }
 
@@ -50,7 +50,7 @@ export function isEligibleForRanking(
   if (coverageRatio < MIN_SYNC_COVERAGE_RATIO) {
     return {
       eligible: false,
-      reason: 'Cobertura da coleta insuficiente para classificação',
+      reason: 'A coleta ainda não cobre conteúdo suficiente para classificar.',
     };
   }
 
@@ -64,7 +64,7 @@ export function isEligibleForRanking(
   if (ageMs > toleranceMs) {
     return {
       eligible: false,
-      reason: 'Dados desatualizados além da tolerância — sincronize novamente',
+      reason: 'Dados desatualizados. Sincronize de novo para voltar ao ranking.',
     };
   }
 

@@ -27,7 +27,7 @@ export class SupabaseAuthAdapter implements AuthPort {
       const { data, error } = await this.supabase.auth.getUser(token);
       
       if (error || !data.user) {
-        throw new UnauthorizedException('Invalid or expired token');
+        throw new UnauthorizedException('Sua sessão expirou. Entre de novo para continuar.');
       }
       
       // CRITICAL: Role must come from database profile, NOT from user_metadata
@@ -41,7 +41,7 @@ export class SupabaseAuthAdapter implements AuthPort {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException('Token verification failed');
+      throw new UnauthorizedException('Sua sessão expirou. Entre de novo para continuar.');
     }
   }
 }

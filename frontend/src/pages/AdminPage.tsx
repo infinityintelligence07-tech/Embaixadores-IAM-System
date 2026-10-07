@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
@@ -116,6 +117,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [pendingSuspend, setPendingSuspend] = useState<AdminUser | null>(null);
 
   const loadAll = useCallback(async () => {
     if (preview) {
@@ -166,8 +168,9 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   }
 
   async function handleSuspend(id: string) {
-    if (!window.confirm('Suspender este usuário?')) return;
     setActionLoading(id);
+    setError(null);
+    setMessage(null);
     try {
       if (preview) {
         setUsers((current) =>
@@ -177,11 +180,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminSuspendUser(id);
         await loadAll();
       }
-      setMessage('Usuário suspenso.');
+      setMessage('Embaixador suspenso.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao suspender.');
+      setError(err instanceof Error ? err.message : 'Não foi possível suspender. Tente de novo.');
     } finally {
       setActionLoading(null);
+      setPendingSuspend(null);
     }
   }
 
@@ -351,7 +355,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                         type="button"
                         className="is-stop"
                         disabled={actionLoading === user.id}
-                        onClick={() => void handleSuspend(user.id)}
+                        onClick={() => setPendingSuspend(user)}
                       >
                         Suspender
                       </button>
@@ -494,6 +498,18 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
           </section>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={pendingSuspend !== null}
+        title={`Suspender ${pendingSuspend?.publicName ?? 'este embaixador'}?`}
+        description="A pessoa perde o acesso ao painel e sai dos rankings até ser aprovada de novo."
+        confirmLabel="Suspender"
+        busy={pendingSuspend !== null && actionLoading === pendingSuspend.id}
+        onConfirm={() => {
+          if (pendingSuspend) void handleSuspend(pendingSuspend.id);
+        }}
+        onCancel={() => setPendingSuspend(null)}
+      />
     </div>
   );
 }

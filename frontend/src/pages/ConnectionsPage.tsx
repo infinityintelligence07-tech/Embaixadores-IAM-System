@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   ApiError,
@@ -93,6 +94,7 @@ export function ConnectionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [pendingDisconnect, setPendingDisconnect] = useState<SocialAccount | null>(null);
 
   const loadAccounts = useCallback(async () => {
     setError(null);
@@ -101,9 +103,11 @@ export function ConnectionsPage() {
       setAccounts(data);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError('Sessão expirada.');
+        setError('Sua sessão expirou. Entre de novo para ver as conexões.');
       } else {
-        setError(err instanceof Error ? err.message : 'Erro ao carregar conexões.');
+        setError(
+          err instanceof Error ? err.message : 'Não foi possível carregar as conexões. Tente de novo.',
+        );
       }
     } finally {
       setLoading(false);
@@ -134,31 +138,40 @@ export function ConnectionsPage() {
       const { url } = await api.startOAuth(platform);
       window.location.href = url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível iniciar conexão.');
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível abrir a conexão. Tente de novo.',
+      );
       setActionId(null);
     }
   }
 
   async function handleSync(id: string) {
     setActionId(id);
+    setError(null);
     try {
       await api.syncSocialAccount(id);
       await loadAccounts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha na sincronização.');
+      setError(
+        err instanceof Error ? err.message : 'A sincronização falhou. Tente de novo em instantes.',
+      );
     } finally {
       setActionId(null);
     }
   }
 
-  async function handleDisconnect(id: string) {
-    if (!window.confirm('Deseja desconectar esta conta?')) return;
-    setActionId(id);
+  async function handleDisconnect(account: SocialAccount) {
+    setActionId(account.id);
+    setError(null);
     try {
-      await api.deleteSocialAccount(id);
+      await api.deleteSocialAccount(account.id);
+      setPendingDisconnect(null);
       await loadAccounts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível desconectar.');
+      setPendingDisconnect(null);
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível desconectar a conta. Tente de novo.',
+      );
     } finally {
       setActionId(null);
     }
@@ -177,8 +190,7 @@ export function ConnectionsPage() {
       <header>
         <h1 className="font-display text-3xl text-text">Conexões</h1>
         <p className="mt-2 max-w-[62ch] text-text-muted">
-          Para entrar na competição, conecte o Instagram e o TikTok com a sua conta.
-          Sem essa autorização, suas views não entram no ranking.
+          Suas redes conectadas e o estado da coleta de views.
         </p>
       </header>
 
@@ -204,30 +216,32 @@ export function ConnectionsPage() {
           {accounts.map((account) => (
             <li
               key={account.id}
-              className="rounded-2xl border border-border bg-surface-card p-4"
+              className="rounded-[14px] border border-border bg-surface-card p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-medium text-text">
-                      @{account.username ?? 'sem usuário'}
+                      {account.username ? `@${account.username.replace(/^@/, '')}` : platformLabel(account.platform)}
                     </h3>
                     <Badge tone={statusTone(account.status)}>
                       {statusLabel(account.status)}
                     </Badge>
-                    <Badge tone="neutral">{transportLabel(account.transport)}</Badge>
+                    {account.transport !== 'official_api' ? (
+                      <Badge tone="neutral">{transportLabel(account.transport)}</Badge>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-sm text-text-muted">
                     {platformLabel(account.platform)}
                     {account.lastSyncAt
-                      ? ` · Última sync: ${new Intl.DateTimeFormat('pt-BR', {
+                      ? ` · Última coleta em ${new Intl.DateTimeFormat('pt-BR', {
                           dateStyle: 'short',
                           timeStyle: 'short',
                         }).format(new Date(account.lastSyncAt))}`
-                      : ' · Nunca sincronizado'}
+                      : ' · Em coleta'}
                   </p>
                   {account.syncMessage ? (
-                    <p className="mt-2 text-sm text-amber-200" role="status">
+                    <p className="mt-2 text-sm text-text-muted" role="status">
                       {account.syncMessage}
                     </p>
                   ) : null}
@@ -236,9 +250,10 @@ export function ConnectionsPage() {
                   <Button
                     variant="secondary"
                     size="sm"
+                    className="min-h-[42px]"
                     loading={actionId === account.id}
                     onClick={() => handleSync(account.id)}
-                    aria-label={`Sincronizar ${account.username}`}
+                    aria-label={`Sincronizar ${platformLabel(account.platform)}`}
                   >
                     <RefreshCw className="size-4" aria-hidden />
                     Sincronizar
@@ -246,9 +261,10 @@ export function ConnectionsPage() {
                   <Button
                     variant="danger"
                     size="sm"
-                    loading={actionId === account.id}
-                    onClick={() => handleDisconnect(account.id)}
-                    aria-label={`Desconectar ${account.username}`}
+                    className="min-h-[42px] min-w-[42px]"
+                    disabled={actionId === account.id}
+                    onClick={() => setPendingDisconnect(account)}
+                    aria-label={`Desconectar ${platformLabel(account.platform)}`}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
@@ -258,6 +274,18 @@ export function ConnectionsPage() {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={pendingDisconnect !== null}
+        title={`Desconectar ${pendingDisconnect ? platformLabel(pendingDisconnect.platform) : ''}?`}
+        description="As views dessa conta deixam de contar no ranking até você conectar de novo."
+        confirmLabel="Desconectar"
+        busy={pendingDisconnect !== null && actionId === pendingDisconnect.id}
+        onConfirm={() => {
+          if (pendingDisconnect) void handleDisconnect(pendingDisconnect);
+        }}
+        onCancel={() => setPendingDisconnect(null)}
+      />
     </div>
   );
 }

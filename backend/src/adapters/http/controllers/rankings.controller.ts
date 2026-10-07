@@ -127,12 +127,12 @@ export class RankingsController {
         platform,
       );
       
-      let reason = 'Not eligible for ranking';
+      let reason = 'Fora do ranking no momento';
       
       if (!membership || membership.status !== 'approved') {
-        reason = 'Membership not approved';
+        reason = 'Cadastro ainda não aprovado';
       } else if (!account) {
-        reason = 'Social account not connected';
+        reason = 'Conta não conectada';
       } else {
         const eligibility = isEligibleForRanking({
           membershipStatus: membership.status,
@@ -143,7 +143,7 @@ export class RankingsController {
           syncCoverageRatio: account.syncCoverageRatio,
           firstSyncIncomplete: !account.lastSuccessfulSyncAt,
         });
-        reason = eligibility.reason || 'Not eligible';
+        reason = eligibility.reason || 'Fora do ranking no momento';
       }
       
       return {

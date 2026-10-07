@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AppExceptionFilter } from './adapters/http/filters/http-exception.filter';
 import { loadConfig } from './infrastructure/config/env';
 import helmet from 'helmet';
 import { join } from 'path';
@@ -65,6 +66,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Toda resposta de erro sai em português, sem detalhe técnico.
+  app.useGlobalFilters(new AppExceptionFilter());
   
   // Serve static frontend (Docker: /app/public; local: frontend/dist)
   const frontendCandidates = [

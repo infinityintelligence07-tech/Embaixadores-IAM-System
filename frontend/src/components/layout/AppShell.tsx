@@ -1,11 +1,11 @@
-import { Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
+import { ClipboardList, Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { useAuth } from '@/contexts/AuthContext';
 import { isRankingPath, useSurfaceTheme } from '@/lib/theme';
 import { LegalLinks } from './LegalLinks';
 
-const navItems = [
+const approvedNavItems = [
   { to: '/dashboard', label: 'Início', icon: Home },
   { to: '/conexoes', label: 'Conexões', icon: Link2 },
   { to: '/conteudos', label: 'Conteúdos', icon: Video },
@@ -13,17 +13,27 @@ const navItems = [
   { to: '/perfil', label: 'Perfil', icon: User },
 ];
 
+// Quem ainda aguarda aprovação só enxerga o que consegue usar.
+const pendingNavItems = [
+  { to: '/onboarding', label: 'Cadastro', icon: ClipboardList },
+  { to: '/conexoes', label: 'Conexões', icon: Link2 },
+  { to: '/perfil', label: 'Perfil', icon: User },
+];
+
 export function AppShell() {
   const { profile, isAdmin } = useAuth();
   const location = useLocation();
   const apple = !isRankingPath(location.pathname);
+  const approved = profile?.status === 'approved';
+  const navItems = approved ? approvedNavItems : pendingNavItems;
+  const homePath = approved ? '/dashboard' : '/onboarding';
 
   useSurfaceTheme(apple ? 'apple' : 'arena');
 
   return (
     <div className={apple ? 'shell shell-apple' : 'shell shell-arena'}>
       <header className="shell-bar">
-        <NavLink to="/dashboard" className="shell-brand">
+        <NavLink to={homePath} className="shell-brand">
           {apple ? (
             <>
               <img className="shell-brand-mark" src="/brand/apple-touch-icon.png" alt="" />

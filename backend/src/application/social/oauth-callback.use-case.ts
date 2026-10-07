@@ -43,7 +43,7 @@ export class OAuthCallbackUseCase {
     // Consume state
     const oauthState = await this.oauthStateRepo.consume(state, now);
     if (!oauthState) {
-      throw new BadRequestException('Invalid or expired OAuth state');
+      throw new BadRequestException('A conexão expirou antes de terminar. Tente de novo.');
     }
     
     // Exchange code for tokens
@@ -66,7 +66,7 @@ export class OAuthCallbackUseCase {
     
     if (existingByPlatformUser && existingByPlatformUser.profileId !== oauthState.profileId) {
       throw new ConflictException(
-        'This social account is already connected to another user',
+        'Essa conta já está conectada a outro embaixador.',
       );
     }
     

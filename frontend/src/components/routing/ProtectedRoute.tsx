@@ -29,6 +29,16 @@ export function ProtectedRoute({
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  // A sessão existe, mas o perfil ainda não chegou. Sem ele não dá para decidir
+  // papel nem status, então não renderizamos nada que dependa disso.
+  if (!profile && !profileError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner label="Carregando seu perfil..." />
+      </div>
+    );
+  }
+
   if (profileError && !profile) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">

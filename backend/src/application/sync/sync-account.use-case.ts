@@ -42,12 +42,12 @@ export class SyncAccountUseCase {
   async execute(jobId: string): Promise<void> {
     const job = await this.syncJobRepo.findById(jobId as any);
     if (!job) {
-      throw new NotFoundException('Sync job not found');
+      throw new NotFoundException('Coleta não encontrada.');
     }
     
     const account = await this.socialAccountRepo.findById(job.socialAccountId);
     if (!account) {
-      throw new NotFoundException('Social account not found');
+      throw new NotFoundException('Conta não encontrada.');
     }
     
     const now = this.clock.now();

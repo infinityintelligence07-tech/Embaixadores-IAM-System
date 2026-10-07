@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +19,7 @@ export function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -64,16 +66,9 @@ export function ProfilePage() {
   }
 
   async function handleDeleteRequest() {
-    if (
-      !window.confirm(
-        'Deseja solicitar a exclusão da sua conta? Esta ação será analisada pela equipe.',
-      )
-    ) {
-      return;
-    }
-
     setDeleting(true);
     setError(null);
+    setSuccess(null);
 
     try {
       await api.requestAccountDeletion();
@@ -82,6 +77,7 @@ export function ProfilePage() {
       setError(err instanceof Error ? err.message : 'Não foi possível enviar a solicitação.');
     } finally {
       setDeleting(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -182,12 +178,22 @@ export function ProfilePage() {
           variant="danger"
           className="w-full"
           loading={deleting}
-          onClick={handleDeleteRequest}
+          onClick={() => setConfirmDelete(true)}
         >
           <Trash2 className="size-4" aria-hidden />
           Solicitar exclusão da conta
         </Button>
       </section>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Solicitar exclusão da conta?"
+        description="A equipe analisa o pedido e entra em contato antes de apagar seus dados. Suas views saem do ranking quando a exclusão for concluída."
+        confirmLabel="Solicitar exclusão"
+        busy={deleting}
+        onConfirm={() => void handleDeleteRequest()}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

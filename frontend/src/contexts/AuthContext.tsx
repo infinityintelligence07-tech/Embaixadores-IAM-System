@@ -18,6 +18,7 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   profile: MeResponse | null;
+  profileLoading: boolean;
   profileError: string | null;
   isAdmin: boolean;
   refreshProfile: () => Promise<void>;
@@ -32,14 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<MeResponse | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const refreshProfile = useCallback(async () => {
     if (!session) {
       setProfile(null);
       setProfileError(null);
+      setProfileLoading(false);
       return;
     }
 
+    setProfileLoading(true);
     try {
       const me = await api.me();
       setProfile(me);
@@ -54,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
       setProfile(null);
+    } finally {
+      setProfileLoading(false);
     }
   }, [session]);
 
@@ -105,12 +111,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user,
       profile,
+      profileLoading,
       profileError,
       isAdmin: profile?.role === 'admin',
       refreshProfile,
       signOut,
     }),
-    [state, session, user, profile, profileError, refreshProfile, signOut],
+    [state, session, user, profile, profileLoading, profileError, refreshProfile, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -8,7 +8,7 @@ export class AdminGuard implements CanActivate {
     const user = request.user;
     
     if (!user || user.role !== AppRole.Admin) {
-      throw new ForbiddenException('Admin access required');
+      throw new ForbiddenException('Área restrita à administração.');
     }
     
     return true;

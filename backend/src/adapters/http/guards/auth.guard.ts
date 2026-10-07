@@ -19,7 +19,7 @@ export class AuthGuard implements CanActivate {
     
     const authHeader = request.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid authorization header');
+      throw new UnauthorizedException('Entre na sua conta para continuar.');
     }
     
     const token = authHeader.substring(7);
@@ -30,7 +30,7 @@ export class AuthGuard implements CanActivate {
       // CRITICAL: Load profile from database to get real role
       const profile = await this.profileRepo.findById(authUser.id);
       if (!profile || profile.deletedAt) {
-        throw new UnauthorizedException('Profile not found or deleted');
+        throw new UnauthorizedException('Não encontramos o seu perfil. Entre de novo ou fale com a equipe.');
       }
       
       // Attach to request with role from database
@@ -43,7 +43,7 @@ export class AuthGuard implements CanActivate {
       
       return true;
     } catch (error) {
-      throw new UnauthorizedException('Invalid or expired token');
+      throw new UnauthorizedException('Sua sessão expirou. Entre de novo para continuar.');
     }
   }
 }

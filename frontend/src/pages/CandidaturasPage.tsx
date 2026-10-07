@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import { ApiError, api, type AmbassadorApplication } from '@/lib/api';
@@ -20,6 +21,7 @@ export function CandidaturasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<AmbassadorApplication | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -27,7 +29,11 @@ export function CandidaturasPage() {
     try {
       setApplications(await api.applications());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Falha ao carregar candidaturas');
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível carregar as candidaturas. Tente de novo.',
+      );
     } finally {
       setLoading(false);
     }
@@ -52,23 +58,25 @@ export function CandidaturasPage() {
       const updated = await api.updateApplication(id, status);
       setApplications((prev) => prev.map((item) => (item.id === id ? updated : item)));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Falha ao atualizar');
+      setError(
+        err instanceof ApiError ? err.message : 'Não foi possível atualizar a candidatura.',
+      );
     } finally {
       setUpdatingId(null);
     }
   }
 
-  async function remove(id: string, name: string) {
-    if (!window.confirm(`Excluir a candidatura de ${name}?`)) return;
+  async function remove(id: string) {
     setUpdatingId(id);
     setError('');
     try {
       await api.deleteApplication(id);
       setApplications((prev) => prev.filter((item) => item.id !== id));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Falha ao excluir');
+      setError(err instanceof ApiError ? err.message : 'Não foi possível excluir a candidatura.');
     } finally {
       setUpdatingId(null);
+      setPendingRemoval(null);
     }
   }
 
@@ -140,7 +148,7 @@ export function CandidaturasPage() {
                   size="sm"
                   variant="ghost"
                   disabled={updatingId === item.id}
-                  onClick={() => void remove(item.id, item.nome_completo)}
+                  onClick={() => setPendingRemoval(item)}
                 >
                   Excluir
                 </Button>
@@ -149,6 +157,18 @@ export function CandidaturasPage() {
           </article>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title={`Excluir a candidatura de ${pendingRemoval?.nome_completo ?? ''}?`}
+        description="Os dados dessa candidatura são apagados e não podem ser recuperados."
+        confirmLabel="Excluir"
+        busy={pendingRemoval !== null && updatingId === pendingRemoval.id}
+        onConfirm={() => {
+          if (pendingRemoval) void remove(pendingRemoval.id);
+        }}
+        onCancel={() => setPendingRemoval(null)}
+      />
     </section>
   );
 }

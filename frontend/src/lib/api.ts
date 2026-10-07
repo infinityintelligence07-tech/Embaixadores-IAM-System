@@ -169,6 +169,27 @@ export interface AdminSettings {
   manualSyncCooldownSeconds: number;
 }
 
+// Textos padrão do servidor que nunca devem aparecer na interface.
+const GENERIC_SERVER_MESSAGES = new Set([
+  'internal server error',
+  'bad request',
+  'unauthorized',
+  'forbidden',
+  'not found',
+  'bad gateway',
+  'service unavailable',
+  'gateway timeout',
+]);
+
+function fallbackMessage(status: number): string {
+  if (status === 401) return 'Sua sessão expirou. Entre de novo para continuar.';
+  if (status === 403) return 'Você não tem permissão para fazer isso.';
+  if (status === 404) return 'Não encontramos o que você procurava.';
+  if (status === 429) return 'Muitas tentativas em pouco tempo. Aguarde um pouco e tente de novo.';
+  if (status >= 500) return 'Algo deu errado do nosso lado. Tente de novo em instantes.';
+  return 'Não foi possível concluir. Revise os dados e tente de novo.';
+}
+
 async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
@@ -189,7 +210,12 @@ export async function fetchJson<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(path, { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(path, { ...init, headers });
+  } catch {
+    throw new ApiError('Sem conexão com o servidor. Verifique a internet e tente de novo.', 0);
+  }
 
   if (!response.ok) {
     let body: unknown;
@@ -199,15 +225,23 @@ export async function fetchJson<T>(
       body = undefined;
     }
 
-    const message =
-      typeof body === 'object' &&
-      body !== null &&
-      'message' in body &&
-      typeof (body as { message: unknown }).message === 'string'
-        ? (body as { message: string }).message
-        : `Erro ${response.status}`;
+    const raw =
+      typeof body === 'object' && body !== null && 'message' in body
+        ? (body as { message: unknown }).message
+        : undefined;
+    const fromServer = Array.isArray(raw)
+      ? raw.find((item): item is string => typeof item === 'string')
+      : typeof raw === 'string'
+        ? raw
+        : undefined;
 
-    throw new ApiError(message, response.status, body);
+    throw new ApiError(
+      fromServer && !GENERIC_SERVER_MESSAGES.has(fromServer.trim().toLowerCase())
+        ? fromServer
+        : fallbackMessage(response.status),
+      response.status,
+      body,
+    );
   }
 
   if (response.status === 204) {

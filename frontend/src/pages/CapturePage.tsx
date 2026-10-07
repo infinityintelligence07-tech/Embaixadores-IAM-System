@@ -171,7 +171,7 @@ export function CapturePage() {
         <section className="lp-hero">
           <img
             src="/brand/logo.png"
-            alt="Embaixadores — Acorde sua mente"
+            alt="Embaixadores Acorde Sua Mente"
             className="lp-hero__brand"
           />
           <h1 className="lp-head">
