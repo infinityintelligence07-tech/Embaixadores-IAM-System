@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { supabase } from '@/lib/supabase';
@@ -17,7 +17,7 @@ export function AuthCallbackPage() {
       if (!active) return;
 
       if (authError) {
-        setError('Não foi possível concluir a autenticação.');
+        setError('O link de confirmação expirou ou já foi usado. Entre com seu e-mail e senha ou peça um novo link.');
         return;
       }
 
@@ -34,10 +34,24 @@ export function AuthCallbackPage() {
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
-        <div className="max-w-md">
-          <Alert variant="error" role="alert" title="Falha na autenticação">
+        <div className="max-w-md space-y-4">
+          <Alert variant="error" role="alert" title="Não foi possível entrar">
             {error}
           </Alert>
+          <div className="flex flex-wrap gap-2.5">
+            <Link
+              to="/login"
+              className="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-brand-violet px-4 text-sm font-medium text-white"
+            >
+              Ir para o login
+            </Link>
+            <Link
+              to="/recuperar-senha"
+              className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-border bg-surface-card px-4 text-sm font-medium text-text"
+            >
+              Recuperar senha
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -45,7 +59,7 @@ export function AuthCallbackPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <Spinner label="Finalizando autenticação..." />
+      <Spinner label="Confirmando sua entrada..." />
     </div>
   );
 }

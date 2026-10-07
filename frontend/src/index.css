@@ -159,13 +159,13 @@ select:focus-visible {
   border: 0;
 }
 
+/* O logotipo oficial aparece inteiro, sem corte nem distorção. */
 .brand-wordmark {
   display: block;
   flex: none;
-  width: 120px;
-  height: 46px;
-  object-fit: cover;
-  object-position: left top;
+  width: auto;
+  height: 48px;
+  object-fit: contain;
 }
 
 .shell-arena .brand-wordmark {
@@ -185,10 +185,54 @@ html {
   background: transparent;
 }
 
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  margin: 0;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--good);
+  color: #062014;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cta:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Na superfície clara o verde é escuro, então o texto vira branco. */
+[data-theme='apple'] .cta {
+  color: #fff;
+}
+
 .shell-brand-mark {
   width: 32px;
   height: 32px;
   border-radius: 8px;
+}
+
+/* Título principal das telas do painel: 32 px no desktop, 28 px no celular. */
+.page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .page-title {
+    font-size: 28px;
+  }
 }
 
 .confirm-dialog {
@@ -375,7 +419,7 @@ html {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
+  min-height: 42px;
   padding: 0 12px;
   border-radius: 999px;
   font-size: 14px;
@@ -419,7 +463,7 @@ html {
 .shell-foot {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 8px 0 112px;
+  padding: 8px 0 calc(112px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
 }
 
@@ -427,6 +471,7 @@ html {
   position: fixed;
   inset: auto 0 0;
   z-index: 30;
+  padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   backdrop-filter: blur(16px);
@@ -453,16 +498,31 @@ html {
   color: var(--accent-2);
 }
 
+.shell-admin-links {
+  display: grid;
+  grid-auto-flow: column;
+  border-top: 1px solid var(--line);
+}
+
 .shell-admin-link {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 44px;
   padding: 8px;
-  border-top: 1px solid var(--line);
   color: var(--ink-muted);
   font-size: 12px;
   text-decoration: none;
+}
+
+.shell-admin-link + .shell-admin-link {
+  border-left: 1px solid var(--line);
+}
+
+/* No palco escuro o azul da marca some; o anel de foco usa o azul claro. */
+[data-theme='arena'] :focus-visible {
+  outline-color: var(--accent-2, #4c7dff);
 }
 
 .shell-admin-link[aria-current='page'] {

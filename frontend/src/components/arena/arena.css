@@ -293,28 +293,6 @@
   border-radius: 10px;
 }
 
-.cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  margin: 0;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--good);
-  color: #062014;
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.cta:disabled {
-  opacity: 0.6;
-  cursor: progress;
-}
-
 .gate {
   display: grid;
   gap: 14px;
@@ -1032,6 +1010,13 @@
 .arena-skeleton i:first-child { width: 42%; height: 28px; }
 .arena-skeleton i:nth-child(2) { width: 70%; height: 84px; }
 
+.arena-skeleton-hero {
+  margin-top: 10px;
+}
+
+.arena-skeleton-hero i:first-child { width: 60%; height: 36px; }
+.arena-skeleton-hero i:nth-child(2) { width: 44%; height: 18px; }
+
 @keyframes arena-rise {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: none; }
@@ -1081,7 +1066,7 @@
     grid-column: 2;
   }
 
-  .arena-standing { font-size: 26px; }
+  .arena-standing { font-size: 28px; }
   .podium { gap: 6px; }
   .avatar-lg { width: 68px; height: 68px; }
   .avatar-md { width: 56px; height: 56px; }

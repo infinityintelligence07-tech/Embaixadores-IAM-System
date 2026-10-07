@@ -34,7 +34,7 @@
 
 .admin-nav button {
   flex: none;
-  min-height: 36px;
+  min-height: 42px;
   padding: 0 14px;
   border: 0;
   border-radius: 999px;
@@ -54,7 +54,7 @@
 .admin-panel {
   padding: 8px 0;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   background: white;
   box-shadow: var(--shadow);
 }
@@ -96,7 +96,19 @@
 .admin-meta {
   display: block;
   color: var(--ink-muted);
-  font-size: 13px;
+  font-size: 14px;
+}
+
+.admin-more {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .admin-actions {
@@ -109,7 +121,7 @@
 .admin-primary,
 .admin .is-stop,
 .admin .is-go {
-  min-height: 34px;
+  min-height: 42px;
   padding: 0 12px;
   border-radius: 10px;
   border: 0;
@@ -120,9 +132,13 @@
   cursor: pointer;
 }
 
-.admin .is-go,
-.admin-primary {
+.admin .is-go {
   background: var(--good);
+  color: white;
+}
+
+.admin-primary {
+  background: var(--accent);
   color: white;
 }
 
@@ -161,8 +177,8 @@
   background: var(--ink-muted);
 }
 
-.admin-status[data-tone='ok'] { color: var(--good); }
-.admin-status[data-tone='ok'] i { background: var(--good); }
+.admin-status[data-tone='ok'] { color: var(--accent); }
+.admin-status[data-tone='ok'] i { background: var(--accent); }
 .admin-status[data-tone='wait'] { color: var(--warn); }
 .admin-status[data-tone='wait'] i { background: var(--warn); }
 .admin-status[data-tone='stop'] { color: var(--bad); }

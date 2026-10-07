@@ -14,8 +14,8 @@ export function TermsPage() {
             Voltar ao login
           </Link>
         </p>
-        <h1 className="font-display text-3xl text-text">
-          Termos de Uso
+        <h1 className="page-title">
+          Termos de uso
         </h1>
         <p className="text-sm text-text-muted">Última atualização: {updated}</p>
         <p>
@@ -65,7 +65,7 @@ export function TermsPage() {
         <p className="text-sm text-text-muted">
           Ver também a{' '}
           <Link to="/privacidade" className="text-text underline-offset-2 hover:underline">
-            Política de Privacidade
+            Política de privacidade
           </Link>
           .
         </p>

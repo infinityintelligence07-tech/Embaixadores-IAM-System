@@ -11,7 +11,7 @@ const toneClasses: Record<BadgeTone, string> = {
   neutral: 'bg-surface-elevated text-text-muted border-border',
   gold: 'bg-[var(--warn-soft)] text-[var(--gold)] border-transparent',
   violet: 'bg-[var(--accent-soft)] text-[var(--accent-2)] border-transparent',
-  success: 'bg-[var(--good-soft)] text-[var(--good)] border-transparent',
+  success: 'bg-[var(--accent-soft)] text-[var(--accent-2)] border-transparent',
   warning: 'bg-[var(--warn-soft)] text-[var(--warn)] border-transparent',
   danger: 'bg-[var(--bad-soft)] text-[var(--bad)] border-transparent',
 };

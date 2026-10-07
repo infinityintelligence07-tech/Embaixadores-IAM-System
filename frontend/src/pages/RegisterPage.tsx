@@ -41,7 +41,18 @@ export function RegisterPage() {
     setLoading(false);
 
     if (authError) {
-      setError(authError.message || 'Não foi possível criar sua conta.');
+      const raw = authError.message.toLowerCase();
+      setError(
+        raw.includes('already registered') || raw.includes('already exists')
+          ? 'Já existe uma conta com este e-mail. Entre ou recupere a senha.'
+          : raw.includes('password')
+            ? 'A senha precisa ter pelo menos 8 caracteres.'
+            : raw.includes('rate limit') || raw.includes('too many')
+              ? 'Muitas tentativas em pouco tempo. Aguarde um pouco e tente de novo.'
+              : raw.includes('invalid') && raw.includes('email')
+                ? 'Informe um e-mail válido.'
+                : 'Não foi possível criar sua conta. Verifique os dados e tente de novo.',
+      );
       return;
     }
 
@@ -112,11 +123,11 @@ export function RegisterPage() {
           <p className="text-xs text-text-muted">
             Ao se cadastrar, você concorda com os{' '}
             <Link to="/termos" className="text-brand-violet underline-offset-4 hover:underline">
-              Termos de Uso
+              Termos de uso
             </Link>{' '}
             e a{' '}
             <Link to="/privacidade" className="text-brand-violet underline-offset-4 hover:underline">
-              Política de Privacidade
+              Política de privacidade
             </Link>
             .
           </p>

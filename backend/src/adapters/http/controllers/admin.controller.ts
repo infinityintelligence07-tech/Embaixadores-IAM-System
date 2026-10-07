@@ -27,6 +27,7 @@ import { ComputeAndPublishRankingUseCase } from '../../../application/rankings/c
 import { daysWithoutPosting } from '../../../domain/view-metrics';
 import {
   ConnectionStatus,
+  ProfileId,
   RankingCategory,
   SocialPlatform,
 } from '../../../domain/types';
@@ -156,12 +157,23 @@ export class AdminController {
     const jobs = await this.syncJobRepo.findRecent(50);
     const result = [];
 
+    const names = new Map<string, string>();
     for (const job of jobs) {
       const account = await this.socialAccountRepo.findById(job.socialAccountId);
       const run = await this.syncJobRepo.findLatestRunByAccount(job.socialAccountId);
+      let publicName: string | null = null;
+      if (account?.profileId) {
+        if (!names.has(account.profileId)) {
+          const profile = await this.profileRepo.findById(account.profileId);
+          names.set(account.profileId, profile?.publicName ?? '');
+        }
+        publicName = names.get(account.profileId) || null;
+      }
       result.push({
         id: job.id,
         profileId: account?.profileId ?? null,
+        publicName,
+        username: account?.username ?? null,
         platform: account?.platform ?? null,
         status: job.status,
         startedAt: run?.startedAt?.toISOString() ?? job.lockedAt?.toISOString() ?? null,
@@ -346,15 +358,33 @@ export class AdminController {
   @Get('audit')
   async getAuditLogs() {
     const logs = await this.auditRepo.findRecent(100);
+    const names = new Map<string, string | null>();
+    const nameOf = async (id: string | null): Promise<string | null> => {
+      if (!id) return null;
+      if (!names.has(id)) {
+        const profile = await this.profileRepo.findById(id as ProfileId);
+        names.set(id, profile?.publicName ?? null);
+      }
+      return names.get(id) ?? null;
+    };
 
-    return logs.map((log) => ({
-      id: log.id,
-      action: log.action,
-      actorId: log.actorId,
-      entityType: log.entityType,
-      entityId: log.entityId,
-      reason: log.reason,
-      createdAt: log.createdAt.toISOString(),
-    }));
+    const result = [];
+    for (const log of logs) {
+      result.push({
+        id: log.id,
+        action: log.action,
+        actorId: log.actorId,
+        actorName: await nameOf(log.actorId),
+        entityType: log.entityType,
+        entityId: log.entityId,
+        entityName:
+          log.entityType === 'profile' || log.entityType === 'membership'
+            ? await nameOf(log.entityId)
+            : null,
+        reason: log.reason,
+        createdAt: log.createdAt.toISOString(),
+      });
+    }
+    return result;
   }
 }

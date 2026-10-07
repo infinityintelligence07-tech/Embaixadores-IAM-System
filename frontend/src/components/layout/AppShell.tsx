@@ -89,10 +89,16 @@ export function AppShell() {
           ))}
         </ul>
         {isAdmin ? (
-          <NavLink to="/admin" className="shell-admin-link">
-            <Shield className="size-4" aria-hidden />
-            Administração
-          </NavLink>
+          <div className="shell-admin-links">
+            <NavLink to="/candidaturas" className="shell-admin-link">
+              <Shield className="size-4" aria-hidden />
+              Candidaturas
+            </NavLink>
+            <NavLink to="/admin" className="shell-admin-link">
+              <Shield className="size-4" aria-hidden />
+              Administração
+            </NavLink>
+          </div>
         ) : null}
       </nav>
     </div>

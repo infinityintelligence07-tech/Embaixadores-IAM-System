@@ -106,6 +106,65 @@ function platformName(platform: SocialPlatform): string {
   return platform === 'instagram' ? 'Instagram' : 'TikTok';
 }
 
+const AUDIT_ACTIONS: Record<string, string> = {
+  approve_membership: 'Embaixador aprovado',
+  suspend_membership: 'Embaixador suspenso',
+  connect_social_account: 'Rede conectada',
+  exclude_content: 'Conteúdo retirado do ranking',
+  recalculate_rankings: 'Rankings recalculados',
+  request_sync: 'Sincronização solicitada',
+  update_settings: 'Regras alteradas',
+};
+
+const AUDIT_ENTITIES: Record<string, string> = {
+  content: 'conteúdo',
+  membership: 'embaixador',
+  ranking: 'ranking',
+  settings: 'regras',
+  social_account: 'conta social',
+  profile: 'perfil',
+};
+
+function auditActionLabel(action: string): string {
+  return AUDIT_ACTIONS[action] ?? action.replace(/_/g, ' ');
+}
+
+function auditEntityLabel(entry: AdminAuditEntry): string {
+  const type = AUDIT_ENTITIES[entry.entityType] ?? entry.entityType;
+  if (entry.entityName) return `${type} ${entry.entityName}`;
+  if (entry.entityType === 'ranking' || entry.entityType === 'settings') return type;
+  return entry.entityId ? `${type} ${entry.entityId.slice(0, 8)}` : type;
+}
+
+function formatWhen(value: string | null): string {
+  if (!value) return 'Sem data';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(value),
+  );
+}
+
+const PAGE_SIZE = 10;
+
+function ShowMore({
+  total,
+  visible,
+  onMore,
+}: {
+  total: number;
+  visible: number;
+  onMore: () => void;
+}) {
+  if (total <= visible) return null;
+  const remaining = total - visible;
+  return (
+    <div className="admin-row">
+      <button type="button" className="admin-more" onClick={onMore}>
+        Mostrar mais {Math.min(PAGE_SIZE, remaining)} de {remaining} restantes
+      </button>
+    </div>
+  );
+}
+
 export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [section, setSection] = useState<AdminSection>('pessoas');
   const [peopleOrder, setPeopleOrder] = useState<'posts' | 'silence'>('posts');
@@ -118,6 +177,9 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingSuspend, setPendingSuspend] = useState<AdminUser | null>(null);
+  const [visibleUsers, setVisibleUsers] = useState(PAGE_SIZE);
+  const [visibleSyncs, setVisibleSyncs] = useState(PAGE_SIZE);
+  const [visibleAudit, setVisibleAudit] = useState(PAGE_SIZE);
 
   const loadAll = useCallback(async () => {
     if (preview) {
@@ -295,7 +357,11 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               key={item.id}
               type="button"
               aria-current={section === item.id ? 'page' : undefined}
-              onClick={() => setSection(item.id)}
+              onClick={() => {
+                setSection(item.id);
+                setMessage(null);
+                setError(null);
+              }}
             >
               {item.label}
             </button>
@@ -324,7 +390,10 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               </div>
             </div>
             {users.length === 0 ? (
-              <EmptyState title="Nenhuma pessoa" description="A lista está vazia no momento." />
+              <EmptyState
+                title="Nenhum embaixador cadastrado"
+                description="Quando alguém criar conta ou for aprovado nas candidaturas, aparece aqui."
+              />
             ) : (
               [...users]
                 .sort((a, b) =>
@@ -332,6 +401,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                     ? (b.postsLast30Days ?? 0) - (a.postsLast30Days ?? 0)
                     : (b.daysWithoutPosting ?? -1) - (a.daysWithoutPosting ?? -1),
                 )
+                .slice(0, visibleUsers)
                 .map((user) => (
                 <article key={user.id} className="admin-row">
                   <div className="admin-person">
@@ -386,6 +456,11 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                 </article>
               ))
             )}
+            <ShowMore
+              total={users.length}
+              visible={visibleUsers}
+              onMore={() => setVisibleUsers((count) => count + PAGE_SIZE)}
+            />
           </section>
         ) : null}
 
@@ -393,24 +468,39 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
           <section className="admin-panel" aria-label="Sincronização">
             <h2>Coletas recentes</h2>
             {syncs.length === 0 ? (
-              <p className="admin-row admin-meta">Nenhuma sincronização registrada.</p>
+              <p className="admin-row admin-meta">
+                Nenhuma coleta registrada ainda. Ela começa quando um embaixador conecta uma rede.
+              </p>
             ) : (
-              syncs.map((job) => (
+              syncs.slice(0, visibleSyncs).map((job) => (
                 <article key={job.id} className="admin-row">
                   <div className="admin-person">
                     <strong>
                       {platformName(job.platform)}
+                      {job.username ? ` @${job.username.replace(/^@/, '')}` : ''}
                       <span className="admin-status" data-tone={job.status === 'failed' ? 'stop' : job.status === 'succeeded' ? 'ok' : 'wait'}>
                         <i />
                         {syncStatusLabel(job.status)}
                       </span>
                     </strong>
-                    <span>Perfil {job.profileId}</span>
+                    <span>
+                      {job.publicName ?? 'Embaixador sem nome'}
+                      {job.finishedAt
+                        ? ` · Terminou em ${formatWhen(job.finishedAt)}`
+                        : job.startedAt
+                          ? ` · Começou em ${formatWhen(job.startedAt)}`
+                          : ' · Aguardando início'}
+                    </span>
                     {job.errorMessage ? <span>{job.errorMessage}</span> : null}
                   </div>
                 </article>
               ))
             )}
+            <ShowMore
+              total={syncs.length}
+              visible={visibleSyncs}
+              onMore={() => setVisibleSyncs((count) => count + PAGE_SIZE)}
+            />
             <div className="admin-row">
               <button
                 type="button"
@@ -430,12 +520,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
             {settings ? (
               <form className="admin-form" onSubmit={(event) => void handleSettingsSubmit(event)}>
                 <Input
-                  label="Coleta e ranking"
+                  label="Coleta e ranking (minutos)"
                   name="syncIntervalMinutes"
                   type="number"
-                  value="10"
+                  value={String(settings.syncIntervalMinutes)}
                   disabled
-                  hint="A cada 10 minutos o sistema renova o acesso, lê as views e publica o ranking."
+                  hint={`A cada ${settings.syncIntervalMinutes} minutos o sistema renova o acesso, lê as views e publica o ranking. Esse intervalo é definido no servidor.`}
                 />
                 <Input
                   label="Tolerância de dados desatualizados (horas)"
@@ -468,7 +558,9 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                 </Button>
               </form>
             ) : (
-              <p className="admin-row admin-meta">Regras indisponíveis.</p>
+              <p className="admin-row admin-meta">
+                Não foi possível carregar as regras. Atualize a página para tentar de novo.
+              </p>
             )}
           </section>
         ) : null}
@@ -484,25 +576,28 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
           <section className="admin-panel" aria-label="Auditoria">
             <h2>Trilha</h2>
             {audit.length === 0 ? (
-              <p className="admin-row admin-meta">Nenhum evento registrado.</p>
+              <p className="admin-row admin-meta">
+                Nenhum evento registrado. Aprovações, suspensões e ajustes de regras aparecem aqui.
+              </p>
             ) : (
-              audit.map((entry) => (
+              audit.slice(0, visibleAudit).map((entry) => (
                 <article key={entry.id} className="admin-row">
                   <div className="admin-person">
-                    <strong>{entry.action}</strong>
+                    <strong>{auditActionLabel(entry.action)}</strong>
                     <span>
-                      {entry.actorId ? `Ator ${entry.actorId}` : 'Sistema'} · {entry.entityType}
-                      {entry.entityId ? ` ${entry.entityId}` : ''}
-                      {entry.reason ? ` · ${entry.reason}` : ''} ·{' '}
-                      {new Intl.DateTimeFormat('pt-BR', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      }).format(new Date(entry.createdAt))}
+                      {entry.actorName ?? (entry.actorId ? 'Administração' : 'Sistema')} ·{' '}
+                      {auditEntityLabel(entry)}
+                      {entry.reason ? ` · ${entry.reason}` : ''} · {formatWhen(entry.createdAt)}
                     </span>
                   </div>
                 </article>
               ))
             )}
+            <ShowMore
+              total={audit.length}
+              visible={visibleAudit}
+              onMore={() => setVisibleAudit((count) => count + PAGE_SIZE)}
+            />
           </section>
         ) : null}
       </div>

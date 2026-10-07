@@ -188,7 +188,7 @@ export function ConnectionsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-display text-3xl text-text">Conexões</h1>
+        <h1 className="page-title">Conexões</h1>
         <p className="mt-2 max-w-[62ch] text-text-muted">
           Suas redes conectadas e o estado da coleta de views.
         </p>

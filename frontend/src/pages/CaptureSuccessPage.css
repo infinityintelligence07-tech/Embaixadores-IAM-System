@@ -1,6 +1,6 @@
 .success {
-  --sky: #2f6bff;
-  --sky-bright: #5b8cff;
+  --sky: #0034b8;
+  --sky-bright: #4c7dff;
   --white: #ffffff;
   --fog: rgba(255, 255, 255, 0.78);
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -15,7 +15,7 @@
   isolation: isolate;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 70% 50% at 80% 10%, rgba(47, 107, 255, 0.32), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 80% 10%, rgba(76, 125, 255, 0.32), transparent 55%),
     linear-gradient(180deg, #000428, #0034b8);
 }
 
@@ -32,8 +32,6 @@
   margin: 0;
   font-size: 12px;
   font-weight: 650;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--sky-bright);
 }
 

@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSurfaceTheme } from '@/lib/theme';
 import { api } from '@/lib/api';
-import '@/components/arena/arena.css';
 
 const steps = [
   {
@@ -38,7 +37,9 @@ export function OnboardingPage() {
   const [fullName, setFullName] = useState(profile?.fullName ?? '');
   const [publicName, setPublicName] = useState(profile?.publicName ?? '');
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl ?? '');
-  const [rankingConsent, setRankingConsent] = useState(false);
+  const [rankingConsent, setRankingConsent] = useState(
+    Boolean(profile?.onboardingCompleted),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -62,11 +63,14 @@ export function OnboardingPage() {
         fullName,
         publicName,
         avatarUrl: avatarUrl || undefined,
+        onboardingCompleted: true,
       });
       await refreshProfile();
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar perfil.');
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível salvar o perfil. Tente de novo.',
+      );
     } finally {
       setLoading(false);
     }
@@ -75,13 +79,13 @@ export function OnboardingPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
-        <h1 className="font-display text-3xl text-text">Seu cadastro</h1>
+        <h1 className="page-title">Seu cadastro</h1>
         <p className="mt-2 text-text-muted">
           Siga os passos abaixo para começar a participar do programa.
         </p>
       </header>
 
-      <ol className="space-y-4">
+      <ol className="space-y-2.5">
         {steps.map((step, index) => {
           const Icon = step.icon;
           const done =
@@ -91,7 +95,7 @@ export function OnboardingPage() {
           return (
             <li
               key={step.id}
-              className="flex gap-4 rounded-2xl border border-border bg-surface-card p-4"
+              className="flex gap-4 rounded-[14px] border border-border bg-surface-card p-4"
             >
               <div
                 className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-violet/15 text-brand-violet"
@@ -107,9 +111,11 @@ export function OnboardingPage() {
                 <h2 className="font-display text-lg text-text">{step.title}</h2>
                 <p className="mt-1 text-sm text-text-muted">{step.description}</p>
                 {step.id === 'connections' ? (
-                  <Link to="/conexoes" className="cta mt-3">
-                    Conectar Instagram e TikTok
-                  </Link>
+                  <div className="mt-3">
+                    <Link to="/conexoes" className="cta">
+                      Conectar Instagram e TikTok
+                    </Link>
+                  </div>
                 ) : null}
               </div>
             </li>
@@ -130,7 +136,7 @@ export function OnboardingPage() {
         </Alert>
       ) : null}
 
-      <section className="rounded-2xl border border-border bg-surface-card p-6">
+      <section className="rounded-[14px] border border-border bg-surface-card p-6">
         <h2 className="font-display text-xl text-text">Seus dados</h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {error ? (
@@ -180,7 +186,7 @@ export function OnboardingPage() {
               type="checkbox"
               checked={rankingConsent}
               onChange={(e) => setRankingConsent(e.target.checked)}
-              className="mt-1 size-4 rounded border-border accent-brand-violet"
+              className="mt-0.5 size-5 rounded border-border accent-brand-violet"
               required
             />
             <span>
@@ -193,10 +199,11 @@ export function OnboardingPage() {
             <Button type="submit" loading={loading}>
               Salvar perfil
             </Button>
-            <Link to="/conexoes">
-              <Button type="button" variant="secondary">
-                Ir para conexões
-              </Button>
+            <Link
+              to="/conexoes"
+              className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-border bg-surface-card px-4 text-sm font-medium text-text"
+            >
+              Ir para conexões
             </Link>
           </div>
         </form>

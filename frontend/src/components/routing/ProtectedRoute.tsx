@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
+import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -14,7 +15,7 @@ export function ProtectedRoute({
   requireApproved = false,
   requireAdmin = false,
 }: ProtectedRouteProps) {
-  const { state, profile, profileError, isAdmin } = useAuth();
+  const { state, profile, profileError, isAdmin, refreshProfile, signOut } = useAuth();
   const location = useLocation();
 
   if (state === 'loading') {
@@ -41,10 +42,18 @@ export function ProtectedRoute({
 
   if (profileError && !profile) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-16">
+      <div className="mx-auto max-w-lg space-y-4 px-4 py-16">
         <Alert variant="error" role="alert" title="Não foi possível continuar">
           {profileError}
         </Alert>
+        <div className="flex flex-wrap gap-2.5">
+          <Button variant="secondary" onClick={() => void refreshProfile()}>
+            Tentar de novo
+          </Button>
+          <Button variant="ghost" onClick={() => void signOut()}>
+            Sair da conta
+          </Button>
+        </div>
       </div>
     );
   }
@@ -55,10 +64,14 @@ export function ProtectedRoute({
 
   if (profile?.status === 'suspended') {
     return (
-      <div className="mx-auto max-w-lg px-4 py-16">
+      <div className="mx-auto max-w-lg space-y-4 px-4 py-16">
         <Alert variant="warning" role="alert" title="Conta suspensa">
-          Sua conta foi suspensa. Entre em contato com a equipe para mais informações.
+          Sua conta foi suspensa. Fale com a equipe do programa para entender o motivo e
+          pedir a revisão.
         </Alert>
+        <Button variant="secondary" onClick={() => void signOut()}>
+          Sair da conta
+        </Button>
       </div>
     );
   }
@@ -79,9 +92,12 @@ export function ProtectedRoute({
     return <Navigate to="/onboarding" replace />;
   }
 
+  // Quem já foi aprovado não volta para o cadastro, mesmo que a marca de
+  // onboarding não tenha sido gravada (cadastros antigos ou aprovação manual).
   if (
     !requireAdmin &&
     profile &&
+    profile.status !== 'approved' &&
     !profile.onboardingCompleted &&
     location.pathname !== '/onboarding' &&
     !PENDING_ALLOWED_PATHS.includes(location.pathname)

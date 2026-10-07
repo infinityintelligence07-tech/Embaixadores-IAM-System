@@ -12,7 +12,7 @@ interface AlertProps {
 
 const variantClasses: Record<AlertVariant, string> = {
   info: 'border-[var(--line)] bg-[var(--accent-soft)] text-[var(--ink)]',
-  success: 'border-transparent bg-[var(--good-soft)] text-[var(--ink)]',
+  success: 'border-transparent bg-[var(--accent-soft)] text-[var(--ink)]',
   warning: 'border-transparent bg-[var(--warn-soft)] text-[var(--ink)]',
   error: 'border-transparent bg-[var(--bad-soft)] text-[var(--ink)]',
 };

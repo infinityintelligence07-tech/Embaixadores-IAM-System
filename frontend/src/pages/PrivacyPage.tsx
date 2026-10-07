@@ -14,8 +14,8 @@ export function PrivacyPage() {
             Voltar ao login
           </Link>
         </p>
-        <h1 className="font-display text-3xl text-text">
-          Política de Privacidade
+        <h1 className="page-title">
+          Política de privacidade
         </h1>
         <p className="text-sm text-text-muted">Última atualização: {updated}</p>
         <p>
@@ -78,7 +78,7 @@ export function PrivacyPage() {
         <p className="text-sm text-text-muted">
           Ver também os{' '}
           <Link to="/termos" className="text-text underline-offset-2 hover:underline">
-            Termos de Uso
+            Termos de uso
           </Link>
           .
         </p>

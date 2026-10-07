@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useSurfaceTheme } from "@/lib/theme";
 import "./CapturePage.css";
 
 const NETWORKS = [
@@ -74,6 +75,7 @@ const ICONS: Record<string, ReactNode> = {
 };
 
 export function CapturePage() {
+  useSurfaceTheme("arena");
   const navigate = useNavigate();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [error, setError] = useState("");
@@ -130,15 +132,33 @@ export function CapturePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = (await response.json()) as { error?: string; message?: string };
+      let result: { message?: unknown } = {};
+      try {
+        result = (await response.json()) as { message?: unknown };
+      } catch {
+        result = {};
+      }
 
       if (!response.ok) {
-        throw new Error(result.error || result.message || "Falha ao enviar");
+        const message = Array.isArray(result.message)
+          ? result.message.find((item): item is string => typeof item === "string")
+          : typeof result.message === "string"
+            ? result.message
+            : undefined;
+        throw new Error(
+          message && !/^(bad request|conflict|internal server error|not found)$/i.test(message)
+            ? message
+            : "Não foi possível enviar sua candidatura. Revise os dados e tente de novo.",
+        );
       }
 
       navigate("/sucesso");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao enviar");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível enviar sua candidatura. Tente de novo.",
+      );
     } finally {
       setLoading(false);
     }
@@ -162,8 +182,8 @@ export function CapturePage() {
 
       <header className="lp-top">
         <img src="/brand/iam-logo.png" alt="iAM" className="lp-top__iam" />
-        <Link to="/login" state={{ from: "/candidaturas" }} className="lp-top__link">
-          Admin
+        <Link to="/login" className="lp-top__link">
+          Entrar
         </Link>
       </header>
 
@@ -266,7 +286,7 @@ export function CapturePage() {
 
             <fieldset className="lp-networks">
               <legend>
-                Qual a rede social que foi criada <span>*</span>
+                Em qual rede você vai publicar? <span>*</span>
               </legend>
               <div className="net-grid">
                 {NETWORKS.map((network) => {

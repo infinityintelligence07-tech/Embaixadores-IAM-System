@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
+import { useSurfaceTheme } from "@/lib/theme";
 import "./CaptureSuccessPage.css";
 
 export function CaptureSuccessPage() {
+  useSurfaceTheme("arena");
   return (
     <main className="success">
       <div className="success__panel">

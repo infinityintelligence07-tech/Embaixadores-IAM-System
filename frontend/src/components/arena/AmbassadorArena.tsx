@@ -156,6 +156,11 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         setSlices(dashboardResult.value.slices);
         setCriteria(dashboardResult.value.rankingCriteria);
       }
+      setConnectError(
+        accountResult.status === 'rejected'
+          ? 'Não foi possível carregar suas conexões. Recarregue a página para tentar de novo.'
+          : null,
+      );
       setLoading(false);
     }
 
@@ -283,6 +288,11 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         ...current,
         [activeKey]: [...(current[activeKey] ?? []), ...page.items],
       }));
+    } catch {
+      setErrors((current) => ({
+        ...current,
+        [activeKey]: 'Não foi possível carregar mais posições. Tente de novo.',
+      }));
     } finally {
       setLoadingMore(false);
     }
@@ -314,9 +324,14 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     <div className="arena">
       <header className="arena-hero">
         <p className="arena-hello">
-          Bem-vindo, <strong>{name}</strong>
+          Olá, <strong>{name}</strong>
         </p>
-        {blocked ? null : standing?.eligible && standing.position != null ? (
+        {loading ? (
+          <div className="arena-skeleton arena-skeleton-hero" aria-hidden>
+            <i />
+            <i />
+          </div>
+        ) : blocked ? null : standing?.eligible && standing.position != null ? (
           <h1 className="arena-standing">
             Você está na{' '}
             <span className="arena-ordinal" data-place={placeTone}>
@@ -328,7 +343,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         ) : (
           <h1 className="arena-standing">Você ainda não está neste ranking</h1>
         )}
-        {blocked ? null : (
+        {loading || blocked ? null : (
           <>
             <p className="arena-context">{chase.context}</p>
             <p className="arena-detail">{chase.detail}</p>
@@ -761,7 +776,7 @@ function Avatar({
           {initial(name)}
         </span>
       )}
-      <img className="tier-pip" src={tier.image} alt={tier.name} />
+      <img className="tier-pip" src={tier.image} alt={`Nível ${tier.name}`} />
     </span>
   );
 }

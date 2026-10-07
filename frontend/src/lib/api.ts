@@ -151,14 +151,18 @@ export interface AdminSyncJob {
   startedAt: string | null;
   finishedAt: string | null;
   errorMessage: string | null;
+  publicName?: string | null;
+  username?: string | null;
 }
 
 export interface AdminAuditEntry {
   id: string;
   action: string;
   actorId: string | null;
+  actorName?: string | null;
   entityType: string;
   entityId: string | null;
+  entityName?: string | null;
   reason: string | null;
   createdAt: string;
 }
