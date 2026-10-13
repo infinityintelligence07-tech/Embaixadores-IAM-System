@@ -42,8 +42,8 @@ export function TermsPage() {
         </p>
         <h2 className="text-xl text-text">4. Rankings e métricas</h2>
         <p>
-          Os rankings usam a soma das visualizações dos vídeos monitorados e o melhor vídeo
-          individual, separados por plataforma. Métricas oficiais de conta, quando indisponíveis,
+          Os rankings usam a soma das visualizações dos Reels e vídeos monitorados e o melhor vídeo
+          individual, separados por plataforma. Fotos e carrosséis do Instagram não contam. Métricas oficiais de conta, quando indisponíveis,
           são exibidas como “Indisponível” e não são substituídas silenciosamente pela soma dos
           vídeos.
         </p>

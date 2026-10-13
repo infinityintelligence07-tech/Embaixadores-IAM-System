@@ -7,6 +7,7 @@ import {
   MetricsRepository,
 } from '../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
+import { countsTowardRanking } from '../../domain/ranked-media';
 
 export interface DashboardSlice {
   platform: SocialPlatform;
@@ -103,7 +104,9 @@ export class GetDashboardUseCase {
       );
       
       // Get content
-      const contents = await this.contentRepo.findEligibleByAccount(account.id);
+      const contents = (await this.contentRepo.findEligibleByAccount(account.id)).filter(
+        (content) => countsTowardRanking(platform, content.mediaType),
+      );
       const bestContent = contents.sort((a, b) => 
         (b.latestViews || 0) - (a.latestViews || 0)
       )[0];
@@ -136,7 +139,7 @@ export class GetDashboardUseCase {
     return {
       slices,
       rankingCriteria:
-        'A ordem usa as views monitoradas de cada rede. O vídeo com mais views considera só o maior vídeo elegível.',
+        'A ordem usa as views dos Reels e vídeos de cada rede. Fotos e carrosséis não contam. O vídeo com mais views considera só o maior vídeo elegível.',
     };
   }
 }

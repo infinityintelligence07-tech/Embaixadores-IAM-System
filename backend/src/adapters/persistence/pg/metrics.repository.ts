@@ -17,6 +17,7 @@ import {
   asSyncRunId,
   asProfileId,
 } from '../../../domain/types';
+import { rankedMediaSql } from '../../../domain/ranked-media';
 import { getPool } from '../../../infrastructure/db/pool';
 import { readJson } from './read-json';
 
@@ -113,12 +114,13 @@ export class PgMetricsRepository implements MetricsRepository {
          (
            SELECT id 
            FROM contents 
-           WHERE social_account_id = sa.id 
-             AND eligible = true 
+           WHERE social_account_id = sa.id
+             AND eligible = true
              AND excluded_at IS NULL
              AND removed_on_platform = false
              AND latest_views IS NOT NULL
-           ORDER BY latest_views DESC 
+             AND ${rankedMediaSql('contents')}
+           ORDER BY latest_views DESC
            LIMIT 1
          ) AS best_content_id
        FROM social_accounts sa
@@ -126,6 +128,7 @@ export class PgMetricsRepository implements MetricsRepository {
          AND c.eligible = true
          AND c.excluded_at IS NULL
          AND c.removed_on_platform = false
+         AND ${rankedMediaSql('c')}
        WHERE sa.id = $1
        GROUP BY sa.profile_id, sa.id`,
       [socialAccountId],

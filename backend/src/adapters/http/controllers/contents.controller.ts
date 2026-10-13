@@ -3,6 +3,7 @@ import { AuthGuard } from '../guards/auth.guard';
 import { SocialPlatform } from '../../../domain/types';
 import { SocialAccountRepository, ContentRepository } from '../../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
+import { countsTowardRanking } from '../../../domain/ranked-media';
 
 @Controller('api')
 @UseGuards(AuthGuard)
@@ -28,7 +29,9 @@ export class ContentsController {
         continue;
       }
       
-      const contents = await this.contentRepo.findEligibleByAccount(account.id);
+      const contents = (await this.contentRepo.findEligibleByAccount(account.id)).filter(
+        (content) => countsTowardRanking(platform, content.mediaType),
+      );
       
       for (const content of contents) {
         allContents.push({
