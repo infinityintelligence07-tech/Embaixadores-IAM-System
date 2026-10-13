@@ -1,4 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { NewMembersSection } from '@/components/admin/NewMembersSection';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -16,7 +18,7 @@ import {
 } from '@/lib/api';
 import '@/components/admin/admin.css';
 
-type AdminSection = 'pessoas' | 'sincronizacao' | 'regras' | 'conteudo' | 'auditoria';
+type AdminSection = 'novos' | 'pessoas' | 'sincronizacao' | 'regras' | 'conteudo' | 'auditoria';
 
 export interface AdminPreview {
   users: AdminUser[];
@@ -26,6 +28,7 @@ export interface AdminPreview {
 }
 
 const sections: { id: AdminSection; label: string }[] = [
+  { id: 'novos', label: 'Novos membros' },
   { id: 'pessoas', label: 'Pessoas' },
   { id: 'sincronizacao', label: 'Coletas' },
   { id: 'regras', label: 'Regras' },
@@ -121,6 +124,8 @@ function platformName(platform: SocialPlatform): string {
 }
 
 const AUDIT_ACTIONS: Record<string, string> = {
+  approve_application: 'Candidatura aprovada',
+  reject_application: 'Candidatura rejeitada',
   approve_membership: 'Embaixador aprovado',
   suspend_membership: 'Embaixador suspenso',
   connect_social_account: 'Rede conectada',
@@ -131,6 +136,7 @@ const AUDIT_ACTIONS: Record<string, string> = {
 };
 
 const AUDIT_ENTITIES: Record<string, string> = {
+  application: 'candidatura de',
   content: 'conteúdo',
   membership: 'embaixador',
   ranking: 'ranking',
@@ -181,7 +187,11 @@ function ShowMore({
 }
 
 export function AdminPage({ preview }: { preview?: AdminPreview }) {
-  const [section, setSection] = useState<AdminSection>('pessoas');
+  const [searchParams] = useSearchParams();
+  const [section, setSection] = useState<AdminSection>(() => {
+    const requested = searchParams.get('secao');
+    return sections.some((item) => item.id === requested) ? (requested as AdminSection) : 'novos';
+  });
   const [peopleOrder, setPeopleOrder] = useState<'posts' | 'silence'>('posts');
   const [users, setUsers] = useState<AdminUser[]>(preview?.users ?? []);
   const [syncs, setSyncs] = useState<AdminSyncJob[]>(preview?.syncs ?? []);
@@ -195,6 +205,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [visibleUsers, setVisibleUsers] = useState(PAGE_SIZE);
   const [visibleSyncs, setVisibleSyncs] = useState(PAGE_SIZE);
   const [visibleAudit, setVisibleAudit] = useState(PAGE_SIZE);
+  const [waitingCount, setWaitingCount] = useState(0);
   const hasLoadedRef = useRef(false);
 
   const loadAll = useCallback(async () => {
@@ -401,9 +412,33 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               }}
             >
               {item.label}
+              {item.id === 'novos' && waitingCount > 0 ? (
+                <span className="admin-nav-count" aria-label={`${waitingCount} aguardando`}>
+                  {waitingCount}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
+
+        {section === 'novos' ? (
+          <NewMembersSection
+            pendingSignups={users}
+            preview={preview != null}
+            approvingUserId={actionLoading}
+            onApproveSignup={(id) => void handleApprove(id)}
+            onChanged={() => void loadAll()}
+            onPendingCount={setWaitingCount}
+            onMessage={(text) => {
+              setError(null);
+              setMessage(text);
+            }}
+            onError={(text) => {
+              setMessage(null);
+              setError(text);
+            }}
+          />
+        ) : null}
 
         {section === 'pessoas' ? (
           <section className="admin-panel" aria-label="Pessoas">

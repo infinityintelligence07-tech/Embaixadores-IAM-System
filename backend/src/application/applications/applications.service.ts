@@ -9,7 +9,10 @@ import { getPool } from '../../infrastructure/db/pool';
 import { loadConfig } from '../../infrastructure/config/env';
 
 const NETWORKS = new Set(['instagram', 'tiktok']);
-const LOGIN_REDIRECT = 'https://embaixadores.iamcontrol.com.br/auth/callback';
+
+const COLUMNS = `id, nome_completo, email, whatsapp, nome_conta, redes_sociais,
+  instagram_handle, tiktok_handle, status, created_at, updated_at, reviewed_at,
+  (SELECT p.public_name FROM profiles p WHERE p.id = applications.reviewed_by) AS reviewed_by_name`;
 
 export interface ApplicationRow {
   id: string;
@@ -18,9 +21,13 @@ export interface ApplicationRow {
   whatsapp: string;
   nome_conta: string;
   redes_sociais: string[];
+  instagram_handle: string | null;
+  tiktok_handle: string | null;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   updated_at: string;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
 }
 
 export interface SubmitApplicationInput {
@@ -32,8 +39,15 @@ export interface SubmitApplicationInput {
   tiktok_handle?: string;
 }
 
-function normalizeHandle(value: string): string {
-  const clean = value.trim().replace(/^@+/, '');
+/** Aceita "@fulano", "fulano" ou a URL do perfil colada (instagram.com/fulano, tiktok.com/@fulano). */
+export function normalizeHandle(value: string): string {
+  const clean = value
+    .trim()
+    .replace(/^@+/, '')
+    .replace(/^https?:\/\//i, '')
+    .replace(/^(www\.|m\.)?(instagram|tiktok)\.com\//i, '')
+    .split(/[/?#\s]/)[0]
+    .replace(/^@+/, '');
   return clean ? `@${clean}` : '';
 }
 
@@ -93,10 +107,20 @@ export class ApplicationsService {
 
     try {
       const result = await getPool().query<{ id: string }>(
-        `INSERT INTO applications (nome_completo, email, whatsapp, nome_conta, redes_sociais)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO applications (
+           nome_completo, email, whatsapp, nome_conta, redes_sociais, instagram_handle, tiktok_handle
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id`,
-        [nomeCompleto, email, whatsapp, nomeConta, redes],
+        [
+          nomeCompleto,
+          email,
+          whatsapp,
+          nomeConta,
+          redes,
+          redes.includes('instagram') ? instagramHandle : null,
+          redes.includes('tiktok') ? tiktokHandle : null,
+        ],
       );
       return { id: result.rows[0].id };
     } catch (error) {
@@ -109,10 +133,7 @@ export class ApplicationsService {
 
   async list(): Promise<ApplicationRow[]> {
     const result = await getPool().query<ApplicationRow>(
-      `SELECT id, nome_completo, email, whatsapp, nome_conta, redes_sociais, status,
-              created_at, updated_at
-       FROM applications
-       ORDER BY created_at DESC`,
+      `SELECT ${COLUMNS} FROM applications ORDER BY created_at DESC`,
     );
     return result.rows.map(serialize);
   }
@@ -120,23 +141,39 @@ export class ApplicationsService {
   async updateStatus(
     id: string,
     status: ApplicationRow['status'],
+    actorId: string,
   ): Promise<ApplicationRow> {
+    const current = await this.findById(id);
     if (status === 'approved') {
-      const current = await this.findById(id);
-      await this.provisionAccess(current);
+      await this.provisionAccess(current, actorId);
     }
 
-    const result = await getPool().query<ApplicationRow>(
+    const updated = await getPool().query<{ id: string }>(
       `UPDATE applications
-       SET status = $2, updated_at = now()
+       SET status = $2,
+           updated_at = now(),
+           reviewed_at = CASE WHEN $2 = 'pending' THEN NULL ELSE now() END,
+           reviewed_by = CASE WHEN $2 = 'pending' THEN NULL ELSE $3::uuid END
        WHERE id = $1
-       RETURNING id, nome_completo, email, whatsapp, nome_conta, redes_sociais, status,
-                 created_at, updated_at`,
-      [id, status],
+       RETURNING id`,
+      [id, status, actorId],
     );
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException('Candidatura não encontrada');
-    return serialize(row);
+    if (!updated.rows[0]) throw new NotFoundException('Candidatura não encontrada');
+
+    if (status !== 'pending') {
+      await getPool().query(
+        `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, $2, 'application', $3, $4)`,
+        [
+          actorId,
+          status === 'approved' ? 'approve_application' : 'reject_application',
+          id,
+          JSON.stringify({ name: current.nome_completo, email: current.email }),
+        ],
+      );
+    }
+
+    return this.findById(id).then(serialize);
   }
 
   async remove(id: string): Promise<void> {
@@ -146,10 +183,7 @@ export class ApplicationsService {
 
   private async findById(id: string): Promise<ApplicationRow> {
     const result = await getPool().query<ApplicationRow>(
-      `SELECT id, nome_completo, email, whatsapp, nome_conta, redes_sociais, status,
-              created_at, updated_at
-       FROM applications
-       WHERE id = $1`,
+      `SELECT ${COLUMNS} FROM applications WHERE id = $1`,
       [id],
     );
     const row = result.rows[0];
@@ -157,7 +191,7 @@ export class ApplicationsService {
     return row;
   }
 
-  private async provisionAccess(application: ApplicationRow): Promise<void> {
+  private async provisionAccess(application: ApplicationRow, actorId: string): Promise<void> {
     const auth = this.authClient();
     const email = application.email.trim().toLowerCase();
     const name = application.nome_completo.trim();
@@ -165,7 +199,7 @@ export class ApplicationsService {
 
     const invited = await auth.auth.admin.inviteUserByEmail(email, {
       data: metadata,
-      redirectTo: LOGIN_REDIRECT,
+      redirectTo: `${loadConfig().app.baseUrl}/auth/callback`,
     });
 
     let userId = invited.data.user?.id ?? null;
@@ -188,6 +222,7 @@ export class ApplicationsService {
         profile_id: userId,
         status: 'approved',
         approved_at: new Date().toISOString(),
+        approved_by: actorId,
       },
       { onConflict: 'profile_id' },
     );
@@ -204,6 +239,7 @@ function serialize(row: ApplicationRow): ApplicationRow {
     ...row,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString(),
+    reviewed_at: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : null,
     redes_sociais: row.redes_sociais ?? [],
   };
 }

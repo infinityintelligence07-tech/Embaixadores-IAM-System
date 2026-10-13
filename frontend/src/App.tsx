@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/routing/ProtectedRoute';
 import { AdminPage } from '@/pages/AdminPage';
-import { CandidaturasPage } from '@/pages/CandidaturasPage';
 import { CapturePage } from '@/pages/CapturePage';
 import { CaptureSuccessPage } from '@/pages/CaptureSuccessPage';
 import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
@@ -56,7 +55,7 @@ export default function App() {
       <Route element={<ProtectedRoute requireApproved requireAdmin />}>
         <Route element={<AppShell />}>
           <Route path="/admin" element={<AdminPage />} />
-          <Route path="/candidaturas" element={<CandidaturasPage />} />
+          <Route path="/candidaturas" element={<Navigate to="/admin?secao=novos" replace />} />
         </Route>
       </Route>
 

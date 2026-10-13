@@ -32,9 +32,15 @@ export interface AmbassadorApplication {
   whatsapp: string;
   nome_conta: string;
   redes_sociais: string[];
-  status: 'pending' | 'approved' | 'rejected';
+  instagram_handle: string | null;
+  tiktok_handle: string | null;
+  status: ApplicationStatus;
   created_at: string;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
 }
+
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
 
 export interface MeResponse {
   id: string;

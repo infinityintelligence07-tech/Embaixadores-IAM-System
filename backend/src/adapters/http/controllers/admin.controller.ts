@@ -383,8 +383,15 @@ export class AdminController {
       return names.get(id) ?? null;
     };
 
-    const entityNameOf = async (log: { entityType: string; entityId: string | null }) => {
+    const entityNameOf = async (log: {
+      entityType: string;
+      entityId: string | null;
+      metadata: Record<string, unknown> | null;
+    }) => {
       if (!log.entityId) return null;
+      if (log.entityType === 'application') {
+        return typeof log.metadata?.name === 'string' ? log.metadata.name : null;
+      }
       if (log.entityType === 'profile' || log.entityType === 'membership') {
         return nameOf(log.entityId);
       }

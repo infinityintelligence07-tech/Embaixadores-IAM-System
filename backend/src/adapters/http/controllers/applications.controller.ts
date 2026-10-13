@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -47,8 +48,12 @@ export class AdminApplicationsController {
   }
 
   @Patch(':id')
-  update(@Param('id', uuidPipe('Candidatura inválida.')) id: string, @Body() body: UpdateApplicationDto) {
-    return this.applications.updateStatus(id, body.status);
+  update(
+    @Req() req: { user: { id: string } },
+    @Param('id', uuidPipe('Candidatura inválida.')) id: string,
+    @Body() body: UpdateApplicationDto,
+  ) {
+    return this.applications.updateStatus(id, body.status, req.user.id);
   }
 
   @Delete(':id')
