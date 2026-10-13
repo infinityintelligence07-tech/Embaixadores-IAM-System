@@ -14,6 +14,12 @@ import {
   type SocialAccount,
   type SocialPlatform,
 } from '@/lib/api';
+import {
+  ABANDONED_OAUTH_HINT,
+  clearOAuthStarted,
+  markOAuthStarted,
+  readAbandonedOAuth,
+} from '@/lib/oauth-return';
 
 function platformLabel(platform: SocialPlatform): string {
   return platform === 'instagram' ? 'Instagram' : 'TikTok';
@@ -99,6 +105,12 @@ export function ConnectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [pendingDisconnect, setPendingDisconnect] = useState<SocialAccount | null>(null);
+  const hasCallbackResult = connected || callbackError != null;
+  const [abandoned] = useState(() => (hasCallbackResult ? null : readAbandonedOAuth()));
+
+  useEffect(() => {
+    if (hasCallbackResult) clearOAuthStarted();
+  }, [hasCallbackResult]);
 
   const loadAccounts = useCallback(async () => {
     setError(null);
@@ -129,6 +141,11 @@ export function ConnectionsPage() {
   );
   const visibleCallbackError =
     callbackError === 'connection_failed' && instagramConnected ? null : callbackError;
+  const abandonedHint =
+    abandoned &&
+    !accounts.some((account) => account.platform === abandoned && account.status !== 'disconnected')
+      ? ABANDONED_OAUTH_HINT[abandoned]
+      : null;
 
   useEffect(() => {
     if (loading || callbackError !== 'connection_failed' || !instagramConnected) return;
@@ -142,6 +159,7 @@ export function ConnectionsPage() {
     setError(null);
     try {
       const { url } = await api.startOAuth(platform);
+      markOAuthStarted(platform);
       window.location.href = url;
     } catch (err) {
       setError(
@@ -207,6 +225,10 @@ export function ConnectionsPage() {
       ) : connected ? (
         <Alert variant="success" role="status">
           Conta conectada. Suas views passam a contar no ranking.
+        </Alert>
+      ) : abandonedHint ? (
+        <Alert variant="warning" role="status">
+          {abandonedHint}
         </Alert>
       ) : null}
 

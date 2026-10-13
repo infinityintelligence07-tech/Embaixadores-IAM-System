@@ -46,7 +46,8 @@ export class StartOAuthUseCase {
       url.searchParams.set('redirect_uri', redirectUri);
       url.searchParams.set('scope', 'instagram_business_basic,instagram_business_manage_insights');
       url.searchParams.set('response_type', 'code');
-      url.searchParams.set('force_reauth', 'true');
+      // Sem force_reauth: o login forçado do Instagram costuma terminar no feed
+      // ("Salvar informações de login?") e nunca volta ao redirect_uri.
       url.searchParams.set('state', state);
       
       return { url: url.toString() };

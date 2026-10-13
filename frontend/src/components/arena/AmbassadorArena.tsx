@@ -26,6 +26,7 @@ import {
   profileUrl,
 } from '@/lib/format';
 import { connectionDuty } from '@/lib/connection';
+import { ABANDONED_OAUTH_HINT, markOAuthStarted, readAbandonedOAuth } from '@/lib/oauth-return';
 import { PATENTS, patentFor } from '@/lib/seniority';
 import { describeChase } from '@/lib/standing';
 import './arena.css';
@@ -87,6 +88,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [abandoned] = useState(() => (locked ? null : readAbandonedOAuth()));
   const [ladderOpen, setLadderOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const picked = useRef(false);
@@ -325,6 +327,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     setConnectError(null);
     try {
       const { url } = await api.startOAuth(next);
+      markOAuthStarted(next);
       window.location.href = url;
     } catch (error) {
       setConnectError(
@@ -395,6 +398,14 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           <button type="button" className="arena-retry" onClick={retry}>
             Tentar de novo
           </button>
+        </Alert>
+      ) : !loading &&
+        abandoned &&
+        !accounts.some(
+          (account) => account.platform === abandoned && account.status !== 'disconnected',
+        ) ? (
+        <Alert variant="warning" role="status">
+          {ABANDONED_OAUTH_HINT[abandoned]}
         </Alert>
       ) : null}
 
