@@ -32,6 +32,10 @@ export interface AppConfig {
       clientKey: string | null;
       clientSecret: string | null;
     };
+    /** ScrapeCreators: leitura pública do TikTok pelo @. Sem chave, o TikTok usa o login oficial. */
+    scrapeCreators: {
+      apiKey: string | null;
+    };
   };
   demo: {
     enabled: boolean;
@@ -83,6 +87,9 @@ export function loadConfig(): AppConfig {
       tiktok: {
         clientKey: process.env.TIKTOK_CLIENT_KEY || null,
         clientSecret: process.env.TIKTOK_CLIENT_SECRET || null,
+      },
+      scrapeCreators: {
+        apiKey: process.env.SCRAPECREATORS_API_KEY || null,
       },
     },
     demo: {

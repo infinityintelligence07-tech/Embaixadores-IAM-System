@@ -92,10 +92,15 @@ export interface CreateSocialAccountInput {
   avatarUrl: string | null;
   profileUrl: string | null;
   transport: SocialTransport;
+  status?: ConnectionStatus;
+  verificationCode?: string | null;
 }
 
 export interface UpdateSocialAccountInput {
   platformUserId?: string;
+  transport?: SocialTransport;
+  verificationCode?: string | null;
+  verifiedAt?: Date | null;
   username?: string | null;
   displayName?: string | null;
   avatarUrl?: string | null;
@@ -137,7 +142,8 @@ export interface SocialAccountRepository {
     platformUserId: string,
   ): Promise<SocialAccount | null>;
   findConnectedByPlatform(platform: SocialPlatform): Promise<SocialAccount[]>;
-  findDueForSync(olderThan: Date): Promise<SocialAccount[]>;
+  /** Contas pela API oficial sem coleta desde `olderThan`; as lidas pelo @ desde `publicOlderThan`. */
+  findDueForSync(olderThan: Date, publicOlderThan: Date): Promise<SocialAccount[]>;
   create(input: CreateSocialAccountInput): Promise<SocialAccount>;
   update(id: SocialAccountId, input: UpdateSocialAccountInput): Promise<SocialAccount>;
   saveCredentials(

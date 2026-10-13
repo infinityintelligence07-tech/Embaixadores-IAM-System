@@ -15,6 +15,8 @@ import { SystemClockAdapter } from './adapters/clock/system-clock.adapter';
 
 // Adapters - Social
 import { SocialProviderFactory } from './adapters/social/social-provider.factory';
+import { TikTokPublicAdapter } from './adapters/social/tiktok-public.adapter';
+import { loadConfig } from './infrastructure/config/env';
 
 // Adapters - Persistence
 import { PgProfileRepository } from './adapters/persistence/pg/profile.repository';
@@ -36,6 +38,7 @@ import { UpdateMeUseCase } from './application/identity/update-me.use-case';
 import { GetDashboardUseCase } from './application/dashboard/get-dashboard.use-case';
 import { StartOAuthUseCase } from './application/social/start-oauth.use-case';
 import { OAuthCallbackUseCase } from './application/social/oauth-callback.use-case';
+import { TikTokHandleUseCase } from './application/social/tiktok-handle.use-case';
 import { SyncAccountUseCase } from './application/sync/sync-account.use-case';
 import { ComputeAndPublishRankingUseCase } from './application/rankings/compute-and-publish.use-case';
 
@@ -138,6 +141,10 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
       provide: INJECTION_TOKENS.SOCIAL_PROVIDER_FACTORY,
       useClass: SocialProviderFactory,
     },
+    {
+      provide: INJECTION_TOKENS.TIKTOK_PUBLIC_LOOKUP,
+      useFactory: () => new TikTokPublicAdapter(loadConfig().social.scrapeCreators.apiKey),
+    },
     
     // Use cases
     GetMeUseCase,
@@ -147,6 +154,7 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     GetDashboardUseCase,
     StartOAuthUseCase,
     OAuthCallbackUseCase,
+    TikTokHandleUseCase,
     SyncAccountUseCase,
     ComputeAndPublishRankingUseCase,
     

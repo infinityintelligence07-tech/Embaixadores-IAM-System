@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompetitionGate } from '@/components/arena/CompetitionGate';
+import { TikTokHandleDialog } from '@/components/social/TikTokHandleDialog';
 import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Alert } from '@/components/ui/Alert';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -88,6 +89,8 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [tiktokOpen, setTiktokOpen] = useState(false);
+  const [tiktokSuggestion, setTiktokSuggestion] = useState<string | null>(null);
   const [abandoned] = useState(() => (locked ? null : readAbandonedOAuth()));
   const [ladderOpen, setLadderOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -326,9 +329,15 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     setConnecting(next);
     setConnectError(null);
     try {
-      const { url } = await api.startOAuth(next);
+      const start = await api.startOAuth(next);
+      if (start.mode === 'handle') {
+        setTiktokSuggestion(start.suggestedHandle);
+        setTiktokOpen(true);
+        setConnecting(null);
+        return;
+      }
       markOAuthStarted(next);
-      window.location.href = url;
+      window.location.href = start.url;
     } catch (error) {
       setConnectError(
         error instanceof Error ? error.message : 'Não foi possível abrir a conexão.',
@@ -390,6 +399,20 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           accounts={accounts}
           busy={connecting}
           onConnect={(next) => void connect(next)}
+        />
+      )}
+      {locked ? null : (
+        <TikTokHandleDialog
+          open={tiktokOpen}
+          account={accounts.find((item) => item.platform === 'tiktok') ?? null}
+          suggestedHandle={tiktokSuggestion}
+          onClose={() => setTiktokOpen(false)}
+          onChanged={(next) =>
+            setAccounts((current) => [
+              ...current.filter((item) => item.platform !== next.platform),
+              next,
+            ])
+          }
         />
       )}
       {connectError ? (

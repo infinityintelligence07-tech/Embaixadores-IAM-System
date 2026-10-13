@@ -93,15 +93,19 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
     return result.rows.map(row => this.mapRow(row));
   }
 
-  async findDueForSync(olderThan: Date): Promise<SocialAccount[]> {
+  async findDueForSync(olderThan: Date, publicOlderThan: Date): Promise<SocialAccount[]> {
     const result = await this.pool.query(
       `SELECT * FROM social_accounts
        WHERE disconnected_at IS NULL
-         AND transport = 'official_api'
          AND status IN ('connected', 'syncing')
-         AND (last_successful_sync_at IS NULL OR last_successful_sync_at <= $1)
+         AND (
+           (transport = 'official_api'
+             AND (last_successful_sync_at IS NULL OR last_successful_sync_at <= $1))
+           OR (transport = 'public_api' AND verified_at IS NOT NULL
+             AND (last_successful_sync_at IS NULL OR last_successful_sync_at <= $2))
+         )
        ORDER BY last_successful_sync_at ASC NULLS FIRST`,
-      [olderThan],
+      [olderThan, publicOlderThan],
     );
     return result.rows.map((row) => this.mapRow(row));
   }
@@ -110,9 +114,9 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
     const result = await this.pool.query(
       `INSERT INTO social_accounts (
         profile_id, platform, platform_user_id, username, display_name,
-        avatar_url, profile_url, status, transport
+        avatar_url, profile_url, status, transport, verification_code
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'connected', $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
       [
         input.profileId,
@@ -122,7 +126,9 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
         input.displayName,
         input.avatarUrl,
         input.profileUrl,
+        input.status ?? ConnectionStatus.Connected,
         input.transport,
+        input.verificationCode ?? null,
       ],
     );
     return this.mapRow(result.rows[0]);
@@ -179,6 +185,18 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
     if (input.disconnectedAt !== undefined) {
       setClauses.push(`disconnected_at = $${paramIndex++}`);
       values.push(input.disconnectedAt);
+    }
+    if (input.transport !== undefined) {
+      setClauses.push(`transport = $${paramIndex++}`);
+      values.push(input.transport);
+    }
+    if (input.verificationCode !== undefined) {
+      setClauses.push(`verification_code = $${paramIndex++}`);
+      values.push(input.verificationCode);
+    }
+    if (input.verifiedAt !== undefined) {
+      setClauses.push(`verified_at = $${paramIndex++}`);
+      values.push(input.verifiedAt);
     }
     
     setClauses.push(`updated_at = NOW()`);
@@ -296,6 +314,8 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
         : null,
       syncCoverageRatio: row.sync_coverage_ratio,
       syncMessage: row.sync_message,
+      verificationCode: row.verification_code ?? null,
+      verifiedAt: row.verified_at ? new Date(row.verified_at) : null,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       disconnectedAt: row.disconnected_at ? new Date(row.disconnected_at) : null,

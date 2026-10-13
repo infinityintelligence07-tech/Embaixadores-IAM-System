@@ -37,6 +37,31 @@ export interface SocialCredentials {
   scopes: string[];
   /** Identificador devolvido na troca do código, quando a leitura de /me ainda não respondeu. */
   platformUserId?: string;
+  /** @ da conta, sem arroba. Usado pelo transporte público, que não tem token. */
+  handle?: string;
+}
+
+export interface PublicSocialProfile {
+  platformUserId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  profileUrl: string;
+  bio: string;
+  isPrivate: boolean;
+}
+
+/** The handle does not belong to an active public account. */
+export class SocialProfileNotFoundError extends Error {
+  constructor(message = 'Não encontramos esse @ no TikTok.') {
+    super(message);
+    this.name = 'SocialProfileNotFoundError';
+  }
+}
+
+export interface PublicProfileLookup {
+  readonly enabled: boolean;
+  lookupProfile(handle: string): Promise<PublicSocialProfile>;
 }
 
 export interface ContentMetricsResult {
@@ -74,7 +99,7 @@ export class SocialRateLimitError extends Error {
 
 export interface SocialMetricsProvider {
   readonly platform: 'instagram' | 'tiktok';
-  readonly transport: 'official_api' | 'mcp' | 'demo';
+  readonly transport: 'official_api' | 'public_api' | 'mcp' | 'demo';
 
   getAuthorizedProfile(creds: SocialCredentials): Promise<AuthorizedProfile>;
   listContents(

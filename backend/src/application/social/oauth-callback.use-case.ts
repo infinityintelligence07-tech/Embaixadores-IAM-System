@@ -93,6 +93,8 @@ export class OAuthCallbackUseCase {
         avatarUrl: authorizedProfile.avatarUrl,
         profileUrl: authorizedProfile.profileUrl,
         status: ConnectionStatus.Connected,
+        transport: SocialTransport.OfficialApi,
+        verificationCode: null,
         disconnectedAt: null,
       });
       accountId = existingByProfile.id;
@@ -100,6 +102,8 @@ export class OAuthCallbackUseCase {
       // Reconnect
       await this.socialAccountRepo.update(existingByPlatformUser.id, {
         status: ConnectionStatus.Connected,
+        transport: SocialTransport.OfficialApi,
+        verificationCode: null,
         disconnectedAt: null,
       });
       accountId = existingByPlatformUser.id;

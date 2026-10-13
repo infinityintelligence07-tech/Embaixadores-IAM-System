@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
+import { TikTokHandleDialog } from '@/components/social/TikTokHandleDialog';
 import {
   ApiError,
   api,
@@ -29,6 +30,8 @@ function transportLabel(transport: SocialAccount['transport']): string {
   switch (transport) {
     case 'official_api':
       return 'API oficial';
+    case 'public_api':
+      return 'Perfil público';
     case 'mcp':
       return 'MCP';
     case 'demo':
@@ -45,6 +48,7 @@ function statusTone(status: ConnectionStatus): 'success' | 'warning' | 'danger' 
     case 'connected':
       return 'success';
     case 'syncing':
+    case 'pending_verification':
       return 'warning';
     case 'authorization_expired':
     case 'insufficient_permission':
@@ -76,6 +80,8 @@ function statusLabel(status: ConnectionStatus): string {
       return 'Conta incompatível';
     case 'integration_unavailable':
       return 'Integração indisponível';
+    case 'pending_verification':
+      return 'Aguardando confirmação';
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -105,6 +111,9 @@ export function ConnectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [pendingDisconnect, setPendingDisconnect] = useState<SocialAccount | null>(null);
+  const [tiktokOpen, setTiktokOpen] = useState(false);
+  const [tiktokSuggestion, setTiktokSuggestion] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const hasCallbackResult = connected || callbackError != null;
   const [abandoned] = useState(() => (hasCallbackResult ? null : readAbandonedOAuth()));
 
@@ -157,10 +166,17 @@ export function ConnectionsPage() {
   async function handleConnect(platform: SocialPlatform) {
     setActionId(platform);
     setError(null);
+    setNotice(null);
     try {
-      const { url } = await api.startOAuth(platform);
+      const start = await api.startOAuth(platform);
+      if (start.mode === 'handle') {
+        setTiktokSuggestion(start.suggestedHandle);
+        setTiktokOpen(true);
+        setActionId(null);
+        return;
+      }
       markOAuthStarted(platform);
-      window.location.href = url;
+      window.location.href = start.url;
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Não foi possível abrir a conexão. Tente de novo.',
@@ -222,9 +238,9 @@ export function ConnectionsPage() {
         <Alert variant="error" role="alert">
           {error ?? CALLBACK_ERRORS[visibleCallbackError ?? ''] ?? 'Não foi possível concluir a conexão.'}
         </Alert>
-      ) : connected ? (
+      ) : connected || notice ? (
         <Alert variant="success" role="status">
-          Conta conectada. Suas views passam a contar no ranking.
+          {notice ?? 'Conta conectada. Suas views passam a contar no ranking.'}
         </Alert>
       ) : abandonedHint ? (
         <Alert variant="warning" role="status">
@@ -292,17 +308,27 @@ export function ConnectionsPage() {
                   ) : null}
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="min-h-[44px]"
-                    loading={actionId === account.id}
-                    onClick={() => handleSync(account.id)}
-                    aria-label={`Coletar agora no ${platformLabel(account.platform)}`}
-                  >
-                    <RefreshCw className="size-4" aria-hidden />
-                    Coletar agora
-                  </Button>
+                  {account.status === 'pending_verification' ? (
+                    <Button
+                      size="sm"
+                      className="min-h-[44px]"
+                      onClick={() => setTiktokOpen(true)}
+                    >
+                      Confirmar pela bio
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="min-h-[44px]"
+                      loading={actionId === account.id}
+                      onClick={() => handleSync(account.id)}
+                      aria-label={`Coletar agora no ${platformLabel(account.platform)}`}
+                    >
+                      <RefreshCw className="size-4" aria-hidden />
+                      Coletar agora
+                    </Button>
+                  )}
                   <Button
                     variant="danger"
                     size="sm"
@@ -330,6 +356,19 @@ export function ConnectionsPage() {
           if (pendingDisconnect) void handleDisconnect(pendingDisconnect);
         }}
         onCancel={() => setPendingDisconnect(null)}
+      />
+
+      <TikTokHandleDialog
+        open={tiktokOpen}
+        account={accounts.find((item) => item.platform === 'tiktok') ?? null}
+        suggestedHandle={tiktokSuggestion}
+        onClose={() => setTiktokOpen(false)}
+        onChanged={(next) => {
+          if (next.status !== 'pending_verification') {
+            setNotice('TikTok confirmado. A primeira coleta começa agora e as views entram no ranking em seguida.');
+          }
+          void loadAccounts();
+        }}
       />
     </div>
   );

@@ -19,6 +19,10 @@ describe('connectionDuty', () => {
     expect(connectionDuty('incompatible_account')).toBe('incompatible');
     expect(connectionDuty('integration_unavailable')).toBe('unavailable');
   });
+
+  it('pede a confirmação pela bio enquanto o @ não foi provado', () => {
+    expect(connectionDuty('pending_verification')).toBe('verify');
+  });
 });
 
 describe('gateHeadline', () => {

@@ -7,7 +7,8 @@ export type DutyKind =
   | 'reconnect'
   | 'permission'
   | 'incompatible'
-  | 'unavailable';
+  | 'unavailable'
+  | 'verify';
 
 const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
 
@@ -24,6 +25,8 @@ export function connectionDuty(status: ConnectionStatus | null | undefined): Dut
       return 'incompatible';
     case 'integration_unavailable':
       return 'unavailable';
+    case 'pending_verification':
+      return 'verify';
     default:
       return 'connect';
   }
@@ -44,6 +47,8 @@ export function dutyLine(platform: SocialPlatform, duty: DutyKind): string {
       return `A conexão com o ${name} ainda não está liberada. Avise a equipe.`;
     case 'connect':
       return `Conecte o ${name} com a sua conta para entrar neste ranking.`;
+    case 'verify':
+      return `Falta confirmar que o perfil é seu. Coloque o código na bio do ${name}.`;
     default: {
       const exhaustive: never = duty;
       return exhaustive;
@@ -65,6 +70,8 @@ export function actionLabel(platform: SocialPlatform, duty: DutyKind): string | 
       return 'Conectar outra conta';
     case 'connect':
       return `Conectar ${name}`;
+    case 'verify':
+      return 'Confirmar pela bio';
     default: {
       const exhaustive: never = duty;
       return exhaustive;

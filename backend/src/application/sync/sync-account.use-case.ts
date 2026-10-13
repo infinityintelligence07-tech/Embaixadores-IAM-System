@@ -1,5 +1,11 @@
 import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
-import { SocialPlatform, SocialAccountId, SyncJobStatus, ConnectionStatus } from '../../domain/types';
+import {
+  SocialPlatform,
+  SocialAccountId,
+  SyncJobStatus,
+  ConnectionStatus,
+  SocialTransport,
+} from '../../domain/types';
 import { SocialAccount, SyncJob, SyncRun } from '../../domain/entities';
 import {
   SocialAccountRepository,
@@ -82,6 +88,16 @@ export class SyncAccountUseCase {
       });
       throw new NotFoundException('Conta não encontrada.');
     }
+
+    // Sem a confirmação pela bio a conta não é coletada; uma falha aqui a marcaria como conectada.
+    if (account.transport === SocialTransport.PublicApi && !account.verifiedAt) {
+      await this.syncJobRepo.update(job.id, {
+        status: SyncJobStatus.Cancelled,
+        nextAttemptAt: null,
+        lastError: 'Conta aguardando confirmação pela bio.',
+      });
+      return;
+    }
     
     const now = this.clock.now();
     
@@ -97,7 +113,7 @@ export class SyncAccountUseCase {
     
     try {
       // Get credentials
-      const creds = await this.socialAccountRepo.getDecryptedCredentials(account.id);
+      const creds = await this.loadCredentials(account);
       if (!creds) {
         throw new Error('No credentials found for account');
       }
@@ -463,5 +479,19 @@ export class SyncAccountUseCase {
       this.logger.warn(`Token refresh failed: ${error}`);
       return creds;
     }
+  }
+
+  /** Contas lidas pelo @ não têm token: a credencial é o próprio @. */
+  private async loadCredentials(account: SocialAccount): Promise<SocialCredentials | null> {
+    if (account.transport === SocialTransport.PublicApi) {
+      if (!account.username) return null;
+      return {
+        accessToken: '',
+        scopes: [],
+        handle: account.username,
+        platformUserId: account.platformUserId,
+      };
+    }
+    return this.socialAccountRepo.getDecryptedCredentials(account.id);
   }
 }

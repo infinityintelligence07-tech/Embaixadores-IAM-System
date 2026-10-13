@@ -178,6 +178,19 @@ export class ApplicationsService {
     return this.findById(id).then(serialize);
   }
 
+  /** O @ do TikTok que a pessoa informou no formulário, para já vir preenchido na conexão. */
+  async tiktokHandleFor(email: string): Promise<string | null> {
+    const result = await getPool().query<{ tiktok_handle: string }>(
+      `SELECT tiktok_handle FROM applications
+       WHERE lower(email) = lower($1) AND tiktok_handle IS NOT NULL AND tiktok_handle <> ''
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [email.trim()],
+    );
+    const handle = result.rows[0]?.tiktok_handle;
+    return handle ? normalizeHandle(handle) || null : null;
+  }
+
   async remove(id: string): Promise<void> {
     const result = await getPool().query(`DELETE FROM applications WHERE id = $1`, [id]);
     if (result.rowCount === 0) throw new NotFoundException('Candidatura não encontrada');

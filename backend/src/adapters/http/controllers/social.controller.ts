@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Body,
   Param,
   Query,
   UseGuards,
@@ -17,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthGuard } from '../guards/auth.guard';
-import { ConnectionStatus, SocialPlatform } from '../../../domain/types';
+import { ConnectionStatus, SocialPlatform, SocialTransport } from '../../../domain/types';
 import {
   SettingsRepository,
   SocialAccountRepository,
@@ -29,9 +30,35 @@ import {
   OAuthCallbackUseCase,
   OAuthStateExpiredException,
 } from '../../../application/social/oauth-callback.use-case';
+import { TikTokHandleUseCase } from '../../../application/social/tiktok-handle.use-case';
+import { ApplicationsService } from '../../../application/applications/applications.service';
+import { SocialAccount } from '../../../domain/entities';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { uuidPipe } from '../pipes/uuid.pipe';
 import { SocialMetricsProvider } from '../../../ports/social-metrics.port';
+
+const PUBLIC_MANUAL_SYNC_COOLDOWN_SECONDS = 6 * 60 * 60;
+
+function toAccountView(account: SocialAccount) {
+  return {
+    id: account.id,
+    platform: account.platform,
+    username: account.username,
+    status: account.status,
+    transport: account.transport,
+    lastSyncAt: account.lastSyncedAt?.toISOString() || null,
+    syncMessage: account.syncMessage,
+    verificationCode:
+      account.status === ConnectionStatus.PendingVerification ? account.verificationCode : null,
+  };
+}
+
+function formatWait(seconds: number): string {
+  if (seconds < 120) return `${seconds} segundos`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 120) return `${minutes} minutos`;
+  return `cerca de ${Math.round(minutes / 60)} horas`;
+}
 
 @Controller('api/social')
 export class SocialController {
@@ -50,6 +77,8 @@ export class SocialController {
     },
     private readonly startOAuthUseCase: StartOAuthUseCase,
     private readonly oauthCallbackUseCase: OAuthCallbackUseCase,
+    private readonly tiktokHandle: TikTokHandleUseCase,
+    private readonly applications: ApplicationsService,
   ) {}
 
   @Get('accounts')
@@ -66,25 +95,27 @@ export class SocialController {
       ),
     ]);
 
-    return accounts.filter(Boolean).map((account) => ({
-      id: account!.id,
-      platform: account!.platform,
-      username: account!.username,
-      status: account!.status,
-      transport: account!.transport,
-      lastSyncAt: account!.lastSyncedAt?.toISOString() || null,
-      syncMessage: account!.syncMessage,
-    }));
+    return accounts
+      .filter((account): account is SocialAccount => account !== null)
+      .map(toAccountView);
   }
 
+  /** TikTok com a leitura pública ativa não abre login: devolve o modo "@" para a tela pedir o perfil. */
   @Post('oauth/:platform/start')
   @UseGuards(AuthGuard)
   async startOAuth(
-    @Req() req: { user: { id: string } },
+    @Req() req: { user: { id: string; email: string } },
     @Param('platform') platform: string,
   ) {
     if (platform !== 'instagram' && platform !== 'tiktok') {
       throw new BadRequestException('Plataforma inválida');
+    }
+
+    if (platform === 'tiktok' && this.tiktokHandle.enabled) {
+      const suggestedHandle = req.user.email
+        ? await this.applications.tiktokHandleFor(req.user.email).catch(() => null)
+        : null;
+      return { mode: 'handle' as const, suggestedHandle };
     }
 
     const result = await this.startOAuthUseCase.execute(
@@ -92,7 +123,27 @@ export class SocialController {
       platform as SocialPlatform,
     );
 
-    return { url: result.url };
+    return { mode: 'oauth' as const, url: result.url };
+  }
+
+  @Post('tiktok/handle')
+  @UseGuards(AuthGuard)
+  async claimTikTokHandle(
+    @Req() req: { user: { id: string } },
+    @Body() body: { handle?: unknown },
+  ) {
+    if (typeof body?.handle !== 'string') {
+      throw new BadRequestException('Informe o seu @ do TikTok.');
+    }
+    const account = await this.tiktokHandle.claim(req.user.id as never, body.handle);
+    return toAccountView(account);
+  }
+
+  @Post('tiktok/verify')
+  @UseGuards(AuthGuard)
+  async verifyTikTokHandle(@Req() req: { user: { id: string } }) {
+    const account = await this.tiktokHandle.verify(req.user.id as never);
+    return toAccountView(account);
   }
 
   /** Callback sem AuthGuard — a plataforma redireciona sem Bearer JWT. */
@@ -193,10 +244,19 @@ export class SocialController {
       throw new NotFoundException('Conta não encontrada.');
     }
 
-    const cooldownSeconds = await this.settingsRepo.getNumber(
+    if (account.status === ConnectionStatus.PendingVerification) {
+      throw new ConflictException('Confirme o código na bio do TikTok antes da primeira coleta.');
+    }
+
+    const settingCooldown = await this.settingsRepo.getNumber(
       'manual_sync_cooldown_seconds',
       300,
     );
+    // Cada consulta pelo @ é paga: a coleta manual fica limitada a poucas por dia.
+    const cooldownSeconds =
+      account.transport === SocialTransport.PublicApi
+        ? Math.max(settingCooldown, PUBLIC_MANUAL_SYNC_COOLDOWN_SECONDS)
+        : settingCooldown;
     const now = this.clock.now();
 
     if (account.lastSyncedAt) {
@@ -206,7 +266,7 @@ export class SocialController {
           (cooldownSeconds * 1000 - elapsedMs) / 1000,
         );
         throw new HttpException(
-          `Aguarde ${waitSec} segundos antes de pedir uma nova coleta.`,
+          `Aguarde ${formatWait(waitSec)} antes de pedir uma nova coleta.`,
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }

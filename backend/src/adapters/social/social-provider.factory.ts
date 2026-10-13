@@ -3,6 +3,7 @@ import { SocialMetricsProvider } from '../../ports/social-metrics.port';
 import { SocialPlatform, SocialTransport } from '../../domain/types';
 import { InstagramOfficialAdapter } from './instagram-official.adapter';
 import { TikTokOfficialAdapter } from './tiktok-official.adapter';
+import { TikTokPublicAdapter } from './tiktok-public.adapter';
 import { McpSocialAdapter } from './mcp-social.adapter';
 import { DemoSocialAdapter } from './demo-social.adapter';
 import { loadConfig } from '../../infrastructure/config/env';
@@ -14,6 +15,7 @@ export class SocialProviderFactory {
   
   private instagramOfficial?: InstagramOfficialAdapter;
   private tiktokOfficial?: TikTokOfficialAdapter;
+  private tiktokPublic?: TikTokPublicAdapter;
   
   getProvider(
     platform: SocialPlatform,
@@ -29,6 +31,17 @@ export class SocialProviderFactory {
       return new McpSocialAdapter(platform);
     }
     
+    if (transport === SocialTransport.PublicApi && platform === SocialPlatform.TikTok) {
+      if (!this.config.social.scrapeCreators.apiKey) {
+        this.logger.warn('SCRAPECREATORS_API_KEY not configured');
+        throw new Error('TikTok public data not configured');
+      }
+      if (!this.tiktokPublic) {
+        this.tiktokPublic = new TikTokPublicAdapter(this.config.social.scrapeCreators.apiKey);
+      }
+      return this.tiktokPublic;
+    }
+
     if (transport === SocialTransport.OfficialApi) {
       if (platform === SocialPlatform.Instagram) {
         if (!this.config.social.meta.appId || !this.config.social.meta.appSecret) {

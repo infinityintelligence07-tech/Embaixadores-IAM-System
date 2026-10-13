@@ -10,7 +10,11 @@ import {
 import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../tokens/injection-tokens';
 import { RankingCategory, SocialPlatform } from '../../domain/types';
-import { SYNC_INTERVAL_MINUTES, SYNC_INTERVAL_MS } from '../../domain/view-metrics';
+import {
+  PUBLIC_SYNC_INTERVAL_MS,
+  SYNC_INTERVAL_MINUTES,
+  SYNC_INTERVAL_MS,
+} from '../../domain/view-metrics';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -72,7 +76,8 @@ export class SyncSchedulerService implements OnModuleInit {
     try {
       const now = this.clock.now();
       const olderThan = new Date(now.getTime() - SYNC_INTERVAL_MS);
-      const due = await this.socialAccountRepo.findDueForSync(olderThan);
+      const publicOlderThan = new Date(now.getTime() - PUBLIC_SYNC_INTERVAL_MS);
+      const due = await this.socialAccountRepo.findDueForSync(olderThan, publicOlderThan);
 
       for (const account of due) {
         await this.syncJobRepo.enqueue({

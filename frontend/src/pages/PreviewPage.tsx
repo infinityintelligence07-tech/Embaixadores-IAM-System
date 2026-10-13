@@ -97,6 +97,7 @@ const arenaSnapshot: ArenaSnapshot = {
       transport: 'demo',
       lastSyncAt: '2026-10-02T18:10:00.000Z',
       syncMessage: null,
+      verificationCode: null,
     },
     {
       id: 'tt',
@@ -106,6 +107,7 @@ const arenaSnapshot: ArenaSnapshot = {
       transport: 'demo',
       lastSyncAt: '2026-10-02T18:12:00.000Z',
       syncMessage: null,
+      verificationCode: null,
     },
   ],
   contents: [

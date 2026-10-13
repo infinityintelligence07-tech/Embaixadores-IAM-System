@@ -21,6 +21,12 @@ export function readInstagramViews(payload: unknown): number | null {
 export const SYNC_INTERVAL_MINUTES = 10;
 export const SYNC_INTERVAL_MS = SYNC_INTERVAL_MINUTES * 60 * 1000;
 
+/**
+ * Contas lidas pelo @ são pagas por consulta, então a coleta é diária.
+ * 23 h mantém a última coleta dentro da tolerância de 24 h do ranking.
+ */
+export const PUBLIC_SYNC_INTERVAL_MS = 23 * 60 * 60 * 1000;
+
 export function isSyncDue(
   lastSuccessfulSyncAt: Date | null,
   now: Date,

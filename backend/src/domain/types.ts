@@ -50,6 +50,7 @@ export enum ConnectionStatus {
   IncompatibleAccount = 'incompatible_account',
   IntegrationUnavailable = 'integration_unavailable',
   Disconnected = 'disconnected',
+  PendingVerification = 'pending_verification',
 }
 
 export enum SyncJobStatus {
@@ -79,6 +80,8 @@ export enum MetricAvailability {
 
 export enum SocialTransport {
   OfficialApi = 'official_api',
+  /** Dados públicos lidos pelo @, sem login na rede. Exige confirmação de posse pela bio. */
+  PublicApi = 'public_api',
   Mcp = 'mcp',
   Demo = 'demo',
 }

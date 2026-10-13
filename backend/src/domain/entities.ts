@@ -59,6 +59,8 @@ export interface SocialAccount {
   lastSuccessfulSyncAt: Date | null;
   syncCoverageRatio: number | null;
   syncMessage: string | null;
+  verificationCode: string | null;
+  verifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   disconnectedAt: Date | null;

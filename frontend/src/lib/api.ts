@@ -21,7 +21,8 @@ export type ConnectionStatus =
   | 'insufficient_permission'
   | 'incompatible_account'
   | 'integration_unavailable'
-  | 'disconnected';
+  | 'disconnected'
+  | 'pending_verification';
 export type RankingView = 'top3' | 'top10' | 'all';
 export type RankingCategory = 'total_views' | 'best_video';
 
@@ -85,10 +86,17 @@ export interface SocialAccount {
   platform: SocialPlatform;
   username: string | null;
   status: ConnectionStatus;
-  transport: 'official_api' | 'mcp' | 'demo';
+  transport: 'official_api' | 'public_api' | 'mcp' | 'demo';
   lastSyncAt: string | null;
   syncMessage: string | null;
+  /** Código para a bio, presente só enquanto a conta aguarda confirmação. */
+  verificationCode: string | null;
 }
+
+/** "oauth" abre o login da rede; "handle" pede o @ e confirma a posse pela bio. */
+export type ConnectStart =
+  | { mode: 'oauth'; url: string }
+  | { mode: 'handle'; suggestedHandle: string | null };
 
 export interface ContentItem {
   id: string;
@@ -269,9 +277,18 @@ export const api = {
   socialAccounts: () => fetchJson<SocialAccount[]>('/api/social/accounts'),
 
   startOAuth: (platform: SocialPlatform) =>
-    fetchJson<{ url: string }>(`/api/social/oauth/${platform}/start`, {
+    fetchJson<ConnectStart>(`/api/social/oauth/${platform}/start`, {
       method: 'POST',
     }),
+
+  claimTikTokHandle: (handle: string) =>
+    fetchJson<SocialAccount>('/api/social/tiktok/handle', {
+      method: 'POST',
+      body: JSON.stringify({ handle }),
+    }),
+
+  verifyTikTokHandle: () =>
+    fetchJson<SocialAccount>('/api/social/tiktok/verify', { method: 'POST' }),
 
   deleteSocialAccount: (id: string) =>
     fetchJson<void>(`/api/social/accounts/${id}`, { method: 'DELETE' }),
