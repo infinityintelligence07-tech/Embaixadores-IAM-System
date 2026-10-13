@@ -35,6 +35,8 @@ export interface SocialCredentials {
   expiresAt?: Date;
   refreshExpiresAt?: Date;
   scopes: string[];
+  /** Identificador devolvido na troca do código, quando a leitura de /me ainda não respondeu. */
+  platformUserId?: string;
 }
 
 export interface ContentMetricsResult {

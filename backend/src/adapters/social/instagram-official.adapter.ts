@@ -79,7 +79,7 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
   private readonly baseUrl = 'https://graph.instagram.com/v22.0';
   
   async getAuthorizedProfile(creds: SocialCredentials): Promise<AuthorizedProfile> {
-    const profile = await this.fetchMe(creds.accessToken);
+    const profile = await this.fetchMe(creds.accessToken, creds.platformUserId);
 
     return {
       platformUserId: profile.id,
@@ -271,77 +271,111 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     }
   }
   
-  private async fetchMe(accessToken: string): Promise<{
-    id: string;
-    username: string | null;
-    name: string | null;
-    avatarUrl: string | null;
-  }> {
-    const primary = await this.requestMe(accessToken, 'user_id,username', true);
-    if (!primary) {
-      throw new Error('Failed to get Instagram profile');
-    }
-
-    const extra = await this.requestMe(accessToken, 'name,profile_picture_url', false);
-    return {
-      id: primary.id,
-      username: primary.username,
-      name: extra?.name ?? null,
-      avatarUrl: extra?.avatarUrl ?? null,
-    };
-  }
-
-  private async requestMe(
+  private async fetchMe(
     accessToken: string,
-    fields: string,
-    required: boolean,
+    knownUserId?: string,
   ): Promise<{
     id: string;
     username: string | null;
     name: string | null;
     avatarUrl: string | null;
-  } | null> {
-    const needsId = fields.includes('user_id');
+  }> {
+    // `user_id` na URL versionada devolve "unsupported request - method type: get"
+    // para conta comum, mesmo depois que a Meta aceita a permissão. `id` é o campo
+    // que a leitura do perfil aceita. O identificador da troca do código entra por último.
+    const attempts = [
+      { path: 'v22.0/me', fields: 'id,username,account_type' },
+      { path: 'v21.0/me', fields: 'id,username,account_type' },
+      { path: 'me', fields: 'id,username,account_type' },
+      { path: 'v22.0/me', fields: 'user_id,username' },
+      ...(knownUserId
+        ? [
+            {
+              path: `v22.0/${knownUserId}`,
+              fields: 'id,username,name,account_type,profile_picture_url',
+            },
+            { path: knownUserId, fields: 'id,username,account_type' },
+          ]
+        : []),
+    ];
+
     let lastDetail = 'sem resposta';
+    let sawUnsupportedGet = false;
 
-    for (const version of ['v25.0', 'v22.0']) {
-      const url = new URL(`https://graph.instagram.com/${version}/me`);
-      url.searchParams.set('fields', fields);
-      url.searchParams.set('access_token', accessToken);
-
-      const response = await fetch(url);
-      const data = await response.json().catch(() => null);
-      if (response.ok && data && !data.error) {
-        const id = String(data.user_id || data.id || '');
-        if (needsId && !id) {
-          lastDetail = 'perfil sem identificador';
-          continue;
+    for (const attempt of attempts) {
+      const result = await this.requestProfile(accessToken, attempt.path, attempt.fields);
+      if (result.profile) {
+        if (result.profile.accountType === 'PERSONAL') {
+          throw new Error('instagram_not_professional');
         }
+        const extra = result.profile.name
+          ? null
+          : await this.requestProfile(accessToken, attempt.path, 'name,profile_picture_url');
         return {
+          id: result.profile.id,
+          username: result.profile.username,
+          name: result.profile.name ?? extra?.profile?.name ?? null,
+          avatarUrl: result.profile.avatarUrl ?? extra?.profile?.avatarUrl ?? null,
+        };
+      }
+      lastDetail = result.detail;
+      if (/unsupported request - method type: get/i.test(result.detail)) {
+        sawUnsupportedGet = true;
+      }
+      if (/professional|business account|creator account|not eligible|personal account/i.test(result.detail)) {
+        throw new Error('instagram_not_professional');
+      }
+    }
+
+    if (sawUnsupportedGet) {
+      throw new Error('instagram_review_required');
+    }
+    this.logger.error(`Instagram profile failed: ${lastDetail.slice(0, 180)}`);
+    throw new Error('Failed to get Instagram profile');
+  }
+
+  private async requestProfile(
+    accessToken: string,
+    path: string,
+    fields: string,
+  ): Promise<{
+    profile: {
+      id: string;
+      username: string | null;
+      name: string | null;
+      avatarUrl: string | null;
+      accountType: string | null;
+    } | null;
+    detail: string;
+  }> {
+    const url = new URL(`https://graph.instagram.com/${path}`);
+    url.searchParams.set('fields', fields);
+    url.searchParams.set('access_token', accessToken);
+
+    const response = await fetch(url);
+    const data = await response.json().catch(() => null);
+    if (response.ok && data && !data.error) {
+      const id = String(data.user_id || data.id || '');
+      if (!id) return { profile: null, detail: 'perfil sem identificador' };
+      return {
+        profile: {
           id,
           username: data.username ? String(data.username) : null,
           name: data.name ? String(data.name) : null,
           avatarUrl: data.profile_picture_url ? String(data.profile_picture_url) : null,
-        };
-      }
-
-      const graphMessage = typeof data?.error?.message === 'string' ? data.error.message : '';
-      const graphCode = data?.error?.code ?? '';
-      lastDetail = graphMessage || `HTTP ${response.status}`;
-      const line = `Instagram profile ${version} fields=${fields} status=${response.status} code=${graphCode} ${graphMessage.slice(0, 180)}`;
-      if (required) this.logger.error(line);
-      else this.logger.warn(line);
+          accountType: data.account_type ? String(data.account_type) : null,
+        },
+        detail: '',
+      };
     }
 
-    if (needsId && /unsupported request - method type: get/i.test(lastDetail)) {
-      throw new Error('instagram_review_required');
-    }
-
-    if (needsId && /professional|business account|creator account|not eligible|personal account/i.test(lastDetail)) {
-      throw new Error('instagram_not_professional');
-    }
-
-    return null;
+    const graphMessage = typeof data?.error?.message === 'string' ? data.error.message : '';
+    const graphCode = data?.error?.code ?? '';
+    const detail = graphMessage || `HTTP ${response.status}`;
+    this.logger.warn(
+      `Instagram profile ${path} fields=${fields} status=${response.status} code=${graphCode} ${graphMessage.slice(0, 180)}`,
+    );
+    return { profile: null, detail };
   }
 
   async refreshCredentials(creds: SocialCredentials): Promise<SocialCredentials> {

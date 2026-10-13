@@ -176,6 +176,7 @@ export class OAuthCallbackUseCase {
       const data = await response.json().catch(() => null);
       const tokenPayload = data?.data?.[0] ?? data;
       const shortToken = tokenPayload?.access_token as string | undefined;
+      const platformUserId = tokenPayload?.user_id ? String(tokenPayload.user_id) : undefined;
 
       if (!response.ok || !shortToken) {
         console.error('Instagram token exchange failed', {
@@ -185,33 +186,24 @@ export class OAuthCallbackUseCase {
         throw new BadRequestException('Não foi possível concluir a entrada no Instagram.');
       }
 
-      const longLivedUrl = new URL('https://graph.instagram.com/access_token');
-      longLivedUrl.searchParams.set('grant_type', 'ig_exchange_token');
-      longLivedUrl.searchParams.set('client_secret', this.config.social.meta.appSecret!);
-      longLivedUrl.searchParams.set('access_token', shortToken);
-      const longLivedResponse = await fetch(longLivedUrl);
+      // A Meta passou a recusar GET nessa troca. POST é o caminho que vale para conta comum.
+      const longLived = await this.exchangeInstagramLongLived(shortToken);
 
       // Token curto vale 1 hora. Registramos a validade para o refresh tentar renovar a tempo.
-      const shortLived = {
-        accessToken: shortToken,
-        expiresAt: new Date(Date.now() + 3600 * 1000),
-        scopes: [],
-      };
-
-      if (!longLivedResponse.ok) {
-        console.error('Instagram long-lived exchange failed', { status: longLivedResponse.status });
-        return shortLived;
-      }
-
-      const longLivedData = await longLivedResponse.json().catch(() => null);
-      if (!longLivedData?.access_token) {
-        return shortLived;
+      if (!longLived) {
+        return {
+          accessToken: shortToken,
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          scopes: [],
+          platformUserId,
+        };
       }
 
       return {
-        accessToken: longLivedData.access_token,
-        expiresAt: new Date(Date.now() + (longLivedData.expires_in || 5184000) * 1000),
+        accessToken: longLived.accessToken,
+        expiresAt: new Date(Date.now() + longLived.expiresIn * 1000),
         scopes: [],
+        platformUserId,
       };
     }
     
@@ -257,5 +249,45 @@ export class OAuthCallbackUseCase {
     }
 
     throw new BadRequestException('Essa rede não está disponível.');
+  }
+
+  private async exchangeInstagramLongLived(
+    shortToken: string,
+  ): Promise<{ accessToken: string; expiresIn: number } | null> {
+    const params = new URLSearchParams({
+      grant_type: 'ig_exchange_token',
+      client_secret: this.config.social.meta.appSecret!,
+      access_token: shortToken,
+    });
+
+    const postResponse = await fetch('https://graph.instagram.com/access_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params,
+    });
+    const postData = await postResponse.json().catch(() => null);
+    if (postResponse.ok && postData?.access_token && !postData.error) {
+      return {
+        accessToken: postData.access_token,
+        expiresIn: Number(postData.expires_in) || 5_184_000,
+      };
+    }
+
+    const getUrl = new URL('https://graph.instagram.com/access_token');
+    params.forEach((value, key) => getUrl.searchParams.set(key, value));
+    const getResponse = await fetch(getUrl);
+    const getData = await getResponse.json().catch(() => null);
+    if (getResponse.ok && getData?.access_token && !getData.error) {
+      return {
+        accessToken: getData.access_token,
+        expiresIn: Number(getData.expires_in) || 5_184_000,
+      };
+    }
+
+    console.error('Instagram long-lived exchange failed', {
+      postStatus: postResponse.status,
+      getStatus: getResponse.status,
+    });
+    return null;
   }
 }
