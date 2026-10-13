@@ -9,6 +9,8 @@ import { getPool } from '../../infrastructure/db/pool';
 import { loadConfig } from '../../infrastructure/config/env';
 
 const NETWORKS = new Set(['instagram', 'tiktok']);
+// Domínio público das páginas; areaembaixadores.* só serve a API e redireciona as telas para cá.
+const LOGIN_REDIRECT = 'https://embaixadores.iamcontrol.com.br/auth/callback';
 
 const COLUMNS = `id, nome_completo, email, whatsapp, nome_conta, redes_sociais,
   instagram_handle, tiktok_handle, status, created_at, updated_at, reviewed_at,
@@ -199,7 +201,7 @@ export class ApplicationsService {
 
     const invited = await auth.auth.admin.inviteUserByEmail(email, {
       data: metadata,
-      redirectTo: `${loadConfig().app.baseUrl}/auth/callback`,
+      redirectTo: LOGIN_REDIRECT,
     });
 
     let userId = invited.data.user?.id ?? null;
