@@ -41,11 +41,6 @@ export default function App() {
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/conexoes" element={<ConnectionsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute requireApproved />}>
-        <Route element={<AppShell />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/conteudos" element={<ContentsPage />} />
           <Route path="/rankings" element={<RankingsPage />} />

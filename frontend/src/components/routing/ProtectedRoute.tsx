@@ -9,7 +9,14 @@ interface ProtectedRouteProps {
   requireAdmin?: boolean;
 }
 
-const PENDING_ALLOWED_PATHS = ['/onboarding', '/conexoes', '/perfil'];
+const PENDING_ALLOWED_PATHS = [
+  '/onboarding',
+  '/conexoes',
+  '/perfil',
+  '/dashboard',
+  '/conteudos',
+  '/rankings',
+];
 
 export function ProtectedRoute({
   requireApproved = false,

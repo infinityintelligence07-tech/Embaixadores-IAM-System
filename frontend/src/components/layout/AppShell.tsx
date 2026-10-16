@@ -1,4 +1,4 @@
-import { ClipboardList, Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
+import { Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,22 +13,16 @@ const approvedNavItems = [
   { to: '/perfil', label: 'Perfil', icon: User },
 ];
 
-// Quem ainda aguarda aprovação só enxerga o que consegue usar.
-const pendingNavItems = [
-  { to: '/onboarding', label: 'Cadastro', icon: ClipboardList },
-  { to: '/conexoes', label: 'Conexões', icon: Link2 },
-  { to: '/perfil', label: 'Perfil', icon: User },
-];
 
 export function AppShell() {
   const { profile, isAdmin: hasAdminRole } = useAuth();
   const location = useLocation();
   const apple = !isRankingPath(location.pathname);
   const approved = profile?.status === 'approved';
-  // As telas de administração exigem cadastro aprovado, então o link só aparece nesse caso
+  // Administração só para quem tem o papel. O membro fica na área da competição.
   const isAdmin = hasAdminRole && approved;
-  const navItems = approved ? approvedNavItems : pendingNavItems;
-  const homePath = approved ? '/dashboard' : '/onboarding';
+  const navItems = approvedNavItems;
+  const homePath = '/dashboard';
 
   useSurfaceTheme(apple ? 'apple' : 'arena');
 
