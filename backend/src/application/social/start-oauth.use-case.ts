@@ -44,7 +44,9 @@ export class StartOAuthUseCase {
       const url = new URL('https://www.instagram.com/oauth/authorize');
       url.searchParams.set('client_id', this.config.social.meta.appId);
       url.searchParams.set('redirect_uri', redirectUri);
-      url.searchParams.set('scope', 'instagram_business_basic,instagram_business_manage_insights');
+      // Só a permissão de perfil e mídia. Pedir insights ainda em teste faz a Meta
+      // recusar a leitura do perfil de qualquer conta que não seja testadora.
+      url.searchParams.set('scope', 'instagram_business_basic');
       url.searchParams.set('response_type', 'code');
       // Sem force_reauth: o login forçado do Instagram costuma terminar no feed
       // ("Salvar informações de login?") e nunca volta ao redirect_uri.

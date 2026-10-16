@@ -63,7 +63,7 @@ async function mapWithConcurrency<T, R>(
  * 
  * OAuth flow:
  * 1. Redirect to https://www.instagram.com/oauth/authorize with scopes:
- *    instagram_business_basic,instagram_business_manage_insights
+ *    instagram_business_basic
  * 2. Exchange code at https://api.instagram.com/oauth/access_token
  * 3. Get long-lived token at https://graph.instagram.com/access_token
  * 
