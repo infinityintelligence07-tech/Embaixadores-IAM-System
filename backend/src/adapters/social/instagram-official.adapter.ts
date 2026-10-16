@@ -101,9 +101,9 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
       cursor && cursor.startsWith('http')
         ? this.extractAfterParam(cursor)
         : cursor ?? null;
-    const url = this.buildMediaUrl(creds.accessToken, after);
+    const url = this.buildMediaUrl(after);
 
-    const response = await fetch(url);
+    const response = await this.fetchGraph(url, creds.accessToken);
     const data = await response.json().catch(() => null);
 
     if (!response.ok || data?.error) {
@@ -176,13 +176,34 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     }
   }
 
-  private buildMediaUrl(accessToken: string, after: string | null): string {
+  private buildMediaUrl(after: string | null): string {
     const url = new URL(`${this.baseUrl}/me/media`);
     url.searchParams.set('fields', MEDIA_FIELDS);
     url.searchParams.set('limit', String(MEDIA_PAGE_SIZE));
     if (after) url.searchParams.set('after', after);
-    url.searchParams.set('access_token', accessToken);
     return url.toString();
+  }
+
+  /**
+   * Conta comum recusa o token na query ("unsupported request - method type: get").
+   * O cabeçalho Bearer é o caminho que a Meta aceita fora do modo de teste.
+   * Se o Bearer falhar por outro motivo, a query antiga continua como reserva.
+   */
+  private async fetchGraph(url: URL | string, accessToken: string): Promise<Response> {
+    const bearerUrl = new URL(typeof url === 'string' ? url : url.toString());
+    bearerUrl.searchParams.delete('access_token');
+    const bearerResponse = await fetch(bearerUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (bearerResponse.ok) return bearerResponse;
+
+    const preview = await bearerResponse.clone().json().catch(() => null);
+    const message = typeof preview?.error?.message === 'string' ? preview.error.message : '';
+    if (!/unsupported request - method type: get/i.test(message)) return bearerResponse;
+
+    const queryUrl = new URL(bearerUrl.toString());
+    queryUrl.searchParams.set('access_token', accessToken);
+    return fetch(queryUrl);
   }
 
   private parseGraphError(data: any, status: number): GraphErrorInfo {
@@ -226,8 +247,8 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
   
   async getAccountMetrics(creds: SocialCredentials): Promise<AccountMetricsResult> {
     try {
-      const insightsUrl = `${this.baseUrl}/me/insights?metric=views&period=days_28&metric_type=total_value&access_token=${encodeURIComponent(creds.accessToken)}`;
-      const insightsResponse = await fetch(insightsUrl);
+      const insightsUrl = `${this.baseUrl}/me/insights?metric=views&period=days_28&metric_type=total_value`;
+      const insightsResponse = await this.fetchGraph(insightsUrl, creds.accessToken);
       
       if (insightsResponse.ok) {
         const insightsData = await insightsResponse.json();
@@ -284,9 +305,9 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
     // para conta comum, mesmo depois que a Meta aceita a permissão. `id` é o campo
     // que a leitura do perfil aceita. O identificador da troca do código entra por último.
     const attempts = [
-      { path: 'v22.0/me', fields: 'id,username,account_type' },
-      { path: 'v21.0/me', fields: 'id,username,account_type' },
-      { path: 'me', fields: 'id,username,account_type' },
+      { path: 'v21.0/me', fields: 'user_id,username' },
+      { path: 'v22.0/me', fields: 'id,username' },
+      { path: 'me', fields: 'id,username' },
       { path: 'v22.0/me', fields: 'user_id,username' },
       ...(knownUserId
         ? [
@@ -350,9 +371,8 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
   }> {
     const url = new URL(`https://graph.instagram.com/${path}`);
     url.searchParams.set('fields', fields);
-    url.searchParams.set('access_token', accessToken);
 
-    const response = await fetch(url);
+    const response = await this.fetchGraph(url, accessToken);
     const data = await response.json().catch(() => null);
     if (response.ok && data && !data.error) {
       const id = String(data.user_id || data.id || '');
@@ -381,9 +401,8 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
   async refreshCredentials(creds: SocialCredentials): Promise<SocialCredentials> {
     const url = new URL('https://graph.instagram.com/refresh_access_token');
     url.searchParams.set('grant_type', 'ig_refresh_token');
-    url.searchParams.set('access_token', creds.accessToken);
 
-    const response = await fetch(url);
+    const response = await this.fetchGraph(url, creds.accessToken);
     const data = await response.json().catch(() => null);
     if (!response.ok || data?.error || !data?.access_token) {
       const info = this.parseGraphError(data, response.status);
@@ -406,9 +425,8 @@ export class InstagramOfficialAdapter implements SocialMetricsProvider {
   private async fetchMediaViews(accessToken: string, mediaId: string): Promise<number | null> {
     const url = new URL(`${this.baseUrl}/${mediaId}/insights`);
     url.searchParams.set('metric', 'views');
-    url.searchParams.set('access_token', accessToken);
 
-    const response = await fetch(url);
+    const response = await this.fetchGraph(url, accessToken);
     const data = await response.json().catch(() => null);
 
     if (!response.ok || data?.error) {

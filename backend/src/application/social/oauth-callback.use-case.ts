@@ -61,8 +61,11 @@ export class OAuthCallbackUseCase {
       SocialTransport.OfficialApi,
     );
     
+    // O token longo às vezes não lê o perfil de uma conta comum. Fica o token que responder.
+    const readableTokens = await this.preferReadableInstagramToken(platform, provider, tokens);
+
     // Get profile
-    const authorizedProfile = await provider.getAuthorizedProfile(tokens);
+    const authorizedProfile = await provider.getAuthorizedProfile(readableTokens);
     
     // A unicidade (platform, platform_user_id) vale também para contas desconectadas
     const existingByPlatformUser = await this.socialAccountRepo.findAnyByPlatformUserId(
@@ -123,7 +126,7 @@ export class OAuthCallbackUseCase {
     }
     
     // Encrypt and store credentials
-    const accessTokenCiphertext = await this.encryption.encrypt(tokens.accessToken);
+    const accessTokenCiphertext = await this.encryption.encrypt(readableTokens.accessToken);
     const refreshTokenCiphertext = tokens.refreshToken
       ? await this.encryption.encrypt(tokens.refreshToken)
       : null;
@@ -132,7 +135,7 @@ export class OAuthCallbackUseCase {
       socialAccountId: accountId as any,
       accessTokenCiphertext,
       refreshTokenCiphertext,
-      tokenExpiresAt: tokens.expiresAt || null,
+      tokenExpiresAt: readableTokens.expiresAt || null,
       refreshExpiresAt: tokens.refreshExpiresAt || null,
       scopes: tokens.scopes,
       encryptionKid: 'default',
@@ -194,12 +197,15 @@ export class OAuthCallbackUseCase {
       const longLived = await this.exchangeInstagramLongLived(shortToken);
 
       // Token curto vale 1 hora. Registramos a validade para o refresh tentar renovar a tempo.
+      const shortLivedExpiresAt = new Date(Date.now() + 3600 * 1000);
       if (!longLived) {
         return {
           accessToken: shortToken,
-          expiresAt: new Date(Date.now() + 3600 * 1000),
+          expiresAt: shortLivedExpiresAt,
           scopes: [],
           platformUserId,
+          shortLivedAccessToken: shortToken,
+          shortLivedExpiresAt,
         };
       }
 
@@ -208,6 +214,8 @@ export class OAuthCallbackUseCase {
         expiresAt: new Date(Date.now() + longLived.expiresIn * 1000),
         scopes: [],
         platformUserId,
+        shortLivedAccessToken: shortToken,
+        shortLivedExpiresAt,
       };
     }
     
@@ -253,6 +261,50 @@ export class OAuthCallbackUseCase {
     }
 
     throw new BadRequestException('Essa rede não está disponível.');
+  }
+
+  private async preferReadableInstagramToken(
+    platform: SocialPlatform,
+    provider: SocialMetricsProvider,
+    tokens: {
+      accessToken: string;
+      expiresAt?: Date;
+      platformUserId?: string;
+      shortLivedAccessToken?: string;
+      shortLivedExpiresAt?: Date;
+      scopes: string[];
+      refreshToken?: string;
+      refreshExpiresAt?: Date;
+    },
+  ) {
+    if (platform !== SocialPlatform.Instagram || !tokens.shortLivedAccessToken) return tokens;
+    if (tokens.accessToken === tokens.shortLivedAccessToken) return tokens;
+    if (await this.canReadInstagramProfile(provider, tokens)) return tokens;
+
+    const shortLived = {
+      ...tokens,
+      accessToken: tokens.shortLivedAccessToken,
+      expiresAt: tokens.shortLivedExpiresAt,
+    };
+    if (await this.canReadInstagramProfile(provider, shortLived)) return shortLived;
+    return tokens;
+  }
+
+  private async canReadInstagramProfile(
+    provider: SocialMetricsProvider,
+    creds: {
+      accessToken: string;
+      scopes: string[];
+      platformUserId?: string;
+      expiresAt?: Date;
+    },
+  ): Promise<boolean> {
+    try {
+      await provider.getAuthorizedProfile(creds);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async exchangeInstagramLongLived(
