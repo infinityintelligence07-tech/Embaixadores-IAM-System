@@ -59,6 +59,7 @@ export class TikTokPublicAdapter implements SocialMetricsProvider, PublicProfile
       profileUrl: `https://www.tiktok.com/@${username}`,
       bio: String(user.signature ?? ''),
       isPrivate: Boolean(user.privateAccount || user.secret),
+      aliasUserIds: [],
     };
   }
 

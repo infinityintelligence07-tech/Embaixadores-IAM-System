@@ -49,6 +49,8 @@ export interface PublicSocialProfile {
   profileUrl: string;
   bio: string;
   isPrivate: boolean;
+  /** Outros ids da mesma conta em outras APIs da rede (no Instagram, o id da API oficial). */
+  aliasUserIds: string[];
 }
 
 /** The handle does not belong to an active public account. */

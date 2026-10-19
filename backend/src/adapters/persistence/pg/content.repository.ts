@@ -100,6 +100,7 @@ export class PgContentRepository implements ContentRepository {
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (platform, platform_content_id) DO UPDATE SET
+        social_account_id = EXCLUDED.social_account_id,
         title = COALESCE($4, contents.title),
         thumbnail_url = COALESCE($5, contents.thumbnail_url),
         permalink = COALESCE($6, contents.permalink),

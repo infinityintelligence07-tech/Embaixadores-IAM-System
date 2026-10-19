@@ -5,6 +5,7 @@ import {
   OAuthStateRepository,
   SyncJobRepository,
   AuditRepository,
+  ContentRepository,
 } from '../../ports/repositories.port';
 import { SocialMetricsProvider } from '../../ports/social-metrics.port';
 import { TokenEncryptionPort } from '../../ports/tokens.port';
@@ -34,6 +35,8 @@ export class OAuthCallbackUseCase {
     private readonly syncJobRepo: SyncJobRepository,
     @Inject(INJECTION_TOKENS.AUDIT_REPOSITORY)
     private readonly auditRepo: AuditRepository,
+    @Inject(INJECTION_TOKENS.CONTENT_REPOSITORY)
+    private readonly contentRepo: ContentRepository,
   ) {}
   
   async execute(
@@ -89,6 +92,17 @@ export class OAuthCallbackUseCase {
     
     if (existingByProfile) {
       // Update existing (também cobre reconexão e troca de conta na mesma rede)
+      const switchedAccount =
+        existingByProfile.platformUserId !== authorizedProfile.platformUserId ||
+        existingByProfile.transport !== SocialTransport.OfficialApi;
+      if (switchedAccount) {
+        // Os vídeos da conta anterior não podem somar com os da nova enquanto a coleta não termina.
+        await this.syncJobRepo.cancelActiveForAccount(existingByProfile.id);
+        const previous = await this.contentRepo.findEligibleByAccount(existingByProfile.id);
+        for (const content of previous) {
+          await this.contentRepo.markRemoved(content.id);
+        }
+      }
       await this.socialAccountRepo.update(existingByProfile.id, {
         platformUserId: authorizedProfile.platformUserId,
         username: authorizedProfile.username,

@@ -40,6 +40,7 @@ describe('TikTokPublicAdapter', () => {
       profileUrl: 'https://www.tiktok.com/@vamosprosperar.br',
       bio: 'Cortes sobre decisão. IAM-7K3QX',
       isPrivate: false,
+      aliasUserIds: [],
     });
     const url = new URL(fetchMock.mock.calls[0][0]);
     expect(url.pathname).toBe('/v1/tiktok/profile');

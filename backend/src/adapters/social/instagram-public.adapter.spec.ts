@@ -49,6 +49,7 @@ describe('InstagramPublicAdapter', () => {
           biography: 'Head de MKT. IAM-7K3QX',
           is_private: false,
           profile_pic_url: 'https://cdn/pic.jpg',
+          fbid: '17841451174046688',
         },
       },
     });
@@ -63,6 +64,7 @@ describe('InstagramPublicAdapter', () => {
       profileUrl: 'https://www.instagram.com/mateuscarddoso/',
       bio: 'Head de MKT. IAM-7K3QX',
       isPrivate: false,
+      aliasUserIds: ['17841451174046688'],
     });
     expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('handle')).toBe('mateuscarddoso');
   });

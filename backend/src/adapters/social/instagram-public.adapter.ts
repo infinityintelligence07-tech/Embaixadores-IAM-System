@@ -62,6 +62,7 @@ export class InstagramPublicAdapter implements SocialMetricsProvider, PublicProf
       profileUrl: `https://www.instagram.com/${username}/`,
       bio: String(user.biography ?? ''),
       isPrivate: Boolean(user.is_private),
+      aliasUserIds: user.fbid ? [String(user.fbid)] : [],
     };
   }
 

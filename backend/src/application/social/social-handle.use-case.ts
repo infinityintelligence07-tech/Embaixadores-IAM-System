@@ -97,16 +97,16 @@ export class SocialHandleUseCase {
     }
 
     const now = this.clock.now();
-    const holder = await this.socialAccountRepo.findAnyByPlatformUserId(
-      platform,
-      profile.platformUserId,
-    );
-    if (holder && holder.profileId !== profileId) {
+    // A mesma conta pode estar gravada com o id da API oficial ou com o da leitura pelo @.
+    const accountIds = [profile.platformUserId, ...profile.aliasUserIds];
+    for (const accountId of accountIds) {
+      const holder = await this.socialAccountRepo.findAnyByPlatformUserId(platform, accountId);
+      if (!holder || holder.profileId === profileId) continue;
       const holderConfirmed =
         holder.disconnectedAt === null && holder.status !== ConnectionStatus.PendingVerification;
       if (holderConfirmed) {
         throw new ConflictException(
-          'Esse @ já está confirmado por outro embaixador. Se ele é seu, fale com a equipe.',
+          'Esse @ já está conectado a outro embaixador. Se ele é seu, fale com a equipe.',
         );
       }
       // Pedido sem confirmação não prende o @: quem provar pela bio fica com ele.
@@ -121,7 +121,7 @@ export class SocialHandleUseCase {
     }
 
     const mine = await this.socialAccountRepo.findAnyByProfileAndPlatform(profileId, platform);
-    const sameAccount = mine?.platformUserId === profile.platformUserId;
+    const sameAccount = mine ? accountIds.includes(mine.platformUserId) : false;
     const identity = {
       platformUserId: profile.platformUserId,
       username: profile.username,
@@ -132,7 +132,7 @@ export class SocialHandleUseCase {
 
     if (
       mine &&
-      sameAccount &&
+      mine.platformUserId === profile.platformUserId &&
       mine.disconnectedAt === null &&
       mine.transport === SocialTransport.PublicApi &&
       mine.verifiedAt
@@ -141,7 +141,9 @@ export class SocialHandleUseCase {
     }
 
     const keepCode =
-      mine && sameAccount && mine.status === ConnectionStatus.PendingVerification
+      mine &&
+      mine.platformUserId === profile.platformUserId &&
+      mine.status === ConnectionStatus.PendingVerification
         ? mine.verificationCode
         : null;
     const code = keepCode ?? generateVerificationCode((max) => randomInt(max));
