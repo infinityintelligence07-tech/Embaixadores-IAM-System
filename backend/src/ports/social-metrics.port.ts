@@ -53,13 +53,14 @@ export interface PublicSocialProfile {
 
 /** The handle does not belong to an active public account. */
 export class SocialProfileNotFoundError extends Error {
-  constructor(message = 'Não encontramos esse @ no TikTok.') {
+  constructor(message = 'Não encontramos esse @.') {
     super(message);
     this.name = 'SocialProfileNotFoundError';
   }
 }
 
 export interface PublicProfileLookup {
+  readonly platform: 'instagram' | 'tiktok';
   readonly enabled: boolean;
   lookupProfile(handle: string): Promise<PublicSocialProfile>;
 }

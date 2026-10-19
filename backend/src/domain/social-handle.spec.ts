@@ -1,4 +1,5 @@
-import { bioHasCode, generateVerificationCode, parseTikTokHandle } from './tiktok-verification';
+import { bioHasCode, generateVerificationCode, parseHandle } from './social-handle';
+import { SocialPlatform } from './types';
 
 describe('generateVerificationCode', () => {
   it('builds an IAM code without ambiguous characters', () => {
@@ -29,18 +30,31 @@ describe('bioHasCode', () => {
   });
 });
 
-describe('parseTikTokHandle', () => {
+describe('parseHandle', () => {
   it.each([
     ['@vamosprosperar.br', 'vamosprosperar.br'],
     ['vamosprosperar.br', 'vamosprosperar.br'],
     ['https://www.tiktok.com/@iam.proposito?lang=pt', 'iam.proposito'],
     ['@www.tiktok.com/@voce.precisaouvir', 'voce.precisaouvir'],
     ['  @cortes_IAM  ', 'cortes_IAM'],
-  ])('reads %s', (raw, expected) => {
-    expect(parseTikTokHandle(raw)).toBe(expected);
+  ])('reads the TikTok handle %s', (raw, expected) => {
+    expect(parseHandle(SocialPlatform.TikTok, raw)).toBe(expected);
   });
 
-  it.each(['', '@', 'a', '@inválido!', 'https://www.tiktok.com/'])('rejects %s', (raw) => {
-    expect(parseTikTokHandle(raw)).toBeNull();
+  it.each([
+    ['@mateuscarddoso', 'mateuscarddoso'],
+    ['https://www.instagram.com/mateuscarddoso/', 'mateuscarddoso'],
+    ['instagram.com/mateuscarddoso?igsh=abc', 'mateuscarddoso'],
+    ['@a', 'a'],
+  ])('reads the Instagram handle %s', (raw, expected) => {
+    expect(parseHandle(SocialPlatform.Instagram, raw)).toBe(expected);
+  });
+
+  it.each(['', '@', 'a', '@inválido!', 'https://www.tiktok.com/'])('rejects the TikTok handle %s', (raw) => {
+    expect(parseHandle(SocialPlatform.TikTok, raw)).toBeNull();
+  });
+
+  it.each(['', '@inválido!', 'x'.repeat(31)])('rejects the Instagram handle %s', (raw) => {
+    expect(parseHandle(SocialPlatform.Instagram, raw)).toBeNull();
   });
 });

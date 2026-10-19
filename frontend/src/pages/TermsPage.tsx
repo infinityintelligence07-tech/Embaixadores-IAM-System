@@ -24,9 +24,9 @@ export function TermsPage() {
         </p>
         <h2 className="text-xl text-text">1. Objeto</h2>
         <p>
-          A plataforma permite o cadastro de embaixadores, conexão autorizada de contas Instagram e
-          TikTok via OAuth, sincronização de métricas de conteúdos (Reels/vídeos) e classificação em
-          rankings públicos com base em critérios transparentes de visualizações.
+          A plataforma permite o cadastro de embaixadores, a conexão de contas Instagram e TikTok
+          com confirmação do titular, a sincronização de métricas de conteúdos (Reels/vídeos) e a
+          classificação em rankings públicos com base em critérios transparentes de visualizações.
         </p>
         <h2 className="text-xl text-text">2. Cadastro e elegibilidade</h2>
         <p>
@@ -36,8 +36,11 @@ export function TermsPage() {
         </p>
         <h2 className="text-xl text-text">3. Contas sociais</h2>
         <p>
-          A vinculação de Instagram/TikTok exige autorização OAuth do titular. Digitar apenas o
-          @username não é suficiente. Cada conta social só pode ser associada a um embaixador. O
+          A vinculação de Instagram/TikTok exige a confirmação do titular: pela autorização na
+          própria rede ou por um código que o titular coloca na bio do perfil. Digitar apenas o
+          @username não é suficiente. Com a confirmação pela bio, as views são lidas do perfil
+          público uma vez por dia, e só contam os conteúdos publicados no próprio perfil. O perfil
+          precisa estar público. Cada conta social só pode ser associada a um embaixador. O
           usuário pode desconectar a qualquer momento.
         </p>
         <h2 className="text-xl text-text">4. Rankings e métricas</h2>
@@ -54,7 +57,8 @@ export function TermsPage() {
         </p>
         <h2 className="text-xl text-text">6. Limitação</h2>
         <p>
-          A disponibilidade depende de APIs de terceiros (Meta, TikTok, Supabase). Interrupções ou
+          A disponibilidade depende de serviços de terceiros (Meta, TikTok, ScrapeCreators,
+          Supabase). Interrupções ou
           mudanças nessas APIs podem afetar a coleta de dados.
         </p>
         <h2 className="text-xl text-text">7. Contato</h2>

@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompetitionGate } from '@/components/arena/CompetitionGate';
-import { TikTokHandleDialog } from '@/components/social/TikTokHandleDialog';
+import { SocialHandleDialog } from '@/components/social/SocialHandleDialog';
 import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Alert } from '@/components/ui/Alert';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -89,8 +89,8 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [connecting, setConnecting] = useState<SocialPlatform | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
-  const [tiktokOpen, setTiktokOpen] = useState(false);
-  const [tiktokSuggestion, setTiktokSuggestion] = useState<string | null>(null);
+  const [handlePlatform, setHandlePlatform] = useState<SocialPlatform | null>(null);
+  const [handleSuggestion, setHandleSuggestion] = useState<string | null>(null);
   const [abandoned] = useState(() => (locked ? null : readAbandonedOAuth()));
   const [ladderOpen, setLadderOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -331,8 +331,8 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     try {
       const start = await api.startOAuth(next);
       if (start.mode === 'handle') {
-        setTiktokSuggestion(start.suggestedHandle);
-        setTiktokOpen(true);
+        setHandleSuggestion(start.suggestedHandle);
+        setHandlePlatform(next);
         setConnecting(null);
         return;
       }
@@ -402,11 +402,11 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         />
       )}
       {locked ? null : (
-        <TikTokHandleDialog
-          open={tiktokOpen}
-          account={accounts.find((item) => item.platform === 'tiktok') ?? null}
-          suggestedHandle={tiktokSuggestion}
-          onClose={() => setTiktokOpen(false)}
+        <SocialHandleDialog
+          platform={handlePlatform}
+          account={accounts.find((item) => item.platform === handlePlatform) ?? null}
+          suggestedHandle={handleSuggestion}
+          onClose={() => setHandlePlatform(null)}
           onChanged={(next) =>
             setAccounts((current) => [
               ...current.filter((item) => item.platform !== next.platform),

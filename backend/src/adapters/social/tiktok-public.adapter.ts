@@ -11,11 +11,8 @@ import {
   SocialCredentials,
   SocialMetricsProvider,
   SocialProfileNotFoundError,
-  SocialRateLimitError,
 } from '../../ports/social-metrics.port';
-
-const BASE_URL = 'https://api.scrapecreators.com';
-const REQUEST_TIMEOUT_MS = 60_000;
+import { ScrapeCreatorsClient } from './scrape-creators.client';
 
 interface ScrapeCreatorsVideo {
   aweme_id?: string;
@@ -36,16 +33,19 @@ export class TikTokPublicAdapter implements SocialMetricsProvider, PublicProfile
   readonly transport = 'public_api' as const;
 
   private readonly logger = new Logger(TikTokPublicAdapter.name);
+  private readonly client: ScrapeCreatorsClient;
 
-  constructor(private readonly apiKey: string | null) {}
+  constructor(apiKey: string | null) {
+    this.client = new ScrapeCreatorsClient(apiKey);
+  }
 
   get enabled(): boolean {
-    return Boolean(this.apiKey);
+    return this.client.enabled;
   }
 
   async lookupProfile(handle: string): Promise<PublicSocialProfile> {
     const clean = handle.replace(/^@+/, '').trim();
-    const data = await this.request('/v1/tiktok/profile', { handle: clean });
+    const data = await this.client.get('/v1/tiktok/profile', { handle: clean });
     const user = data?.user;
     if (data?.account_deactivated || !user?.id || !user?.uniqueId) {
       throw new SocialProfileNotFoundError();
@@ -63,7 +63,7 @@ export class TikTokPublicAdapter implements SocialMetricsProvider, PublicProfile
   }
 
   async getAuthorizedProfile(creds: SocialCredentials): Promise<AuthorizedProfile> {
-    const profile = await this.lookupProfile(this.handleOf(creds));
+    const profile = await this.lookupProfile(handleOf(creds));
     return {
       platformUserId: profile.platformUserId,
       username: profile.username,
@@ -77,11 +77,11 @@ export class TikTokPublicAdapter implements SocialMetricsProvider, PublicProfile
     creds: SocialCredentials,
     cursor?: string | null,
   ): Promise<SocialContentPage> {
-    const params: Record<string, string> = { handle: this.handleOf(creds), trim: 'true' };
+    const params: Record<string, string> = { handle: handleOf(creds), trim: 'true' };
     if (creds.platformUserId) params.user_id = creds.platformUserId;
     if (cursor) params.max_cursor = cursor;
 
-    const data = await this.request('/v3/tiktok/profile/videos', params);
+    const data = await this.client.get('/v3/tiktok/profile/videos', params);
     const videos: ScrapeCreatorsVideo[] = Array.isArray(data?.aweme_list) ? data.aweme_list : [];
 
     const items: SocialContentItem[] = videos
@@ -131,38 +131,10 @@ export class TikTokPublicAdapter implements SocialMetricsProvider, PublicProfile
   async disconnect(_creds: SocialCredentials): Promise<void> {
     // Não há autorização a revogar: a leitura é pública.
   }
+}
 
-  private handleOf(creds: SocialCredentials): string {
-    const handle = creds.handle?.replace(/^@+/, '').trim();
-    if (!handle) throw new Error('TikTok handle missing for public transport');
-    return handle;
-  }
-
-  private async request(path: string, params: Record<string, string>): Promise<any> {
-    if (!this.apiKey) throw new Error('TikTok public data not configured');
-
-    const url = new URL(path, BASE_URL);
-    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-
-    const response = await fetch(url, {
-      headers: { 'x-api-key': this.apiKey },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    const data = await response.json().catch(() => null);
-
-    if (response.status === 429) {
-      throw new SocialRateLimitError('A leitura do TikTok está limitada. A coleta continua em breve.', 429);
-    }
-    if (response.status === 404) {
-      throw new SocialProfileNotFoundError();
-    }
-    if (!response.ok || data?.success === false) {
-      // 401 e 402 aqui são da nossa chave (inválida ou sem créditos), não da conta do embaixador.
-      this.logger.error(
-        `ScrapeCreators ${path} failed status=${response.status} message=${String(data?.message ?? '').slice(0, 160)}`,
-      );
-      throw new Error(`TikTok public data request failed (${response.status})`);
-    }
-    return data;
-  }
+export function handleOf(creds: SocialCredentials): string {
+  const handle = creds.handle?.replace(/^@+/, '').trim();
+  if (!handle) throw new Error('Handle missing for public transport');
+  return handle;
 }

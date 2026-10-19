@@ -15,6 +15,7 @@ import { SystemClockAdapter } from './adapters/clock/system-clock.adapter';
 
 // Adapters - Social
 import { SocialProviderFactory } from './adapters/social/social-provider.factory';
+import { InstagramPublicAdapter } from './adapters/social/instagram-public.adapter';
 import { TikTokPublicAdapter } from './adapters/social/tiktok-public.adapter';
 import { loadConfig } from './infrastructure/config/env';
 
@@ -38,7 +39,7 @@ import { UpdateMeUseCase } from './application/identity/update-me.use-case';
 import { GetDashboardUseCase } from './application/dashboard/get-dashboard.use-case';
 import { StartOAuthUseCase } from './application/social/start-oauth.use-case';
 import { OAuthCallbackUseCase } from './application/social/oauth-callback.use-case';
-import { TikTokHandleUseCase } from './application/social/tiktok-handle.use-case';
+import { SocialHandleUseCase } from './application/social/social-handle.use-case';
 import { SyncAccountUseCase } from './application/sync/sync-account.use-case';
 import { ComputeAndPublishRankingUseCase } from './application/rankings/compute-and-publish.use-case';
 
@@ -142,8 +143,11 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
       useClass: SocialProviderFactory,
     },
     {
-      provide: INJECTION_TOKENS.TIKTOK_PUBLIC_LOOKUP,
-      useFactory: () => new TikTokPublicAdapter(loadConfig().social.scrapeCreators.apiKey),
+      provide: INJECTION_TOKENS.PUBLIC_PROFILE_LOOKUPS,
+      useFactory: () => {
+        const apiKey = loadConfig().social.scrapeCreators.apiKey;
+        return [new InstagramPublicAdapter(apiKey), new TikTokPublicAdapter(apiKey)];
+      },
     },
     
     // Use cases
@@ -154,7 +158,7 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     GetDashboardUseCase,
     StartOAuthUseCase,
     OAuthCallbackUseCase,
-    TikTokHandleUseCase,
+    SocialHandleUseCase,
     SyncAccountUseCase,
     ComputeAndPublishRankingUseCase,
     

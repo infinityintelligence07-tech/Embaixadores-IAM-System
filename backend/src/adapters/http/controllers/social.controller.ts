@@ -30,7 +30,7 @@ import {
   OAuthCallbackUseCase,
   OAuthStateExpiredException,
 } from '../../../application/social/oauth-callback.use-case';
-import { TikTokHandleUseCase } from '../../../application/social/tiktok-handle.use-case';
+import { SocialHandleUseCase } from '../../../application/social/social-handle.use-case';
 import { ApplicationsService } from '../../../application/applications/applications.service';
 import { SocialAccount } from '../../../domain/entities';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
@@ -51,6 +51,13 @@ function toAccountView(account: SocialAccount) {
     verificationCode:
       account.status === ConnectionStatus.PendingVerification ? account.verificationCode : null,
   };
+}
+
+function parsePlatform(platform: string): SocialPlatform {
+  if (platform === SocialPlatform.Instagram || platform === SocialPlatform.TikTok) {
+    return platform;
+  }
+  throw new BadRequestException('Plataforma inválida');
 }
 
 function formatWait(seconds: number): string {
@@ -77,7 +84,7 @@ export class SocialController {
     },
     private readonly startOAuthUseCase: StartOAuthUseCase,
     private readonly oauthCallbackUseCase: OAuthCallbackUseCase,
-    private readonly tiktokHandle: TikTokHandleUseCase,
+    private readonly socialHandle: SocialHandleUseCase,
     private readonly applications: ApplicationsService,
   ) {}
 
@@ -100,49 +107,52 @@ export class SocialController {
       .map(toAccountView);
   }
 
-  /** TikTok com a leitura pública ativa não abre login: devolve o modo "@" para a tela pedir o perfil. */
+  /**
+   * Com a leitura pública ativa, novas conexões não abrem login: devolve o modo "@" para a tela
+   * pedir o perfil. Contas já conectadas pela API oficial seguem coletando por ela.
+   */
   @Post('oauth/:platform/start')
   @UseGuards(AuthGuard)
   async startOAuth(
     @Req() req: { user: { id: string; email: string } },
     @Param('platform') platform: string,
   ) {
-    if (platform !== 'instagram' && platform !== 'tiktok') {
-      throw new BadRequestException('Plataforma inválida');
-    }
+    const network = parsePlatform(platform);
 
-    if (platform === 'tiktok' && this.tiktokHandle.enabled) {
+    if (this.socialHandle.isEnabled(network)) {
       const suggestedHandle = req.user.email
-        ? await this.applications.tiktokHandleFor(req.user.email).catch(() => null)
+        ? await this.applications.handleFor(req.user.email, network).catch(() => null)
         : null;
       return { mode: 'handle' as const, suggestedHandle };
     }
 
-    const result = await this.startOAuthUseCase.execute(
-      req.user.id as never,
-      platform as SocialPlatform,
-    );
+    const result = await this.startOAuthUseCase.execute(req.user.id as never, network);
 
     return { mode: 'oauth' as const, url: result.url };
   }
 
-  @Post('tiktok/handle')
+  @Post(':platform/handle')
   @UseGuards(AuthGuard)
-  async claimTikTokHandle(
+  async claimHandle(
     @Req() req: { user: { id: string } },
+    @Param('platform') platform: string,
     @Body() body: { handle?: unknown },
   ) {
+    const network = parsePlatform(platform);
     if (typeof body?.handle !== 'string') {
-      throw new BadRequestException('Informe o seu @ do TikTok.');
+      throw new BadRequestException('Informe o seu @.');
     }
-    const account = await this.tiktokHandle.claim(req.user.id as never, body.handle);
+    const account = await this.socialHandle.claim(req.user.id as never, network, body.handle);
     return toAccountView(account);
   }
 
-  @Post('tiktok/verify')
+  @Post(':platform/verify')
   @UseGuards(AuthGuard)
-  async verifyTikTokHandle(@Req() req: { user: { id: string } }) {
-    const account = await this.tiktokHandle.verify(req.user.id as never);
+  async verifyHandle(
+    @Req() req: { user: { id: string } },
+    @Param('platform') platform: string,
+  ) {
+    const account = await this.socialHandle.verify(req.user.id as never, parsePlatform(platform));
     return toAccountView(account);
   }
 

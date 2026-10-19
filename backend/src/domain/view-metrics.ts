@@ -47,6 +47,10 @@ export function readTikTokViewCount(value: unknown): number | null {
   return asViewCount(value);
 }
 
+export function readViewCount(value: unknown): number | null {
+  return asViewCount(value);
+}
+
 function asViewCount(value: unknown): number | null {
   const numeric =
     typeof value === 'number'

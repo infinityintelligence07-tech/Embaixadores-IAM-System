@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SocialMetricsProvider } from '../../ports/social-metrics.port';
 import { SocialPlatform, SocialTransport } from '../../domain/types';
 import { InstagramOfficialAdapter } from './instagram-official.adapter';
+import { InstagramPublicAdapter } from './instagram-public.adapter';
 import { TikTokOfficialAdapter } from './tiktok-official.adapter';
 import { TikTokPublicAdapter } from './tiktok-public.adapter';
 import { McpSocialAdapter } from './mcp-social.adapter';
@@ -16,6 +17,7 @@ export class SocialProviderFactory {
   private instagramOfficial?: InstagramOfficialAdapter;
   private tiktokOfficial?: TikTokOfficialAdapter;
   private tiktokPublic?: TikTokPublicAdapter;
+  private instagramPublic?: InstagramPublicAdapter;
   
   getProvider(
     platform: SocialPlatform,
@@ -31,15 +33,20 @@ export class SocialProviderFactory {
       return new McpSocialAdapter(platform);
     }
     
-    if (transport === SocialTransport.PublicApi && platform === SocialPlatform.TikTok) {
-      if (!this.config.social.scrapeCreators.apiKey) {
+    if (transport === SocialTransport.PublicApi) {
+      const apiKey = this.config.social.scrapeCreators.apiKey;
+      if (!apiKey) {
         this.logger.warn('SCRAPECREATORS_API_KEY not configured');
-        throw new Error('TikTok public data not configured');
+        throw new Error('Public social data not configured');
       }
-      if (!this.tiktokPublic) {
-        this.tiktokPublic = new TikTokPublicAdapter(this.config.social.scrapeCreators.apiKey);
+      if (platform === SocialPlatform.TikTok) {
+        if (!this.tiktokPublic) this.tiktokPublic = new TikTokPublicAdapter(apiKey);
+        return this.tiktokPublic;
       }
-      return this.tiktokPublic;
+      if (platform === SocialPlatform.Instagram) {
+        if (!this.instagramPublic) this.instagramPublic = new InstagramPublicAdapter(apiKey);
+        return this.instagramPublic;
+      }
     }
 
     if (transport === SocialTransport.OfficialApi) {

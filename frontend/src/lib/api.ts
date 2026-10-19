@@ -281,14 +281,14 @@ export const api = {
       method: 'POST',
     }),
 
-  claimTikTokHandle: (handle: string) =>
-    fetchJson<SocialAccount>('/api/social/tiktok/handle', {
+  claimHandle: (platform: SocialPlatform, handle: string) =>
+    fetchJson<SocialAccount>(`/api/social/${platform}/handle`, {
       method: 'POST',
       body: JSON.stringify({ handle }),
     }),
 
-  verifyTikTokHandle: () =>
-    fetchJson<SocialAccount>('/api/social/tiktok/verify', { method: 'POST' }),
+  verifyHandle: (platform: SocialPlatform) =>
+    fetchJson<SocialAccount>(`/api/social/${platform}/verify`, { method: 'POST' }),
 
   deleteSocialAccount: (id: string) =>
     fetchJson<void>(`/api/social/accounts/${id}`, { method: 'DELETE' }),

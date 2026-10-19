@@ -2,13 +2,15 @@ import { Check, Copy } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { api, type SocialAccount } from '@/lib/api';
+import { api, type SocialAccount, type SocialPlatform } from '@/lib/api';
+import { platformLabel } from '@/lib/format';
 
 type Step = 'handle' | 'code';
 
-interface TikTokHandleDialogProps {
-  open: boolean;
-  /** Conta do TikTok atual, se houver. Com código pendente, o diálogo abre direto na confirmação. */
+interface SocialHandleDialogProps {
+  /** Rede em conexão. Sem rede, o diálogo fica fechado. */
+  platform: SocialPlatform | null;
+  /** Conta atual nessa rede, se houver. Com código pendente, o diálogo abre direto na confirmação. */
   account: SocialAccount | null;
   suggestedHandle: string | null;
   onClose: () => void;
@@ -20,15 +22,17 @@ function bare(handle: string | null | undefined): string {
   return (handle ?? '').trim().replace(/^@+/, '');
 }
 
-export function TikTokHandleDialog({
-  open,
+export function SocialHandleDialog({
+  platform,
   account,
   suggestedHandle,
   onClose,
   onChanged,
-}: TikTokHandleDialogProps) {
+}: SocialHandleDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const open = platform !== null;
+  const name = platform ? platformLabel(platform) : '';
   const pendingCode =
     account?.status === 'pending_verification' ? account.verificationCode : null;
   const [step, setStep] = useState<Step>('handle');
@@ -58,14 +62,15 @@ export function TikTokHandleDialog({
 
   async function submitHandle(event: FormEvent) {
     event.preventDefault();
+    if (!platform) return;
     if (!bare(handle)) {
-      setError('Informe o seu @ do TikTok.');
+      setError(`Informe o seu @ do ${name}.`);
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const next = await api.claimTikTokHandle(bare(handle));
+      const next = await api.claimHandle(platform, bare(handle));
       onChanged(next);
       if (next.status === 'pending_verification') {
         setStep('code');
@@ -81,10 +86,11 @@ export function TikTokHandleDialog({
   }
 
   async function verify() {
+    if (!platform) return;
     setBusy(true);
     setError(null);
     try {
-      const next = await api.verifyTikTokHandle();
+      const next = await api.verifyHandle(platform);
       onChanged(next);
       onClose();
     } catch (err) {
@@ -105,6 +111,7 @@ export function TikTokHandleDialog({
   }
 
   const username = bare(account?.username);
+  const inputId = `${platform ?? 'social'}-handle`;
 
   return (
     <dialog
@@ -121,16 +128,16 @@ export function TikTokHandleDialog({
     >
       {step === 'handle' || !pendingCode ? (
         <form className="confirm-dialog-body" onSubmit={submitHandle} noValidate>
-          <h2 id={titleId}>Conectar o TikTok</h2>
+          <h2 id={titleId}>Conectar o {name}</h2>
           <p>
             Informe o @ do perfil onde você posta. As views são lidas do perfil público, sem
             pedir a sua senha.
           </p>
           <div className="mt-4">
             <Input
-              id="tiktok-handle"
-              name="tiktok-handle"
-              label="Seu @ no TikTok"
+              id={inputId}
+              name={inputId}
+              label={`Seu @ no ${name}`}
               leading="@"
               value={handle}
               onChange={(event) => setHandle(event.target.value)}
@@ -157,7 +164,7 @@ export function TikTokHandleDialog({
         <div className="confirm-dialog-body">
           <h2 id={titleId}>Confirme que o perfil é seu</h2>
           <p>
-            Cole este código na bio de <strong>@{username}</strong> no TikTok e salve. Ele só
+            Cole este código na bio de <strong>@{username}</strong> no {name} e salve. Ele só
             serve para provar que a conta é sua.
           </p>
           <div className="handle-code">
@@ -168,7 +175,7 @@ export function TikTokHandleDialog({
             </Button>
           </div>
           <ol className="handle-steps">
-            <li>No TikTok, abra o seu perfil e toque em Editar perfil.</li>
+            <li>No {name}, abra o seu perfil e toque em Editar perfil.</li>
             <li>Cole o código na Bio e salve.</li>
             <li>Volte aqui e toque em Conferir bio.</li>
           </ol>

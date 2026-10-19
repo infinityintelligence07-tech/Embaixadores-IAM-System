@@ -178,16 +178,17 @@ export class ApplicationsService {
     return this.findById(id).then(serialize);
   }
 
-  /** O @ do TikTok que a pessoa informou no formulário, para já vir preenchido na conexão. */
-  async tiktokHandleFor(email: string): Promise<string | null> {
-    const result = await getPool().query<{ tiktok_handle: string }>(
-      `SELECT tiktok_handle FROM applications
-       WHERE lower(email) = lower($1) AND tiktok_handle IS NOT NULL AND tiktok_handle <> ''
+  /** O @ que a pessoa informou no formulário para essa rede, para já vir preenchido na conexão. */
+  async handleFor(email: string, platform: 'instagram' | 'tiktok'): Promise<string | null> {
+    const column = platform === 'instagram' ? 'instagram_handle' : 'tiktok_handle';
+    const result = await getPool().query<{ handle: string }>(
+      `SELECT ${column} AS handle FROM applications
+       WHERE lower(email) = lower($1) AND ${column} IS NOT NULL AND ${column} <> ''
        ORDER BY created_at DESC
        LIMIT 1`,
       [email.trim()],
     );
-    const handle = result.rows[0]?.tiktok_handle;
+    const handle = result.rows[0]?.handle;
     return handle ? normalizeHandle(handle) || null : null;
   }
 

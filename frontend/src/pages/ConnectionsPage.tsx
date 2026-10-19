@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
-import { TikTokHandleDialog } from '@/components/social/TikTokHandleDialog';
+import { SocialHandleDialog } from '@/components/social/SocialHandleDialog';
 import {
   ApiError,
   api,
@@ -111,8 +111,8 @@ export function ConnectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [pendingDisconnect, setPendingDisconnect] = useState<SocialAccount | null>(null);
-  const [tiktokOpen, setTiktokOpen] = useState(false);
-  const [tiktokSuggestion, setTiktokSuggestion] = useState<string | null>(null);
+  const [handlePlatform, setHandlePlatform] = useState<SocialPlatform | null>(null);
+  const [handleSuggestion, setHandleSuggestion] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const hasCallbackResult = connected || callbackError != null;
   const [abandoned] = useState(() => (hasCallbackResult ? null : readAbandonedOAuth()));
@@ -170,8 +170,8 @@ export function ConnectionsPage() {
     try {
       const start = await api.startOAuth(platform);
       if (start.mode === 'handle') {
-        setTiktokSuggestion(start.suggestedHandle);
-        setTiktokOpen(true);
+        setHandleSuggestion(start.suggestedHandle);
+        setHandlePlatform(platform);
         setActionId(null);
         return;
       }
@@ -312,7 +312,7 @@ export function ConnectionsPage() {
                     <Button
                       size="sm"
                       className="min-h-[44px]"
-                      onClick={() => setTiktokOpen(true)}
+                      onClick={() => setHandlePlatform(account.platform)}
                     >
                       Confirmar pela bio
                     </Button>
@@ -358,14 +358,16 @@ export function ConnectionsPage() {
         onCancel={() => setPendingDisconnect(null)}
       />
 
-      <TikTokHandleDialog
-        open={tiktokOpen}
-        account={accounts.find((item) => item.platform === 'tiktok') ?? null}
-        suggestedHandle={tiktokSuggestion}
-        onClose={() => setTiktokOpen(false)}
+      <SocialHandleDialog
+        platform={handlePlatform}
+        account={accounts.find((item) => item.platform === handlePlatform) ?? null}
+        suggestedHandle={handleSuggestion}
+        onClose={() => setHandlePlatform(null)}
         onChanged={(next) => {
           if (next.status !== 'pending_verification') {
-            setNotice('TikTok confirmado. A primeira coleta começa agora e as views entram no ranking em seguida.');
+            setNotice(
+              `${platformLabel(next.platform)} confirmado. A primeira coleta começa agora e as views entram no ranking em seguida.`,
+            );
           }
           void loadAccounts();
         }}
