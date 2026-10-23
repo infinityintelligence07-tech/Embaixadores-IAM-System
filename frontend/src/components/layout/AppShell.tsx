@@ -1,29 +1,25 @@
-import { Home, Link2, Shield, Trophy, User, Video } from 'lucide-react';
+import { Link2, Shield, Trophy, User } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { useAuth } from '@/contexts/AuthContext';
-import { isRankingPath, useSurfaceTheme } from '@/lib/theme';
+import { isAdminPath, useSurfaceTheme } from '@/lib/theme';
 import { LegalLinks } from './LegalLinks';
 import { NoticesBar } from './NoticesBar';
 
-const approvedNavItems = [
-  { to: '/dashboard', label: 'Início', icon: Home },
+const navItems = [
+  { to: '/rankings', label: 'Ranking', icon: Trophy },
   { to: '/conexoes', label: 'Conexões', icon: Link2 },
-  { to: '/conteudos', label: 'Conteúdos', icon: Video },
-  { to: '/rankings', label: 'Rankings', icon: Trophy },
   { to: '/perfil', label: 'Perfil', icon: User },
 ];
-
 
 export function AppShell() {
   const { profile, isAdmin: hasAdminRole } = useAuth();
   const location = useLocation();
-  const apple = !isRankingPath(location.pathname);
+  const apple = isAdminPath(location.pathname);
   const approved = profile?.status === 'approved';
   // Administração só para quem tem o papel. O membro fica na área da competição.
   const isAdmin = hasAdminRole && approved;
-  const navItems = approvedNavItems;
-  const homePath = '/dashboard';
+  const homePath = '/rankings';
 
   useSurfaceTheme(apple ? 'apple' : 'arena');
 

@@ -9,15 +9,10 @@ interface ProtectedRouteProps {
   requireAdmin?: boolean;
 }
 
-const PENDING_ALLOWED_PATHS = [
-  '/onboarding',
-  '/conexoes',
-  '/perfil',
-  '/dashboard',
-  '/conteudos',
-  '/rankings',
-];
-
+/**
+ * Quem tem conta entra direto na área dos embaixadores, aprovado ou não.
+ * A aprovação da equipe decide só quem aparece no ranking; a administração pede o papel.
+ */
 export function ProtectedRoute({
   requireApproved = false,
   requireAdmin = false,
@@ -25,8 +20,6 @@ export function ProtectedRoute({
   const { state, profile, profileError, profileLoading, isAdmin, refreshProfile, signOut } =
     useAuth();
   const location = useLocation();
-  // Barra final não muda a tela: /conexoes/ é a mesma coisa que /conexoes
-  const pathname = location.pathname.replace(/\/+$/, '') || '/';
 
   if (state === 'loading') {
     return (
@@ -98,28 +91,11 @@ export function ProtectedRoute({
   }
 
   if (requireAdmin && !isAdmin) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  if (profile?.status === 'approved' && pathname === '/onboarding') {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/rankings" replace />;
   }
 
   if (requireApproved && profile && profile.status !== 'approved') {
-    return <Navigate to="/onboarding" replace />;
-  }
-
-  // Quem já foi aprovado não volta para o cadastro, mesmo que a marca de
-  // onboarding não tenha sido gravada (cadastros antigos ou aprovação manual).
-  if (
-    !requireAdmin &&
-    profile &&
-    profile.status !== 'approved' &&
-    !profile.onboardingCompleted &&
-    pathname !== '/onboarding' &&
-    !PENDING_ALLOWED_PATHS.includes(pathname)
-  ) {
-    return <Navigate to="/onboarding" replace />;
+    return <Navigate to="/rankings" replace />;
   }
 
   return <Outlet />;

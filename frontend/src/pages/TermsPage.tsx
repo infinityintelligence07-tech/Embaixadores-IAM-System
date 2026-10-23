@@ -4,7 +4,7 @@ import { useSurfaceTheme } from '@/lib/theme';
 const updated = '24 de setembro de 2026';
 
 export function TermsPage() {
-  useSurfaceTheme('apple');
+  useSurfaceTheme('arena');
 
   return (
     <main className="min-h-dvh bg-surface px-4 py-10 text-text">
@@ -36,12 +36,11 @@ export function TermsPage() {
         </p>
         <h2 className="text-xl text-text">3. Contas sociais</h2>
         <p>
-          A vinculação de Instagram/TikTok exige a confirmação do titular: pela autorização na
-          própria rede ou por um código que o titular coloca na bio do perfil. Digitar apenas o
-          @username não é suficiente. Com a confirmação pela bio, as views são lidas do perfil
-          público uma vez por dia, e só contam os conteúdos publicados no próprio perfil. O perfil
-          precisa estar público. Cada conta social só pode ser associada a um embaixador. O
-          usuário pode desconectar a qualquer momento.
+          O usuário informa o @ do Instagram ou do TikTok onde publica e declara que o perfil é
+          dele. As views são lidas do perfil público, e só contam os conteúdos publicados no
+          próprio perfil. O perfil precisa estar público. A equipe confere cada perfil antes de
+          ele entrar no ranking e pode recusar o que não for do usuário. Cada conta social só pode
+          ser associada a um embaixador. O usuário pode desconectar a qualquer momento.
         </p>
         <h2 className="text-xl text-text">4. Rankings e métricas</h2>
         <p>

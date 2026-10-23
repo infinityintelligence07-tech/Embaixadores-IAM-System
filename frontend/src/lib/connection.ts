@@ -115,9 +115,9 @@ export function dutyLine(platform: SocialPlatform, duty: DutyKind): string {
     case 'unavailable':
       return `A conexão com o ${name} ainda não está liberada. Avise a equipe.`;
     case 'connect':
-      return `Conecte o ${name} com a sua conta para entrar neste ranking.`;
+      return `Informe o seu @ do ${name} para entrar neste ranking.`;
     case 'verify':
-      return `Falta confirmar que o perfil é seu. Coloque o código na bio do ${name}.`;
+      return `Falta confirmar o seu @ do ${name}.`;
     default: {
       const exhaustive: never = duty;
       return exhaustive;
@@ -140,7 +140,7 @@ export function actionLabel(platform: SocialPlatform, duty: DutyKind): string | 
     case 'connect':
       return `Conectar ${name}`;
     case 'verify':
-      return 'Confirmar pela bio';
+      return 'Confirmar @';
     default: {
       const exhaustive: never = duty;
       return exhaustive;
@@ -161,14 +161,13 @@ export function gateHeadline(
   if (pending.length === 2) {
     return {
       title: 'Para entrar na competição',
-      detail:
-        'Conecte o Instagram e o TikTok com a sua conta. Sem essa autorização, suas views não entram no ranking.',
+      detail: 'Informe o @ do Instagram, do TikTok ou dos dois. Basta o @, sem senha.',
     };
   }
 
   const name = platformLabel(pending[0]);
   return {
-    title: `Falta conectar o ${name}`,
-    detail: `Sem o ${name}, você fica de fora do ranking dessa rede. A autorização é feita na sua conta.`,
+    title: `Quer disputar também no ${name}?`,
+    detail: `Informe o seu @ do ${name}. Cada rede tem o seu ranking.`,
   };
 }

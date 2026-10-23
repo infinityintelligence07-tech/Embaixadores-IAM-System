@@ -26,7 +26,7 @@ export function AuthCallbackPage() {
         return;
       }
 
-      navigate('/dashboard', { replace: true });
+      navigate('/rankings', { replace: true });
     }
 
     void handleCallback();

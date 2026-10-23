@@ -9,9 +9,8 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { randomInt } from 'crypto';
 import { SocialAccount } from '../../domain/entities';
-import { bioHasCode, generateVerificationCode, parseHandle } from '../../domain/social-handle';
+import { bioHasCode, parseHandle } from '../../domain/social-handle';
 import {
   AccountReviewStatus,
   ConnectionStatus,
@@ -50,8 +49,8 @@ function networkName(platform: SocialPlatform): string {
 }
 
 /**
- * Conexão sem login na rede: o embaixador informa o @, recebe um código e o coloca na bio.
- * A conta só entra na coleta e no ranking depois que o código aparece na bio.
+ * Conexão sem login na rede: o embaixador informa o @ e a coleta começa na hora.
+ * Quem garante que o @ é da pessoa é a equipe, na análise que libera o ranking.
  */
 @Injectable()
 export class SocialHandleUseCase {
@@ -103,14 +102,16 @@ export class SocialHandleUseCase {
     for (const accountId of accountIds) {
       const holder = await this.socialAccountRepo.findAnyByPlatformUserId(platform, accountId);
       if (!holder || holder.profileId === profileId) continue;
-      const holderConfirmed =
-        holder.disconnectedAt === null && holder.status !== ConnectionStatus.PendingVerification;
-      if (holderConfirmed) {
+      const holderKeeps =
+        holder.disconnectedAt === null &&
+        holder.status !== ConnectionStatus.PendingVerification &&
+        holder.reviewStatus !== AccountReviewStatus.Rejected;
+      if (holderKeeps) {
         throw new ConflictException(
           'Esse @ já está conectado a outro embaixador. Se ele é seu, fale com a equipe.',
         );
       }
-      // Pedido sem confirmação não prende o @: quem provar pela bio fica com ele.
+      // Conta reprovada pela equipe ou pedido antigo sem confirmação não prendem o @.
       await this.syncJobRepo.cancelActiveForAccount(holder.id);
       await this.socialAccountRepo.update(holder.id, {
         platformUserId: `released:${holder.id}`,
@@ -141,13 +142,15 @@ export class SocialHandleUseCase {
       return this.socialAccountRepo.update(mine.id, identity);
     }
 
-    const keepCode =
-      mine &&
-      mine.platformUserId === profile.platformUserId &&
-      mine.status === ConnectionStatus.PendingVerification
-        ? mine.verificationCode
-        : null;
-    const code = keepCode ?? generateVerificationCode((max) => randomInt(max));
+    const connected = {
+      transport: SocialTransport.PublicApi,
+      status: ConnectionStatus.Connected,
+      verificationCode: null,
+      // A coleta pelo @ só roda com esta data preenchida.
+      verifiedAt: now,
+      disconnectedAt: null,
+      syncMessage: 'Conta recebida. A primeira coleta começa agora.',
+    };
 
     let account: SocialAccount;
     if (mine) {
@@ -159,25 +162,21 @@ export class SocialHandleUseCase {
       }
       account = await this.socialAccountRepo.update(mine.id, {
         ...identity,
-        transport: SocialTransport.PublicApi,
-        status: ConnectionStatus.PendingVerification,
-        verificationCode: code,
-        verifiedAt: null,
-        disconnectedAt: null,
-        syncMessage: null,
+        ...connected,
         // Outra conta precisa de nova análise; a mesma conta mantém a decisão da equipe.
         ...(sameAccount ? {} : { reviewStatus: AccountReviewStatus.Pending, reviewNote: null }),
       });
     } else {
-      account = await this.socialAccountRepo.create({
+      const created = await this.socialAccountRepo.create({
         profileId,
         platform,
         ...identity,
         transport: SocialTransport.PublicApi,
-        status: ConnectionStatus.PendingVerification,
-        verificationCode: code,
+        status: ConnectionStatus.Connected,
       });
+      account = await this.socialAccountRepo.update(created.id, connected);
     }
+    await this.syncJobRepo.enqueue({ socialAccountId: account.id, priority: 200 });
 
     await this.auditRepo.append({
       actorId: profileId,

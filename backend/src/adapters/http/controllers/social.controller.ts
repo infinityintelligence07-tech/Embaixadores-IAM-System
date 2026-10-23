@@ -269,7 +269,7 @@ export class SocialController {
     }
 
     if (account.status === ConnectionStatus.PendingVerification) {
-      throw new ConflictException('Confirme o código na bio antes da primeira coleta.');
+      throw new ConflictException('Confirme o seu @ em Conexões antes da primeira coleta.');
     }
 
     const settingCooldown = await this.settingsRepo.getNumber(

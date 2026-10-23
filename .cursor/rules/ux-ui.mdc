@@ -9,8 +9,9 @@ A interface segue o design system da IAM. Clareza vem antes de novidade. A cópi
 
 ## Duas superfícies
 
-- Painel operacional (login, conexões, conteúdos, perfil, administração, termos): fundo `#f2f2f7`, cartão branco, texto `#1d1d1f`, azul `#0034B8` só como tint e CTA comum.
-- Ranking (início e rankings): palco escuro da competição. O escuro não é o tema do produto inteiro.
+- Área do embaixador (cadastro, login, ranking, conexões, perfil, conteúdos, termos): palco escuro da competição, do primeiro ao último passo. O membro nunca troca de visual no meio do caminho.
+- Administração: painel claro, fundo `#f2f2f7`, cartão branco, texto `#1d1d1f`, azul `#0034B8` só como tint e CTA comum. Só a equipe vê.
+- O membro tem três lugares: Ranking, Conexões e Perfil. Cadastro termina dentro do ranking, sem tela de onboarding nem segundo login. O @ do cadastro já conecta a rede; a equipe aprova o perfil para o ranking.
 
 ## Régua
 

@@ -8,10 +8,8 @@ import { CaptureSuccessPage } from '@/pages/CaptureSuccessPage';
 import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
 import { ConnectionsPage } from '@/pages/ConnectionsPage';
 import { ContentsPage } from '@/pages/ContentsPage';
-import { DashboardPage } from '@/pages/DashboardPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { LoginPage } from '@/pages/LoginPage';
-import { OnboardingPage } from '@/pages/OnboardingPage';
 import { PrivacyPage } from '@/pages/PrivacyPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { RankingsPage } from '@/pages/RankingsPage';
@@ -35,14 +33,15 @@ export default function App() {
       <Route path="/termos" element={<TermsPage />} />
       <Route path="/privacidade" element={<PrivacyPage />} />
 
+      <Route path="/dashboard" element={<Navigate to="/rankings" replace />} />
+      <Route path="/onboarding" element={<Navigate to="/rankings" replace />} />
+
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
-          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/rankings" element={<RankingsPage />} />
           <Route path="/conexoes" element={<ConnectionsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/conteudos" element={<ContentsPage />} />
-          <Route path="/rankings" element={<RankingsPage />} />
         </Route>
       </Route>
 

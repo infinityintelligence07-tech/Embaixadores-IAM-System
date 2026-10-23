@@ -26,7 +26,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = location.state as { from?: string; reason?: string } | null;
-  const from = routeState?.from ?? '/dashboard';
+  const from = routeState?.from ?? '/rankings';
   const reason = routeState?.reason ?? null;
 
   const [email, setEmail] = useState('');

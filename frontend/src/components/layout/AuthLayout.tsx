@@ -11,7 +11,7 @@ export function AuthLayout({
   subtitle: string;
   children: ReactNode;
 }) {
-  useSurfaceTheme('apple');
+  useSurfaceTheme('arena');
 
   return (
     <div className="auth-screen">

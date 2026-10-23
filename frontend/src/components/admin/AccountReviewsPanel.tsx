@@ -155,10 +155,8 @@ export function AccountReviewsPanel({
           </span>
           <span>
             {confirmed
-              ? item.verifiedAt
-                ? `Confirmou pela bio em ${formatWhen(item.verifiedAt)}`
-                : `Conectado em ${formatWhen(item.connectedAt)}`
-              : 'Ainda não colocou o código na bio'}
+              ? `Conectado em ${formatWhen(item.verifiedAt ?? item.connectedAt)}`
+              : 'Ainda não confirmou o @'}
             {item.membershipStatus === 'pending' ? ' · cadastro novo' : ''}
           </span>
           {item.reviewStatus === 'changes_requested' && item.reviewNote ? (

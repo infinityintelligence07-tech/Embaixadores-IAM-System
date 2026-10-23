@@ -277,38 +277,6 @@ html {
   min-height: 42px;
 }
 
-.handle-code {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg);
-}
-
-.handle-code code {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--ink);
-}
-
-.handle-steps {
-  margin: 14px 0 0;
-  padding-left: 20px;
-  list-style: decimal;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--ink);
-}
-
-.confirm-dialog-body p.handle-error {
-  color: var(--bad);
-}
-
 @media (max-width: 480px) {
   .confirm-dialog-actions {
     flex-direction: column-reverse;
@@ -323,6 +291,12 @@ html {
   min-height: 100vh;
   background: var(--bg);
   padding: 40px 16px;
+}
+
+[data-theme='arena'] .auth-screen {
+  background:
+    radial-gradient(ellipse 90% 42% at 50% -8%, rgba(0, 52, 184, 0.42), transparent 60%),
+    var(--bg);
 }
 
 .auth-wrap {

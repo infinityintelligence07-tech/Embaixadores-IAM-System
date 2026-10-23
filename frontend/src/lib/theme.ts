@@ -16,6 +16,7 @@ export function useSurfaceTheme(theme: SurfaceTheme) {
   }, [theme]);
 }
 
-export function isRankingPath(pathname: string): boolean {
-  return pathname === '/dashboard' || pathname === '/rankings' || pathname === '/';
+/** A área do embaixador é toda no palco escuro; só a administração usa o painel claro. */
+export function isAdminPath(pathname: string): boolean {
+  return pathname === '/admin' || pathname.startsWith('/admin/');
 }

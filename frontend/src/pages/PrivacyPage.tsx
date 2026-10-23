@@ -4,7 +4,7 @@ import { useSurfaceTheme } from '@/lib/theme';
 const updated = '24 de setembro de 2026';
 
 export function PrivacyPage() {
-  useSurfaceTheme('apple');
+  useSurfaceTheme('arena');
 
   return (
     <main className="min-h-dvh bg-surface px-4 py-10 text-text">

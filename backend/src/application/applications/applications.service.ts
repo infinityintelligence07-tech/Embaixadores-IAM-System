@@ -12,9 +12,10 @@ import { loadConfig } from '../../infrastructure/config/env';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 import { ClockPort } from '../../ports/clock.port';
 import { MembershipRepository } from '../../ports/repositories.port';
-import { ProfileId } from '../../domain/types';
+import { ProfileId, SocialPlatform } from '../../domain/types';
 import { AccountReviewService } from '../social/account-review.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SocialHandleUseCase } from '../social/social-handle.use-case';
 
 const NETWORKS = new Set(['instagram', 'tiktok']);
 // Domínio público das páginas; areaembaixadores.* só serve a API e redireciona as telas para cá.
@@ -81,6 +82,7 @@ export class ApplicationsService {
     private readonly membershipRepo: MembershipRepository,
     private readonly accountReview: AccountReviewService,
     private readonly notifications: NotificationsService,
+    private readonly socialHandles: SocialHandleUseCase,
   ) {}
 
   private authClient(): SupabaseClient {
@@ -184,6 +186,7 @@ export class ApplicationsService {
       );
     }
 
+    let applicationId: string;
     try {
       // O gatilho do Supabase já criou o perfil e a participação "aguardando".
       await getPool().query(
@@ -208,7 +211,7 @@ export class ApplicationsService {
           userId,
         ],
       );
-      return { id: result.rows[0].id, accountCreated: true };
+      applicationId = result.rows[0].id;
     } catch (error) {
       await this.authClient().auth.admin.deleteUser(userId).catch(() => undefined);
       if (isUniqueViolation(error)) {
@@ -217,6 +220,36 @@ export class ApplicationsService {
         );
       }
       throw error;
+    }
+
+    await this.connectHandles(userId as ProfileId, [
+      redes.includes('instagram') ? [SocialPlatform.Instagram, instagramHandle] : null,
+      redes.includes('tiktok') ? [SocialPlatform.TikTok, tiktokHandle] : null,
+    ]);
+    return { id: applicationId, accountCreated: true };
+  }
+
+  /**
+   * O @ do formulário já vira a rede conectada: a pessoa não digita de novo dentro do app.
+   * Se o @ não for encontrado ou estiver privado, o cadastro segue e ela corrige em Conexões.
+   */
+  private async connectHandles(
+    profileId: ProfileId,
+    handles: ([SocialPlatform, string] | null)[],
+  ): Promise<void> {
+    for (const item of handles) {
+      if (!item) continue;
+      const [platform, handle] = item;
+      if (!this.socialHandles.isEnabled(platform)) continue;
+      try {
+        await this.socialHandles.claim(profileId, platform, handle);
+      } catch (error) {
+        console.warn(
+          'signup_connect_handle_skipped',
+          platform,
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
   }
 

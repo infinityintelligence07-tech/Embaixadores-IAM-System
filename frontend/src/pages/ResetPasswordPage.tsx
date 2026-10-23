@@ -52,7 +52,7 @@ export function ResetPasswordPage() {
 
   useEffect(() => {
     if (!success) return;
-    const timer = setTimeout(() => navigate('/dashboard', { replace: true }), 1500);
+    const timer = setTimeout(() => navigate('/rankings', { replace: true }), 1500);
     return () => clearTimeout(timer);
   }, [success, navigate]);
 

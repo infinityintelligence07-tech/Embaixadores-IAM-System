@@ -175,7 +175,7 @@ export function CapturePage() {
       });
       return;
     }
-    navigate("/onboarding", { replace: true });
+    navigate("/rankings", { replace: true });
   }
 
   return (
@@ -232,8 +232,8 @@ export function CapturePage() {
             <p className="lp-form__eyebrow">Inscrição</p>
             <h2 className="lp-form__title">Crie sua conta</h2>
             <p className="lp-form__sub">
-              Marque Instagram, TikTok ou os dois. Depois de enviar, você já entra
-              no app para confirmar a sua conta e aguarda a aprovação da equipe.
+              Marque Instagram, TikTok ou os dois. Ao enviar, você já entra na
+              área dos embaixadores. A equipe aprova o perfil para o ranking.
             </p>
           </header>
 

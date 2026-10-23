@@ -27,23 +27,6 @@ function platformLabel(platform: SocialPlatform): string {
   return platform === 'instagram' ? 'Instagram' : 'TikTok';
 }
 
-function transportLabel(transport: SocialAccount['transport']): string {
-  switch (transport) {
-    case 'official_api':
-      return 'API oficial';
-    case 'public_api':
-      return 'Perfil público';
-    case 'mcp':
-      return 'MCP';
-    case 'demo':
-      return 'Demonstração';
-    default: {
-      const _exhaustive: never = transport;
-      return _exhaustive;
-    }
-  }
-}
-
 function statusTone(status: ConnectionStatus): 'success' | 'warning' | 'danger' | 'neutral' {
   switch (status) {
     case 'connected':
@@ -82,7 +65,7 @@ function statusLabel(status: ConnectionStatus): string {
     case 'integration_unavailable':
       return 'Integração indisponível';
     case 'pending_verification':
-      return 'Aguardando confirmação';
+      return 'Falta confirmar o @';
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -303,9 +286,6 @@ export function ConnectionsPage() {
                     <Badge tone={statusTone(account.status)}>
                       {statusLabel(account.status)}
                     </Badge>
-                    {account.transport !== 'official_api' ? (
-                      <Badge tone="neutral">{transportLabel(account.transport)}</Badge>
-                    ) : null}
                     {account.status !== 'pending_verification' ? (
                       <Badge tone={reviewBadge(account.reviewStatus).tone}>
                         {reviewBadge(account.reviewStatus).label}
@@ -342,7 +322,7 @@ export function ConnectionsPage() {
                       className="min-h-[44px]"
                       onClick={() => setHandlePlatform(account.platform)}
                     >
-                      Confirmar pela bio
+                      Confirmar @
                     </Button>
                   ) : (
                     <Button
@@ -395,8 +375,8 @@ export function ConnectionsPage() {
           if (next.status !== 'pending_verification') {
             setNotice(
               next.reviewStatus === 'approved'
-                ? `${platformLabel(next.platform)} confirmado. A coleta começa agora e as views entram no ranking em seguida.`
-                : `${platformLabel(next.platform)} confirmado. A equipe vai analisar a conta e você recebe um aviso aqui quando ela entrar no ranking.`,
+                ? `${platformLabel(next.platform)} conectado. A coleta começa agora e as views entram no ranking em seguida.`
+                : `${platformLabel(next.platform)} conectado. A equipe vai analisar o perfil e você recebe um aviso aqui quando ele entrar no ranking.`,
             );
           }
           void loadAccounts();

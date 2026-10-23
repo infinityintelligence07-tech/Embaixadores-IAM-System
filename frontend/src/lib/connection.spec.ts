@@ -20,7 +20,7 @@ describe('connectionDuty', () => {
     expect(connectionDuty('integration_unavailable')).toBe('unavailable');
   });
 
-  it('pede a confirmação pela bio enquanto o @ não foi provado', () => {
+  it('pede para confirmar o @ de contas antigas que ficaram sem confirmação', () => {
     expect(connectionDuty('pending_verification')).toBe('verify');
   });
 });
@@ -29,8 +29,7 @@ describe('gateHeadline', () => {
   it('pede as duas redes quando nenhuma está pronta', () => {
     expect(gateHeadline([])).toEqual({
       title: 'Para entrar na competição',
-      detail:
-        'Conecte o Instagram e o TikTok com a sua conta. Sem essa autorização, suas views não entram no ranking.',
+      detail: 'Informe o @ do Instagram, do TikTok ou dos dois. Basta o @, sem senha.',
     });
   });
 
@@ -40,7 +39,7 @@ describe('gateHeadline', () => {
         { platform: 'instagram', status: 'connected' },
         { platform: 'tiktok', status: 'disconnected' },
       ])?.title,
-    ).toBe('Falta conectar o TikTok');
+    ).toBe('Quer disputar também no TikTok?');
   });
 
   it('some quando as duas redes estão autorizadas', () => {
