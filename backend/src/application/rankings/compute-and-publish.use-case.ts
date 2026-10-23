@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { SocialPlatform, RankingCategory, ProfileId } from '../../domain/types';
+import { SocialPlatform, RankingCategory, ProfileId, AppRole } from '../../domain/types';
 import {
   RankingRepository,
   MembershipRepository,
@@ -88,6 +88,12 @@ export class ComputeAndPublishRankingUseCase {
     const candidates: RankingCandidate[] = [];
     
     for (const membership of memberships) {
+      const profile = await this.profileRepo.findById(membership.profileId);
+      // A equipe acompanha a competição, mas não disputa posição com os embaixadores.
+      if (!profile || profile.deletedAt || profile.role === AppRole.Admin) {
+        continue;
+      }
+
       const account = await this.socialAccountRepo.findByProfileAndPlatform(
         membership.profileId,
         platform,
@@ -128,11 +134,6 @@ export class ComputeAndPublishRankingUseCase {
       );
       
       if (!aggregate) {
-        continue;
-      }
-      
-      const profile = await this.profileRepo.findById(membership.profileId);
-      if (!profile) {
         continue;
       }
       

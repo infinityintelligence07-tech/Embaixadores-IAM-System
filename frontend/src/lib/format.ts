@@ -76,6 +76,8 @@ export function humanizeReason(reason: string | null | undefined): string {
       return 'Você ainda não entrou neste ranking.';
     case 'Cadastro suspenso':
       return 'Sua conta está suspensa. Fale com a equipe do programa.';
+    case 'Conta da equipe não entra no ranking':
+      return 'Contas da equipe acompanham o ranking, mas não disputam posição.';
     default:
       return LEGACY_ENGLISH_REASONS.has(reason) ? 'Sua posição ainda não está disponível.' : reason;
   }

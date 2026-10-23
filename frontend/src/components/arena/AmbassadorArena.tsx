@@ -265,8 +265,12 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   });
   const totalViewsStanding = standings[boardKey(platform, 'total_views')];
   const patent = patentFor(totalViewsStanding?.score ?? 0);
+  const activeCampaign = campaigns.find((item) => item.id === campaign);
   const videos = contents
-    .filter((item) => !item.excluded && item.platform === platform)
+    .filter(
+      (item) =>
+        !item.excluded && item.platform === platform && inCampaign(item, activeCampaign),
+    )
     .sort((a, b) => b.views - a.views)
     .slice(0, 6);
   const slice = slices.find((item) => item.platform === platform);
@@ -282,7 +286,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         url: videos[0].url,
         thumbnailUrl: videos[0].thumbnailUrl,
       }
-    : slice?.bestVideo
+    : !activeCampaign && slice?.bestVideo
       ? {
           title: slice.bestVideo.title || 'Sem título',
           views: slice.bestVideo.views,
@@ -290,6 +294,9 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           thumbnailUrl: null,
         }
       : null;
+  const featuredLabel = activeCampaign
+    ? `Seu vídeo com mais views em ${periodName(activeCampaign)}`
+    : 'Seu vídeo com mais views desde o início';
   const topBand = items.filter((item) => item.position >= 4 && item.position <= 10);
   const tail = items.filter((item) => item.position > 10);
   const visibleTail = query.trim()
@@ -505,7 +512,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           <a className="featured" href={featured.url} target="_blank" rel="noreferrer">
             <FeaturedMedia thumbnailUrl={featured.thumbnailUrl} />
             <div>
-              <p>Seu vídeo com mais views</p>
+              <p>{featuredLabel}</p>
               <strong>{featured.title}</strong>
               <span>{formatViews(featured.views)} views</span>
             </div>
@@ -515,7 +522,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           <article className="featured">
             <FeaturedMedia thumbnailUrl={featured.thumbnailUrl} />
             <div>
-              <p>Seu vídeo com mais views</p>
+              <p>{featuredLabel}</p>
               <strong>{featured.title}</strong>
               <span>{formatViews(featured.views)} views. O link ainda não chegou na coleta.</span>
             </div>
@@ -605,7 +612,17 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
       {videosOpen ? (
         <section id="videos-mais-acessados" aria-label="Vídeos mais acessados">
-          {videos.length === 0 ? (
+          {videos.length === 0 && activeCampaign && hasVideosOn(contents, platform) ? (
+            <EmptyState
+              title={`Nenhum vídeo publicado em ${periodName(activeCampaign)}`}
+              description="Só contam os vídeos publicados dentro do período. Publique um novo para entrar neste ranking."
+              action={
+                <Link className="arena-link" to="/conteudos">
+                  Ver todos os conteúdos
+                </Link>
+              }
+            />
+          ) : videos.length === 0 ? (
             <EmptyState
               title="Nenhum vídeo coletado"
               description="Conecte a rede e aguarde a coleta para ver os vídeos com mais views."
@@ -625,11 +642,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {video.thumbnailUrl ? (
-                    <img src={video.thumbnailUrl} alt="" />
-                  ) : (
-                    <span className="arena-video-fallback" aria-hidden />
-                  )}
+                  <Thumbnail src={video.thumbnailUrl} fallbackClass="arena-video-fallback" />
                   <strong>{video.title || 'Sem título'}</strong>
                   <span>{formatViews(video.views)} views</span>
                 </a>
@@ -932,8 +945,35 @@ function RankRow({
 }
 
 function FeaturedMedia({ thumbnailUrl }: { thumbnailUrl: string | null }) {
-  if (thumbnailUrl) return <img src={thumbnailUrl} alt="" />;
-  return <span className="featured-fallback" aria-hidden />;
+  return <Thumbnail key={thumbnailUrl ?? 'sem-capa'} src={thumbnailUrl} fallbackClass="featured-fallback" />;
+}
+
+/** Capa que some para o bloco neutro se não carregar, em vez do ícone de imagem quebrada. */
+function Thumbnail({ src, fallbackClass }: { src: string | null; fallbackClass: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return <span className={fallbackClass} aria-hidden />;
+  return <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />;
+}
+
+function inCampaign(item: ContentItem, campaign: Campaign | undefined): boolean {
+  if (!campaign) return true;
+  if (!item.publishedAt) return false;
+  const published = new Date(item.publishedAt).getTime();
+  return (
+    published >= new Date(campaign.startsAt).getTime() &&
+    published < new Date(campaign.endsAt).getTime()
+  );
+}
+
+function hasVideosOn(contents: ContentItem[], platform: SocialPlatform): boolean {
+  return contents.some((item) => !item.excluded && item.platform === platform);
+}
+
+/** "Outubro de 2026" vira "outubro de 2026" no meio da frase; campanhas mantêm o nome. */
+function periodName(campaign: Campaign): string {
+  return campaign.kind === 'monthly'
+    ? campaign.name.charAt(0).toLocaleLowerCase('pt-BR') + campaign.name.slice(1)
+    : campaign.name;
 }
 
 function Avatar({

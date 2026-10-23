@@ -24,6 +24,7 @@ import {
 import { TokenEncryptionPort } from '../../ports/tokens.port';
 import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
+import { ThumbnailCacheService } from '../../infrastructure/media/thumbnail-cache.service';
 
 const MAX_PAGES = 100; // Safety limit per run
 const SNAPSHOT_MIN_INTERVAL_MS = 60 * 60 * 1000; // Skip duplicate snapshots within 1 hour
@@ -69,6 +70,7 @@ export class SyncAccountUseCase {
     private readonly contentRepo: ContentRepository,
     @Inject(INJECTION_TOKENS.METRICS_REPOSITORY)
     private readonly metricsRepo: MetricsRepository,
+    private readonly thumbnails: ThumbnailCacheService,
   ) {}
   
   async execute(jobId: string): Promise<void> {
@@ -324,6 +326,7 @@ export class SyncAccountUseCase {
     };
     
     const content = await this.contentRepo.upsert(input);
+    this.thumbnails.warm(content.id, item.thumbnailUrl);
     
     if (!item.viewsAvailable) return;
 

@@ -7,6 +7,7 @@ import { AppThrottlerGuard } from './adapters/http/guards/app-throttler.guard';
 // Infrastructure
 import { INJECTION_TOKENS } from './infrastructure/tokens/injection-tokens';
 import { SyncSchedulerService } from './infrastructure/scheduler/sync-scheduler.service';
+import { ThumbnailCacheService } from './infrastructure/media/thumbnail-cache.service';
 
 // Adapters - Auth & Crypto
 import { SupabaseAuthAdapter } from './adapters/auth/supabase-auth.adapter';
@@ -56,6 +57,7 @@ import { ContentsController } from './adapters/http/controllers/contents.control
 import { AdminController } from './adapters/http/controllers/admin.controller';
 import { AdminCompetitionController } from './adapters/http/controllers/admin-competition.controller';
 import { NotificationsController } from './adapters/http/controllers/notifications.controller';
+import { MediaController } from './adapters/http/controllers/media.controller';
 import {
   AdminApplicationsController,
   ApplicationsController,
@@ -172,6 +174,7 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     
     // Infrastructure
     SyncSchedulerService,
+    ThumbnailCacheService,
 
     // Guards (DI)
     AuthGuard,
@@ -187,6 +190,7 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     AdminController,
     AdminCompetitionController,
     NotificationsController,
+    MediaController,
     ApplicationsController,
     AdminApplicationsController,
   ],

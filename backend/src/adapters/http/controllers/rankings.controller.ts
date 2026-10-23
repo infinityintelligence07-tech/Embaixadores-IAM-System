@@ -2,6 +2,7 @@ import { Controller, Get, Query, UseGuards, Req, BadRequestException } from '@ne
 import { AuthGuard } from '../guards/auth.guard';
 import {
   AccountReviewStatus,
+  AppRole,
   MembershipStatus,
   RankingCategory,
   SocialPlatform,
@@ -200,6 +201,20 @@ export class RankingsController {
       );
       
       let reason = 'Fora do ranking no momento';
+
+      if (req.user.role === AppRole.Admin) {
+        return {
+          eligible: false,
+          reason: 'Conta da equipe não entra no ranking',
+          position: null,
+          total: published.entries.length,
+          score: null,
+          gapToAbove: null,
+          category,
+          platform,
+          entry: null,
+        };
+      }
       
       const teamNote =
         account &&

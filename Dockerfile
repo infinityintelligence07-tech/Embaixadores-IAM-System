@@ -30,6 +30,9 @@ COPY --from=frontend-build /app/frontend/dist ./public
 COPY supabase/migrations ./migrations
 
 ENV FRONTEND_DIST_PATH=/app/public
+ENV THUMBNAIL_CACHE_DIR=/app/cache/thumbnails
+# O volume nomeado herda dono e permissões deste diretório na primeira montagem.
+RUN mkdir -p /app/cache/thumbnails && chown -R app:app /app/cache
 
 USER app
 EXPOSE 3000

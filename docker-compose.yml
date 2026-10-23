@@ -8,6 +8,8 @@ services:
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
     env_file: .env
     restart: unless-stopped
+    volumes:
+      - thumbnail_cache:/app/cache/thumbnails
     expose:
       - "3000"
     networks:
@@ -52,3 +54,4 @@ networks:
 
 volumes:
   certbot_www:
+  thumbnail_cache:

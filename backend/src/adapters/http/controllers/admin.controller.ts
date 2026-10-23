@@ -34,6 +34,7 @@ import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-token
 import { ComputeAndPublishRankingUseCase } from '../../../application/rankings/compute-and-publish.use-case';
 import { AccountReviewService } from '../../../application/social/account-review.service';
 import { daysWithoutPosting } from '../../../domain/view-metrics';
+import { thumbnailPath } from './media.controller';
 import {
   ConnectionStatus,
   ProfileId,
@@ -290,7 +291,7 @@ export class AdminController {
       url: content.permalink || '',
       views: content.latestViews || 0,
       publishedAt: content.publishedAt?.toISOString() || '',
-      thumbnailUrl: content.thumbnailUrl,
+      thumbnailUrl: thumbnailPath(content),
       excluded: true,
     };
   }

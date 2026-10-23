@@ -4,6 +4,7 @@ import { SocialPlatform } from '../../../domain/types';
 import { SocialAccountRepository, ContentRepository } from '../../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { countsTowardRanking } from '../../../domain/ranked-media';
+import { thumbnailPath } from './media.controller';
 
 @Controller('api')
 @UseGuards(AuthGuard)
@@ -41,7 +42,7 @@ export class ContentsController {
           url: content.permalink || '',
           views: content.latestViews || 0,
           publishedAt: content.publishedAt?.toISOString() || '',
-          thumbnailUrl: content.thumbnailUrl,
+          thumbnailUrl: thumbnailPath(content),
           excluded: content.excludedAt !== null,
         });
       }

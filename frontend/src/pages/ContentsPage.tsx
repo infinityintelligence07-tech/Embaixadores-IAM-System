@@ -14,6 +14,32 @@ function formatViews(views: number): string {
   return new Intl.NumberFormat('pt-BR').format(views);
 }
 
+function formatPublished(value: string): string {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return 'Data em coleta';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(date);
+}
+
+function ContentThumbnail({ src }: { src: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-surface-elevated text-text-muted">
+        <Video className="size-6" aria-hidden />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="size-16 shrink-0 rounded-lg object-cover"
+    />
+  );
+}
+
 export function ContentsPage() {
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,17 +122,7 @@ export function ContentsPage() {
               key={item.id}
               className="flex gap-4 rounded-[14px] border border-border bg-surface-card p-4"
             >
-              {item.thumbnailUrl ? (
-                <img
-                  src={item.thumbnailUrl}
-                  alt=""
-                  className="size-16 shrink-0 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-surface-elevated text-text-muted">
-                  <Video className="size-6" aria-hidden />
-                </div>
-              )}
+              <ContentThumbnail src={item.thumbnailUrl} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="min-w-0 max-w-full truncate font-medium text-text">{item.title}</h2>
@@ -115,10 +131,7 @@ export function ContentsPage() {
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-text-muted">
-                  {formatViews(item.views)} views ·{' '}
-                  {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(
-                    new Date(item.publishedAt),
-                  )}
+                  {formatViews(item.views)} views · {formatPublished(item.publishedAt)}
                 </p>
                 <a
                   href={item.url}
