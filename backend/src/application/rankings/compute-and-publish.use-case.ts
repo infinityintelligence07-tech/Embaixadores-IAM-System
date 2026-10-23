@@ -43,9 +43,16 @@ export class ComputeAndPublishRankingUseCase {
   /** Ranking geral e de cada campanha ou mês que ainda recebe views. */
   async publishAll(): Promise<void> {
     const now = this.clock.now();
-    await this.campaigns.ensureCurrentMonth(now);
-    const open = await this.campaigns.toCompute(now);
-    for (const campaign of [null, ...open]) {
+    // O ranking geral sai primeiro e não depende das campanhas.
+    await this.publishBoards(null);
+    let open: Campaign[] = [];
+    try {
+      await this.campaigns.ensureCurrentMonth(now);
+      open = await this.campaigns.toCompute(now);
+    } catch (error) {
+      this.logger.error(`Falha ao preparar rankings por período: ${error}`);
+    }
+    for (const campaign of open) {
       await this.publishBoards(campaign);
     }
   }

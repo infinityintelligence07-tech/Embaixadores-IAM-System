@@ -43,8 +43,11 @@ export class CampaignsService {
   ) {}
 
   async getMode(): Promise<RankingMode> {
-    const value = await this.settingsRepo.get<string>('ranking_mode');
-    return value === 'campaign' ? 'campaign' : 'monthly';
+    // Lido direto: o jsonb já chega como texto, e o SettingsRepository tentaria um JSON.parse a mais.
+    const result = await getPool().query<{ value: unknown }>(
+      `SELECT value FROM app_settings WHERE key = 'ranking_mode'`,
+    );
+    return result.rows[0]?.value === 'campaign' ? 'campaign' : 'monthly';
   }
 
   async setMode(mode: RankingMode, actorId: ProfileId): Promise<RankingMode> {

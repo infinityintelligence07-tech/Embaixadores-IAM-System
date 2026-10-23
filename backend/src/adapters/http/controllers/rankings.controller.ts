@@ -1,6 +1,11 @@
 import { Controller, Get, Query, UseGuards, Req, BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '../guards/auth.guard';
-import { SocialPlatform, RankingCategory } from '../../../domain/types';
+import {
+  AccountReviewStatus,
+  MembershipStatus,
+  RankingCategory,
+  SocialPlatform,
+} from '../../../domain/types';
 import { RankingRepository, MembershipRepository, SocialAccountRepository } from '../../../ports/repositories.port';
 import { isEligibleForRanking } from '../../../domain/eligibility';
 import { ClockPort } from '../../../ports/clock.port';
@@ -196,13 +201,24 @@ export class RankingsController {
       
       let reason = 'Fora do ranking no momento';
       
-      if (!membership || membership.status !== 'approved') {
+      const teamNote =
+        account &&
+        (account.reviewStatus === AccountReviewStatus.ChangesRequested ||
+          account.reviewStatus === AccountReviewStatus.Rejected);
+
+      if ((!membership || membership.status !== 'approved') && !teamNote) {
+        reason = 'Cadastro ainda não aprovado';
+      } else if (!membership) {
         reason = 'Cadastro ainda não aprovado';
       } else if (!account) {
         reason = 'Conta não conectada';
       } else {
         const eligibility = isEligibleForRanking({
-          membershipStatus: membership.status,
+          // Com recado da equipe na conta, o recado vale mais que o "aguardando aprovação".
+          membershipStatus:
+            teamNote && membership.status === MembershipStatus.Pending
+              ? MembershipStatus.Approved
+              : membership.status,
           connectionStatus: account.status,
           reviewStatus: account.reviewStatus,
           reviewNote: account.reviewNote,
