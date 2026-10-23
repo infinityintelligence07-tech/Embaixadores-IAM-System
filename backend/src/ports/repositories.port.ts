@@ -12,6 +12,7 @@ import {
   SyncRun,
 } from '../domain/entities';
 import {
+  AccountReviewStatus,
   AppRole,
   ConnectionStatus,
   ContentId,
@@ -111,6 +112,10 @@ export interface UpdateSocialAccountInput {
   syncCoverageRatio?: number | null;
   syncMessage?: string | null;
   disconnectedAt?: Date | null;
+  reviewStatus?: AccountReviewStatus;
+  reviewNote?: string | null;
+  reviewedAt?: Date | null;
+  reviewedBy?: ProfileId | null;
 }
 
 export interface StoredSocialCredentials {
@@ -242,8 +247,10 @@ export interface MetricsRepository {
   getLatestAccountSnapshot(
     socialAccountId: SocialAccountId,
   ): Promise<AccountMetricSnapshot | null>;
+  /** Com `window`, só somam os vídeos publicados dentro do período da campanha. */
   aggregateEligibleMetricsByAccount(
     socialAccountId: SocialAccountId,
+    window?: { from: Date; to: Date } | null,
   ): Promise<AmbassadorMetricAggregate | null>;
 }
 
@@ -318,6 +325,8 @@ export interface PublishRankingEntryInput {
 export interface PublishRankingInput {
   platform: SocialPlatform;
   category: RankingCategory;
+  /** Null publica o ranking geral; um id publica o ranking daquela campanha ou mês. */
+  campaignId: string | null;
   staleToleranceHours: number;
   notes?: string | null;
   computedAt: Date;
@@ -328,6 +337,7 @@ export interface RankingRepository {
   findPublished(
     platform: SocialPlatform,
     category: RankingCategory,
+    campaignId?: string | null,
   ): Promise<{ version: RankingVersion; entries: RankingEntry[] } | null>;
   findVersionById(id: RankingVersionId): Promise<RankingVersion | null>;
   /**

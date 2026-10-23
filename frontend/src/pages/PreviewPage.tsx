@@ -98,6 +98,8 @@ const arenaSnapshot: ArenaSnapshot = {
       lastSyncAt: '2026-10-02T18:10:00.000Z',
       syncMessage: null,
       verificationCode: null,
+      reviewStatus: 'approved',
+      reviewNote: null,
     },
     {
       id: 'tt',
@@ -108,6 +110,8 @@ const arenaSnapshot: ArenaSnapshot = {
       lastSyncAt: '2026-10-02T18:12:00.000Z',
       syncMessage: null,
       verificationCode: null,
+      reviewStatus: 'approved',
+      reviewNote: null,
     },
   ],
   contents: [

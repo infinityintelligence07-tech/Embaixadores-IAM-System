@@ -402,6 +402,37 @@
   margin-top: 8px;
 }
 
+.lp-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fog);
+  cursor: pointer;
+}
+
+.lp-consent input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  accent-color: var(--sky);
+}
+
+.lp-consent a,
+.lp-login-hint a {
+  color: var(--white);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.lp-login-hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--fog-dim);
+}
+
 .lp-foot {
   display: flex;
   align-items: center;

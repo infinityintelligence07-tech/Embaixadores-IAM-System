@@ -13,6 +13,10 @@ import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 import { isEligibleForRanking } from '../../domain/eligibility';
 import { compareRankingCandidates, assignSequentialPositions, RankingCandidate } from '../../domain/ranking-rules';
+import { Campaign, CampaignsService } from './campaigns.service';
+
+const PLATFORMS = [SocialPlatform.Instagram, SocialPlatform.TikTok];
+const CATEGORIES = [RankingCategory.TotalViews, RankingCategory.BestVideo];
 
 @Injectable()
 export class ComputeAndPublishRankingUseCase {
@@ -33,9 +37,32 @@ export class ComputeAndPublishRankingUseCase {
     private readonly profileRepo: ProfileRepository,
     @Inject(INJECTION_TOKENS.SETTINGS_REPOSITORY)
     private readonly settingsRepo: SettingsRepository,
+    private readonly campaigns: CampaignsService,
   ) {}
+
+  /** Ranking geral e de cada campanha ou mês que ainda recebe views. */
+  async publishAll(): Promise<void> {
+    const now = this.clock.now();
+    await this.campaigns.ensureCurrentMonth(now);
+    const open = await this.campaigns.toCompute(now);
+    for (const campaign of [null, ...open]) {
+      await this.publishBoards(campaign);
+    }
+  }
+
+  async publishBoards(campaign: Campaign | null): Promise<void> {
+    for (const platform of PLATFORMS) {
+      for (const category of CATEGORIES) {
+        await this.execute(platform, category, campaign);
+      }
+    }
+  }
   
-  async execute(platform: SocialPlatform, category: RankingCategory): Promise<void> {
+  async execute(
+    platform: SocialPlatform,
+    category: RankingCategory,
+    campaign: Campaign | null = null,
+  ): Promise<void> {
     const now = this.clock.now();
     
     // Get stale tolerance from settings
@@ -45,7 +72,7 @@ export class ComputeAndPublishRankingUseCase {
     );
     
     this.logger.log(
-      `Computing ${category} ranking for ${platform} (stale tolerance: ${staleToleranceHours}h)`,
+      `Computing ${category} ranking for ${platform}${campaign ? ` (${campaign.name})` : ''} (stale tolerance: ${staleToleranceHours}h)`,
     );
     
     // Get all approved memberships
@@ -71,6 +98,8 @@ export class ComputeAndPublishRankingUseCase {
       const eligibility = isEligibleForRanking({
         membershipStatus: membership.status,
         connectionStatus: account.status,
+        reviewStatus: account.reviewStatus,
+        reviewNote: account.reviewNote,
         lastSyncedAt: account.lastSyncedAt,
         staleToleranceHours,
         now,
@@ -88,6 +117,7 @@ export class ComputeAndPublishRankingUseCase {
       // Get metrics
       const aggregate = await this.metricsRepo.aggregateEligibleMetricsByAccount(
         account.id,
+        campaign ? { from: campaign.startsAt, to: campaign.endsAt } : null,
       );
       
       if (!aggregate) {
@@ -142,6 +172,7 @@ export class ComputeAndPublishRankingUseCase {
     const result = await this.rankingRepo.publishAtomic({
       platform,
       category,
+      campaignId: campaign?.id ?? null,
       staleToleranceHours,
       computedAt: now,
       entries,

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ApiError, api } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { useSurfaceTheme } from "@/lib/theme";
 import "./CapturePage.css";
 
@@ -16,6 +18,8 @@ type FormState = {
   instagram_handle: string;
   tiktok_handle: string;
   redes_sociais: string[];
+  password: string;
+  ranking_consent: boolean;
 };
 
 const INITIAL: FormState = {
@@ -25,6 +29,8 @@ const INITIAL: FormState = {
   instagram_handle: "",
   tiktok_handle: "",
   redes_sociais: [],
+  password: "",
+  ranking_consent: false,
 };
 
 function normalizeHandle(value: string) {
@@ -77,9 +83,16 @@ const ICONS: Record<string, ReactNode> = {
 export function CapturePage() {
   useSurfaceTheme("arena");
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (location.hash === "#formulario") {
+      document.getElementById("formulario")?.scrollIntoView({ block: "start" });
+    }
+  }, [location.hash]);
 
   function toggleNetwork(id: string) {
     setForm((prev) => {
@@ -115,55 +128,54 @@ export function CapturePage() {
       setLoading(false);
       return;
     }
+    if (form.password.length < 8) {
+      setError("A senha precisa ter pelo menos 8 caracteres.");
+      setLoading(false);
+      return;
+    }
+    if (!form.ranking_consent) {
+      setError("Para participar, autorize a divulgação do seu nome no ranking.");
+      setLoading(false);
+      return;
+    }
 
+    const email = form.email.trim().toLowerCase();
     try {
-      const payload = {
+      await api.signup({
         nome_completo: form.nome_completo,
-        email: form.email,
+        email,
         whatsapp: form.whatsapp,
         redes_sociais: form.redes_sociais,
-        instagram_handle: hasInstagram
-          ? normalizeHandle(form.instagram_handle)
-          : "",
+        instagram_handle: hasInstagram ? normalizeHandle(form.instagram_handle) : "",
         tiktok_handle: hasTiktok ? normalizeHandle(form.tiktok_handle) : "",
-      };
-      const response = await fetch("/api/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        password: form.password,
+        ranking_consent: true,
       });
-      let result: { message?: unknown } = {};
-      try {
-        result = (await response.json()) as { message?: unknown };
-      } catch {
-        result = {};
-      }
-
-      if (!response.ok) {
-        const message = Array.isArray(result.message)
-          ? result.message.find((item): item is string => typeof item === "string")
-          : typeof result.message === "string"
-            ? result.message
-            : undefined;
-        throw new Error(
-          message && !/^(bad request|conflict|internal server error|not found)$/i.test(message)
-            ? message
-            : "Não foi possível enviar sua candidatura. Revise os dados e tente de novo.",
-        );
-      }
-
-      navigate("/sucesso");
     } catch (err) {
       setError(
-        err instanceof TypeError
-          ? "Sem conexão com o servidor. Verifique a internet e tente de novo."
-          : err instanceof Error && err.message
-            ? err.message
-            : "Não foi possível enviar sua candidatura. Tente de novo.",
+        err instanceof ApiError
+          ? err.message
+          : err instanceof TypeError
+            ? "Sem conexão com o servidor. Verifique a internet e tente de novo."
+            : "Não foi possível criar sua conta. Tente de novo.",
       );
-    } finally {
       setLoading(false);
+      return;
     }
+
+    // A conta já existe: entra na hora e segue para conectar as redes.
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password: form.password,
+    });
+    setLoading(false);
+    if (signInError) {
+      navigate("/login", {
+        state: { reason: "Sua conta foi criada. Entre com o e-mail e a senha que você escolheu." },
+      });
+      return;
+    }
+    navigate("/onboarding", { replace: true });
   }
 
   return (
@@ -218,10 +230,10 @@ export function CapturePage() {
         <section className="lp-form" id="formulario">
           <header className="lp-form__intro">
             <p className="lp-form__eyebrow">Inscrição</p>
-            <h2 className="lp-form__title">Candidatura</h2>
+            <h2 className="lp-form__title">Crie sua conta</h2>
             <p className="lp-form__sub">
-              Marque Instagram, TikTok ou os dois. O @ de cada rede marcada é
-              obrigatório.
+              Marque Instagram, TikTok ou os dois. Depois de enviar, você já entra
+              no app para confirmar a sua conta e aguarda a aprovação da equipe.
             </p>
           </header>
 
@@ -284,6 +296,24 @@ export function CapturePage() {
                 />
               </div>
 
+              <div className="field">
+                <label htmlFor="password">
+                  Senha <span>*</span>
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Mínimo de 8 caracteres"
+                  minLength={8}
+                  required
+                  value={form.password}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, password: e.target.value }))
+                  }
+                />
+              </div>
             </div>
 
             <fieldset className="lp-networks">
@@ -366,6 +396,21 @@ export function CapturePage() {
               </div>
             ) : null}
 
+            <label className="lp-consent">
+              <input
+                type="checkbox"
+                checked={form.ranking_consent}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, ranking_consent: e.target.checked }))
+                }
+              />
+              <span>
+                Autorizo a divulgação do meu nome no ranking e concordo com os{" "}
+                <Link to="/termos">Termos de uso</Link> e a{" "}
+                <Link to="/privacidade">Política de privacidade</Link>.
+              </span>
+            </label>
+
             {error ? (
               <div className="form-error" role="alert">
                 {error}
@@ -377,8 +422,11 @@ export function CapturePage() {
               type="submit"
               disabled={loading}
             >
-              {loading ? "Enviando..." : "Enviar candidatura"}
+              {loading ? "Criando sua conta..." : "Criar conta e entrar"}
             </button>
+            <p className="lp-login-hint">
+              Já tem conta? <Link to="/login">Entrar</Link>
+            </p>
           </form>
         </section>
       </main>

@@ -8,6 +8,7 @@ import {
 } from '../../../ports/repositories.port';
 import { SocialAccount } from '../../../domain/entities';
 import {
+  AccountReviewStatus,
   SocialAccountId,
   ProfileId,
   SocialPlatform,
@@ -198,6 +199,22 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
       setClauses.push(`verified_at = $${paramIndex++}`);
       values.push(input.verifiedAt);
     }
+    if (input.reviewStatus !== undefined) {
+      setClauses.push(`review_status = $${paramIndex++}`);
+      values.push(input.reviewStatus);
+    }
+    if (input.reviewNote !== undefined) {
+      setClauses.push(`review_note = $${paramIndex++}`);
+      values.push(input.reviewNote);
+    }
+    if (input.reviewedAt !== undefined) {
+      setClauses.push(`reviewed_at = $${paramIndex++}`);
+      values.push(input.reviewedAt);
+    }
+    if (input.reviewedBy !== undefined) {
+      setClauses.push(`reviewed_by = $${paramIndex++}`);
+      values.push(input.reviewedBy);
+    }
     
     setClauses.push(`updated_at = NOW()`);
     values.push(id);
@@ -316,6 +333,9 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
       syncMessage: row.sync_message,
       verificationCode: row.verification_code ?? null,
       verifiedAt: row.verified_at ? new Date(row.verified_at) : null,
+      reviewStatus: (row.review_status ?? AccountReviewStatus.Pending) as AccountReviewStatus,
+      reviewNote: row.review_note ?? null,
+      reviewedAt: row.reviewed_at ? new Date(row.reviewed_at) : null,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       disconnectedAt: row.disconnected_at ? new Date(row.disconnected_at) : null,

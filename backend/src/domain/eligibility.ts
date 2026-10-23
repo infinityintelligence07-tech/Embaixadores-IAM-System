@@ -1,4 +1,4 @@
-import { ConnectionStatus, MembershipStatus } from './types';
+import { AccountReviewStatus, ConnectionStatus, MembershipStatus } from './types';
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MIN_SYNC_COVERAGE_RATIO = 0.99;
@@ -6,6 +6,8 @@ const MIN_SYNC_COVERAGE_RATIO = 0.99;
 export interface RankingEligibilityInput {
   membershipStatus: MembershipStatus;
   connectionStatus: ConnectionStatus;
+  reviewStatus: AccountReviewStatus;
+  reviewNote: string | null;
   lastSyncedAt: Date | null;
   staleToleranceHours: number;
   now: Date;
@@ -30,6 +32,28 @@ export function isEligibleForRanking(
 
   if (input.membershipStatus !== MembershipStatus.Approved) {
     return { eligible: false, reason: 'Aguardando aprovação da equipe.' };
+  }
+
+  if (input.reviewStatus === AccountReviewStatus.Rejected) {
+    return {
+      eligible: false,
+      reason: input.reviewNote
+        ? `A equipe não aprovou esta conta para a competição: ${input.reviewNote}`
+        : 'A equipe não aprovou esta conta para a competição.',
+    };
+  }
+
+  if (input.reviewStatus === AccountReviewStatus.ChangesRequested) {
+    return {
+      eligible: false,
+      reason: input.reviewNote
+        ? `A equipe pediu um ajuste nesta conta: ${input.reviewNote}`
+        : 'A equipe pediu um ajuste nesta conta antes de liberar o ranking.',
+    };
+  }
+
+  if (input.reviewStatus !== AccountReviewStatus.Approved) {
+    return { eligible: false, reason: 'Conta em análise pela equipe.' };
   }
 
   if (input.connectionStatus !== ConnectionStatus.Connected) {

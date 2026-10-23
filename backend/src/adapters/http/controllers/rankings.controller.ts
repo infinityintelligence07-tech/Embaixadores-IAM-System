@@ -6,6 +6,11 @@ import { isEligibleForRanking } from '../../../domain/eligibility';
 import { ClockPort } from '../../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { Inject } from '@nestjs/common';
+import { CampaignsService } from '../../../application/rankings/campaigns.service';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Valor do parâmetro `campaign` para pedir o ranking desde o início, sem período. */
+const GENERAL = 'geral';
 
 const PLATFORMS = new Set<string>(Object.values(SocialPlatform));
 const CATEGORIES = new Set<string>(Object.values(RankingCategory));
@@ -47,7 +52,35 @@ export class RankingsController {
     private readonly membershipRepo: MembershipRepository,
     @Inject(INJECTION_TOKENS.SOCIAL_ACCOUNT_REPOSITORY)
     private readonly socialAccountRepo: SocialAccountRepository,
+    private readonly campaigns: CampaignsService,
   ) {}
+
+  /** Campanhas e meses que já começaram, mais o geral. `defaultId` é o que abre primeiro. */
+  @Get('campaigns')
+  async listCampaigns() {
+    const now = this.clock.now();
+    const all = await this.campaigns.list();
+    const started = all.filter((item) => item.startsAt <= now);
+    const fallback = this.campaigns.pickDefault(all, now);
+    return {
+      defaultId: fallback?.id ?? GENERAL,
+      items: started.map((item) => this.campaigns.toView(item, now)),
+    };
+  }
+
+  /** Sem parâmetro, usa a campanha padrão; `geral` pede o ranking sem período. */
+  private async resolveCampaign(value?: string): Promise<{ id: string | null }> {
+    if (value === GENERAL) return { id: null };
+    if (value) {
+      if (!UUID.test(value)) throw new BadRequestException('Campanha inválida.');
+      const found = await this.campaigns.findById(value);
+      if (!found) throw new BadRequestException('Campanha não encontrada.');
+      return { id: found.id };
+    }
+    const now = this.clock.now();
+    const fallback = this.campaigns.pickDefault(await this.campaigns.list(), now);
+    return { id: fallback?.id ?? null };
+  }
   
   @Get()
   async getRankings(
@@ -58,14 +91,16 @@ export class RankingsController {
     @Query('q') searchQuery?: string,
     @Query('page') pageParam?: string,
     @Query('pageSize') pageSizeParam?: string,
+    @Query('campaign') campaignParam?: string,
   ) {
     const platform = parsePlatform(platformParam);
     const category = parseCategory(categoryParam);
     const view = parseView(viewParam);
     const page = clampInt(pageParam, 1, 1, 10_000);
     const pageSize = clampInt(pageSizeParam, 50, 1, 100);
+    const campaign = await this.resolveCampaign(campaignParam);
     
-    const published = await this.rankingRepo.findPublished(platform, category);
+    const published = await this.rankingRepo.findPublished(platform, category, campaign.id);
     
     if (!published) {
       return {
@@ -76,6 +111,7 @@ export class RankingsController {
         view,
         category,
         platform,
+        campaignId: campaign.id ?? GENERAL,
       };
     }
     
@@ -117,6 +153,7 @@ export class RankingsController {
       view,
       category,
       platform,
+      campaignId: campaign.id ?? GENERAL,
     };
   }
   
@@ -125,11 +162,13 @@ export class RankingsController {
     @Req() req: any,
     @Query('platform') platformParam?: string,
     @Query('category') categoryParam?: string,
+    @Query('campaign') campaignParam?: string,
   ) {
     const platform = parsePlatform(platformParam);
     const category = parseCategory(categoryParam);
+    const campaign = await this.resolveCampaign(campaignParam);
     
-    const published = await this.rankingRepo.findPublished(platform, category);
+    const published = await this.rankingRepo.findPublished(platform, category, campaign.id);
     
     if (!published) {
       return {
@@ -165,6 +204,8 @@ export class RankingsController {
         const eligibility = isEligibleForRanking({
           membershipStatus: membership.status,
           connectionStatus: account.status,
+          reviewStatus: account.reviewStatus,
+          reviewNote: account.reviewNote,
           lastSyncedAt: account.lastSyncedAt,
           staleToleranceHours: published.version.staleToleranceHours,
           now: this.clock.now(),

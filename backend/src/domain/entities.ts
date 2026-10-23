@@ -1,4 +1,5 @@
 import {
+  AccountReviewStatus,
   AppRole,
   AuditLogId,
   ConnectionStatus,
@@ -61,6 +62,9 @@ export interface SocialAccount {
   syncMessage: string | null;
   verificationCode: string | null;
   verifiedAt: Date | null;
+  reviewStatus: AccountReviewStatus;
+  reviewNote: string | null;
+  reviewedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   disconnectedAt: Date | null;

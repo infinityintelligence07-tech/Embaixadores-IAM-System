@@ -15,6 +15,7 @@ import {
   type SocialAccount,
   type SocialPlatform,
 } from '@/lib/api';
+import { reviewBadge, reviewLine } from '@/lib/connection';
 import {
   ABANDONED_OAUTH_HINT,
   clearOAuthStarted,
@@ -200,6 +201,21 @@ export function ConnectionsPage() {
     }
   }
 
+  async function handleRequestReview(id: string) {
+    setActionId(id);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.requestAccountReview(id);
+      setNotice('Pronto. A equipe vai olhar a conta de novo e você recebe um aviso aqui.');
+      await loadAccounts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível pedir a nova análise.');
+    } finally {
+      setActionId(null);
+    }
+  }
+
   async function handleDisconnect(account: SocialAccount) {
     setActionId(account.id);
     setError(null);
@@ -265,8 +281,9 @@ export function ConnectionsPage() {
         <CompetitionGate
           accounts={accounts}
           persist
-          busy={actionId === 'instagram' || actionId === 'tiktok' ? actionId : null}
+          busy={actionId}
           onConnect={(platform) => void handleConnect(platform)}
+          onRequestReview={(id) => void handleRequestReview(id)}
         />
       )}
 
@@ -289,6 +306,11 @@ export function ConnectionsPage() {
                     {account.transport !== 'official_api' ? (
                       <Badge tone="neutral">{transportLabel(account.transport)}</Badge>
                     ) : null}
+                    {account.status !== 'pending_verification' ? (
+                      <Badge tone={reviewBadge(account.reviewStatus).tone}>
+                        {reviewBadge(account.reviewStatus).label}
+                      </Badge>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-sm text-text-muted">
                     {platformLabel(account.platform)}
@@ -304,6 +326,12 @@ export function ConnectionsPage() {
                   {account.syncMessage ? (
                     <p className="mt-2 text-sm text-text-muted" role="status">
                       {account.syncMessage}
+                    </p>
+                  ) : null}
+                  {account.status !== 'pending_verification' &&
+                  reviewLine(account.reviewStatus, account.reviewNote) ? (
+                    <p className="mt-2 text-sm font-medium text-text" role="status">
+                      {reviewLine(account.reviewStatus, account.reviewNote)}
                     </p>
                   ) : null}
                 </div>
@@ -366,7 +394,9 @@ export function ConnectionsPage() {
         onChanged={(next) => {
           if (next.status !== 'pending_verification') {
             setNotice(
-              `${platformLabel(next.platform)} confirmado. A primeira coleta começa agora e as views entram no ranking em seguida.`,
+              next.reviewStatus === 'approved'
+                ? `${platformLabel(next.platform)} confirmado. A coleta começa agora e as views entram no ranking em seguida.`
+                : `${platformLabel(next.platform)} confirmado. A equipe vai analisar a conta e você recebe um aviso aqui quando ela entrar no ranking.`,
             );
           }
           void loadAccounts();

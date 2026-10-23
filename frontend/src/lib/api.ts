@@ -39,9 +39,69 @@ export interface AmbassadorApplication {
   created_at: string;
   reviewed_at: string | null;
   reviewed_by_name: string | null;
+  review_note: string | null;
 }
 
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+/** Decisão da equipe sobre a conta: só `approved` entra no ranking. */
+export type AccountReviewStatus = 'pending' | 'approved' | 'changes_requested' | 'rejected';
+export type ReviewDecision = Exclude<AccountReviewStatus, 'pending'>;
+
+export interface AccountReviewItem {
+  accountId: string;
+  platform: SocialPlatform;
+  username: string | null;
+  profileUrl: string | null;
+  connectionStatus: ConnectionStatus;
+  verifiedAt: string | null;
+  reviewStatus: AccountReviewStatus;
+  reviewNote: string | null;
+  connectedAt: string;
+  profileId: string;
+  fullName: string;
+  publicName: string;
+  email: string;
+  whatsapp: string | null;
+  membershipStatus: UserStatus | null;
+}
+
+export interface AppNotification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export type CampaignState = 'scheduled' | 'active' | 'finished';
+export type RankingMode = 'monthly' | 'campaign';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  kind: 'monthly' | 'campaign';
+  startsAt: string;
+  endsAt: string;
+  firstDay: string;
+  lastDay: string;
+  state: CampaignState;
+}
+
+/** Valor de campanha para o ranking desde o início, sem período. */
+export const GENERAL_RANKING = 'geral';
+
+export interface SignupPayload {
+  nome_completo: string;
+  email: string;
+  whatsapp: string;
+  redes_sociais: string[];
+  instagram_handle: string;
+  tiktok_handle: string;
+  password: string;
+  ranking_consent: boolean;
+}
 
 export interface MeResponse {
   id: string;
@@ -91,6 +151,8 @@ export interface SocialAccount {
   syncMessage: string | null;
   /** Código para a bio, presente só enquanto a conta aguarda confirmação. */
   verificationCode: string | null;
+  reviewStatus: AccountReviewStatus;
+  reviewNote: string | null;
 }
 
 /** "oauth" abre o login da rede; "handle" pede o @ e confirma a posse pela bio. */
@@ -129,6 +191,7 @@ export interface RankingsResponse {
   view: RankingView;
   category: RankingCategory;
   platform: SocialPlatform | null;
+  campaignId?: string;
 }
 
 export interface MyRankingResponse {
@@ -307,6 +370,7 @@ export const api = {
     q?: string;
     page?: number;
     pageSize?: number;
+    campaign?: string;
   }) => {
     const search = new URLSearchParams();
     if (params.platform) search.set('platform', params.platform);
@@ -315,19 +379,69 @@ export const api = {
     if (params.q) search.set('q', params.q);
     if (params.page) search.set('page', String(params.page));
     if (params.pageSize) search.set('pageSize', String(params.pageSize));
+    if (params.campaign) search.set('campaign', params.campaign);
     const query = search.toString();
     return fetchJson<RankingsResponse>(`/api/rankings${query ? `?${query}` : ''}`);
   },
 
-  myRanking: (params?: { platform?: SocialPlatform; category?: RankingCategory }) => {
+  myRanking: (params?: {
+    platform?: SocialPlatform;
+    category?: RankingCategory;
+    campaign?: string;
+  }) => {
     const search = new URLSearchParams();
     if (params?.platform) search.set('platform', params.platform);
     if (params?.category) search.set('category', params.category);
+    if (params?.campaign) search.set('campaign', params.campaign);
     const query = search.toString();
     return fetchJson<MyRankingResponse>(
       `/api/rankings/me${query ? `?${query}` : ''}`,
     );
   },
+
+  rankingCampaigns: () =>
+    fetchJson<{ defaultId: string; items: Campaign[] }>('/api/rankings/campaigns'),
+
+  notifications: () => fetchJson<AppNotification[]>('/api/notifications'),
+
+  markNotificationRead: (id: string) =>
+    fetchJson<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: 'POST' }),
+
+  requestAccountReview: (id: string) =>
+    fetchJson<SocialAccount>(`/api/social/accounts/${id}/request-review`, { method: 'POST' }),
+
+  /** Cadastro público: cria a conta na hora com a senha escolhida. */
+  signup: (payload: SignupPayload) =>
+    fetchJson<{ id: string; accountCreated: true }>('/api/applications', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  adminAccountReviews: () => fetchJson<AccountReviewItem[]>('/api/admin/account-reviews'),
+
+  adminReviewAccount: (id: string, decision: ReviewDecision, note?: string) =>
+    fetchJson<{ id: string; reviewStatus: AccountReviewStatus; reviewNote: string | null }>(
+      `/api/admin/accounts/${id}/review`,
+      { method: 'POST', body: JSON.stringify(note ? { decision, note } : { decision }) },
+    ),
+
+  adminCampaigns: () =>
+    fetchJson<{ mode: RankingMode; items: Campaign[] }>('/api/admin/campaigns'),
+
+  adminCreateCampaign: (payload: { name: string; startDate: string; endDate: string }) =>
+    fetchJson<Campaign>('/api/admin/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  adminDeleteCampaign: (id: string) =>
+    fetchJson<{ ok: boolean }>(`/api/admin/campaigns/${id}`, { method: 'DELETE' }),
+
+  adminSetRankingMode: (mode: RankingMode) =>
+    fetchJson<{ mode: RankingMode }>('/api/admin/ranking-mode', {
+      method: 'PATCH',
+      body: JSON.stringify({ mode }),
+    }),
 
   updateProfile: (payload: {
     fullName?: string;
@@ -382,10 +496,10 @@ export const api = {
 
   applications: () => fetchJson<AmbassadorApplication[]>('/api/admin/applications'),
 
-  updateApplication: (id: string, status: AmbassadorApplication['status']) =>
+  updateApplication: (id: string, status: AmbassadorApplication['status'], note?: string) =>
     fetchJson<AmbassadorApplication>(`/api/admin/applications/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(note ? { status, note } : { status }),
     }),
 
   deleteApplication: (id: string) =>

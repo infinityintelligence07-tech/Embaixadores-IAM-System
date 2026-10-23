@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { NoteDialog } from '@/components/admin/NoteDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
@@ -188,15 +189,15 @@ export function NewMembersSection({
   const shownSignups = filter === 'pending' || filter === 'all' ? directSignups : [];
   const total = shownApplications.length + shownSignups.length;
 
-  async function review(item: AmbassadorApplication, status: ApplicationStatus) {
+  async function review(item: AmbassadorApplication, status: ApplicationStatus, note?: string) {
     setUpdatingId(item.id);
     try {
-      const updated = await api.updateApplication(item.id, status);
+      const updated = await api.updateApplication(item.id, status, note);
       setApplications((current) => current.map((row) => (row.id === item.id ? updated : row)));
       onMessage(
         status === 'approved'
-          ? `${updated.nome_completo} aprovado. O acesso foi criado e o convite foi enviado para ${updated.email}.`
-          : `Candidatura de ${updated.nome_completo} rejeitada.`,
+          ? `${updated.nome_completo} aprovado. As redes que ele já confirmou entram no ranking, e ele recebeu o aviso no app.`
+          : `Candidatura de ${updated.nome_completo} reprovada. O motivo aparece no app dele.`,
       );
       onChanged();
     } catch (err) {
@@ -311,7 +312,7 @@ export function NewMembersSection({
                   disabled={busy || preview}
                   onClick={() => setPendingReject(item)}
                 >
-                  Rejeitar
+                  Reprovar
                 </button>
               ) : null}
             </div>
@@ -366,11 +367,17 @@ export function NewMembersSection({
                 </div>
                 {item.reviewed_at ? (
                   <div>
-                    <dt>{item.status === 'approved' ? 'Aprovado' : 'Rejeitado'}</dt>
+                    <dt>{item.status === 'approved' ? 'Aprovado' : 'Reprovado'}</dt>
                     <dd>
                       {formatWhen(item.reviewed_at)}
                       {item.reviewed_by_name ? ` por ${item.reviewed_by_name}` : ''}
                     </dd>
+                  </div>
+                ) : null}
+                {item.review_note ? (
+                  <div>
+                    <dt>Motivo enviado</dt>
+                    <dd>{item.review_note}</dd>
                   </div>
                 ) : null}
                 <div className="admin-details-foot">
@@ -465,14 +472,18 @@ export function NewMembersSection({
         </div>
       ) : null}
 
-      <ConfirmDialog
+      <NoteDialog
         open={pendingReject !== null}
-        title={`Rejeitar a candidatura de ${pendingReject?.nome_completo ?? ''}?`}
-        description="A pessoa não recebe acesso. Você pode aprovar depois, se mudar de ideia."
-        confirmLabel="Rejeitar"
+        title={`Reprovar a candidatura de ${pendingReject?.nome_completo ?? ''}?`}
+        description="As redes dela ficam fora do ranking e ela vê o motivo no app. Você pode aprovar depois, se mudar de ideia."
+        confirmLabel="Reprovar"
+        suggestions={[
+          'O perfil não publica conteúdo do programa.',
+          'Os dados do cadastro não conferem com o perfil informado.',
+        ]}
         busy={pendingReject !== null && updatingId === pendingReject.id}
-        onConfirm={() => {
-          if (pendingReject) void review(pendingReject, 'rejected');
+        onConfirm={(note) => {
+          if (pendingReject) void review(pendingReject, 'rejected', note);
         }}
         onCancel={() => setPendingReject(null)}
       />

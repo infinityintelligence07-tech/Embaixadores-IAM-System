@@ -1,5 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { AccountReviewsPanel } from '@/components/admin/AccountReviewsPanel';
+import { CampaignsSection } from '@/components/admin/CampaignsSection';
 import { NewMembersSection } from '@/components/admin/NewMembersSection';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
@@ -18,7 +20,14 @@ import {
 } from '@/lib/api';
 import '@/components/admin/admin.css';
 
-type AdminSection = 'novos' | 'pessoas' | 'sincronizacao' | 'regras' | 'conteudo' | 'auditoria';
+type AdminSection =
+  | 'novos'
+  | 'pessoas'
+  | 'rankings'
+  | 'sincronizacao'
+  | 'regras'
+  | 'conteudo'
+  | 'auditoria';
 
 export interface AdminPreview {
   users: AdminUser[];
@@ -30,6 +39,7 @@ export interface AdminPreview {
 const sections: { id: AdminSection; label: string }[] = [
   { id: 'novos', label: 'Novos membros' },
   { id: 'pessoas', label: 'Pessoas' },
+  { id: 'rankings', label: 'Rankings' },
   { id: 'sincronizacao', label: 'Coletas' },
   { id: 'regras', label: 'Regras' },
   { id: 'conteudo', label: 'Conteúdo' },
@@ -127,6 +137,13 @@ const AUDIT_ACTIONS: Record<string, string> = {
   approve_application: 'Candidatura aprovada',
   reject_application: 'Candidatura rejeitada',
   approve_membership: 'Embaixador aprovado',
+  review_account_approved: 'Conta aprovada no ranking',
+  review_account_changes_requested: 'Ajuste pedido na conta',
+  review_account_rejected: 'Conta reprovada',
+  request_account_review: 'Embaixador pediu nova análise',
+  create_campaign: 'Campanha criada',
+  delete_campaign: 'Campanha apagada',
+  update_ranking_mode: 'Modo do ranking alterado',
   suspend_membership: 'Embaixador suspenso',
   connect_social_account: 'Rede conectada',
   claim_social_handle: 'Rede informada pelo @',
@@ -139,6 +156,7 @@ const AUDIT_ACTIONS: Record<string, string> = {
 
 const AUDIT_ENTITIES: Record<string, string> = {
   application: 'candidatura de',
+  campaign: 'campanha',
   content: 'conteúdo',
   membership: 'embaixador',
   ranking: 'ranking',
@@ -208,7 +226,17 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [visibleSyncs, setVisibleSyncs] = useState(PAGE_SIZE);
   const [visibleAudit, setVisibleAudit] = useState(PAGE_SIZE);
   const [waitingCount, setWaitingCount] = useState(0);
+  const [waitingAccounts, setWaitingAccounts] = useState(0);
   const hasLoadedRef = useRef(false);
+
+  const showMessage = useCallback((text: string) => {
+    setError(null);
+    setMessage(text);
+  }, []);
+  const showError = useCallback((text: string) => {
+    setMessage(null);
+    setError(text);
+  }, []);
 
   const loadAll = useCallback(async () => {
     if (preview) {
@@ -414,9 +442,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               }}
             >
               {item.label}
-              {item.id === 'novos' && waitingCount > 0 ? (
-                <span className="admin-nav-count" aria-label={`${waitingCount} aguardando`}>
-                  {waitingCount}
+              {item.id === 'novos' && waitingCount + waitingAccounts > 0 ? (
+                <span
+                  className="admin-nav-count"
+                  aria-label={`${waitingCount + waitingAccounts} aguardando`}
+                >
+                  {waitingCount + waitingAccounts}
                 </span>
               ) : null}
             </button>
@@ -424,21 +455,31 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         </nav>
 
         {section === 'novos' ? (
-          <NewMembersSection
-            pendingSignups={users}
+          <div className="grid gap-4">
+            <AccountReviewsPanel
+              preview={preview != null}
+              onCount={setWaitingAccounts}
+              onMessage={showMessage}
+              onError={showError}
+            />
+            <NewMembersSection
+              pendingSignups={users}
+              preview={preview != null}
+              approvingUserId={actionLoading}
+              onApproveSignup={(id) => void handleApprove(id)}
+              onChanged={() => void loadAll()}
+              onPendingCount={setWaitingCount}
+              onMessage={showMessage}
+              onError={showError}
+            />
+          </div>
+        ) : null}
+
+        {section === 'rankings' ? (
+          <CampaignsSection
             preview={preview != null}
-            approvingUserId={actionLoading}
-            onApproveSignup={(id) => void handleApprove(id)}
-            onChanged={() => void loadAll()}
-            onPendingCount={setWaitingCount}
-            onMessage={(text) => {
-              setError(null);
-              setMessage(text);
-            }}
-            onError={(text) => {
-              setMessage(null);
-              setError(text);
-            }}
+            onMessage={showMessage}
+            onError={showError}
           />
         ) : null}
 

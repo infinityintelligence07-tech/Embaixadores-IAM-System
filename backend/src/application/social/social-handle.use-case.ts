@@ -13,6 +13,7 @@ import { randomInt } from 'crypto';
 import { SocialAccount } from '../../domain/entities';
 import { bioHasCode, generateVerificationCode, parseHandle } from '../../domain/social-handle';
 import {
+  AccountReviewStatus,
   ConnectionStatus,
   ProfileId,
   SocialAccountId,
@@ -164,6 +165,8 @@ export class SocialHandleUseCase {
         verifiedAt: null,
         disconnectedAt: null,
         syncMessage: null,
+        // Outra conta precisa de nova análise; a mesma conta mantém a decisão da equipe.
+        ...(sameAccount ? {} : { reviewStatus: AccountReviewStatus.Pending, reviewNote: null }),
       });
     } else {
       account = await this.socialAccountRepo.create({
@@ -228,6 +231,9 @@ export class SocialHandleUseCase {
       verifiedAt: this.clock.now(),
       verificationCode: null,
       syncMessage: 'Conta confirmada. A primeira coleta começa agora.',
+      ...(account.reviewStatus === AccountReviewStatus.ChangesRequested
+        ? { reviewStatus: AccountReviewStatus.Pending }
+        : {}),
     });
     await this.syncJobRepo.enqueue({ socialAccountId: account.id, priority: 200 });
     await this.auditRepo.append({

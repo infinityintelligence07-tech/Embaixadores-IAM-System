@@ -28,13 +28,15 @@ export class PgRankingRepository implements RankingRepository {
   async findPublished(
     platform: SocialPlatform,
     category: RankingCategory,
+    campaignId: string | null = null,
   ): Promise<{ version: RankingVersion; entries: RankingEntry[] } | null> {
     const versionResult = await this.pool.query(
       `SELECT * FROM ranking_versions 
        WHERE platform = $1 AND category = $2 AND status = 'published'
+         AND campaign_id IS NOT DISTINCT FROM $3::uuid
        ORDER BY published_at DESC 
        LIMIT 1`,
-      [platform, category],
+      [platform, category, campaignId],
     );
     
     if (!versionResult.rows[0]) {
@@ -76,17 +78,18 @@ export class PgRankingRepository implements RankingRepository {
       await client.query(
         `UPDATE ranking_versions 
          SET status = 'superseded' 
-         WHERE platform = $1 AND category = $2 AND status = 'published'`,
-        [input.platform, input.category],
+         WHERE platform = $1 AND category = $2 AND status = 'published'
+           AND campaign_id IS NOT DISTINCT FROM $3::uuid`,
+        [input.platform, input.category, input.campaignId],
       );
       
       // Create new version
       const versionResult = await client.query(
         `INSERT INTO ranking_versions (
           platform, category, status, computed_at, published_at,
-          participant_count, stale_tolerance_hours, notes
+          participant_count, stale_tolerance_hours, notes, campaign_id
         )
-        VALUES ($1, $2, 'published', $3, NOW(), $4, $5, $6)
+        VALUES ($1, $2, 'published', $3, NOW(), $4, $5, $6, $7)
         RETURNING *`,
         [
           input.platform,
@@ -95,6 +98,7 @@ export class PgRankingRepository implements RankingRepository {
           input.entries.length,
           input.staleToleranceHours,
           input.notes,
+          input.campaignId,
         ],
       );
       

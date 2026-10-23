@@ -32,6 +32,7 @@ import {
 import { ClockPort } from '../../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { ComputeAndPublishRankingUseCase } from '../../../application/rankings/compute-and-publish.use-case';
+import { AccountReviewService } from '../../../application/social/account-review.service';
 import { daysWithoutPosting } from '../../../domain/view-metrics';
 import {
   ConnectionStatus,
@@ -62,6 +63,7 @@ export class AdminController {
     @Inject(INJECTION_TOKENS.SOCIAL_ACCOUNT_REPOSITORY)
     private readonly socialAccountRepo: SocialAccountRepository,
     private readonly computeRankingUseCase: ComputeAndPublishRankingUseCase,
+    private readonly accountReview: AccountReviewService,
   ) {}
 
   @Get('users')
@@ -112,6 +114,7 @@ export class AdminController {
       req.user.id as never,
       this.clock.now(),
     );
+    await this.accountReview.approveAllFor(userId as never, req.user.id as never);
 
     await this.auditRepo.append({
       actorId: req.user.id as never,
@@ -294,14 +297,7 @@ export class AdminController {
 
   @Post('rankings/recalculate')
   async recalculateRankings(@Req() req: { user: { id: string } }) {
-    for (const platform of [SocialPlatform.Instagram, SocialPlatform.TikTok]) {
-      for (const category of [
-        RankingCategory.TotalViews,
-        RankingCategory.BestVideo,
-      ]) {
-        await this.computeRankingUseCase.execute(platform, category);
-      }
-    }
+    await this.computeRankingUseCase.publishAll();
 
     await this.auditRepo.append({
       actorId: req.user.id as never,
@@ -389,7 +385,7 @@ export class AdminController {
       metadata: Record<string, unknown> | null;
     }) => {
       if (!log.entityId) return null;
-      if (log.entityType === 'application') {
+      if (log.entityType === 'application' || log.entityType === 'campaign') {
         return typeof log.metadata?.name === 'string' ? log.metadata.name : null;
       }
       if (log.entityType === 'profile' || log.entityType === 'membership') {

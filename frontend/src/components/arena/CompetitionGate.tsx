@@ -1,7 +1,14 @@
 import { PlatformMark } from '@/components/brand/PlatformMark';
 import type { SocialAccount, SocialPlatform } from '@/lib/api';
 import './arena.css';
-import { actionLabel, connectionDuty, dutyLine, gateHeadline } from '@/lib/connection';
+import {
+  actionLabel,
+  connectionDuty,
+  dutyLine,
+  gateHeadline,
+  reviewHeadline,
+  reviewLine,
+} from '@/lib/connection';
 import { platformLabel } from '@/lib/format';
 
 const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
@@ -9,21 +16,27 @@ const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
 export function CompetitionGate({
   accounts,
   onConnect,
+  onRequestReview,
   busy,
   persist = false,
 }: {
-  accounts: Pick<SocialAccount, 'platform' | 'status' | 'username'>[];
+  accounts: Pick<
+    SocialAccount,
+    'id' | 'platform' | 'status' | 'username' | 'reviewStatus' | 'reviewNote'
+  >[];
   onConnect: (platform: SocialPlatform) => void;
-  busy?: SocialPlatform | null;
+  /** Embaixador avisa que fez o ajuste pedido; sem callback o botão não aparece. */
+  onRequestReview?: (accountId: string) => void;
+  busy?: string | null;
   persist?: boolean;
 }) {
-  const headline = gateHeadline(accounts);
+  const headline = gateHeadline(accounts) ?? reviewHeadline(accounts);
   if (!headline && !persist) return null;
 
   const title = headline?.title ?? 'Suas redes na competição';
   const detail =
     headline?.detail ??
-    'Instagram e TikTok estão conectados. As views entram no ranking por essas contas.';
+    'Suas contas estão conectadas e aprovadas. As views entram no ranking por elas.';
 
   return (
     <section className="gate" aria-label="Conexão para a competição">
@@ -37,15 +50,22 @@ export function CompetitionGate({
           const duty = connectionDuty(account?.status);
           const label = actionLabel(platform, duty);
           const handle = account?.username?.replace(/^@/, '').trim();
+          const review = duty === 'ready' ? reviewLine(account?.reviewStatus, account?.reviewNote) : null;
           const line =
             duty === 'ready' && handle ? `Conectado como @${handle}` : dutyLine(platform, duty);
 
           return (
-            <article key={platform} className="gate-card" data-duty={duty}>
+            <article
+              key={platform}
+              className="gate-card"
+              data-duty={duty}
+              data-review={duty === 'ready' ? account?.reviewStatus : undefined}
+            >
               <PlatformMark platform={platform} size={48} />
               <div>
                 <strong>{platformLabel(platform)}</strong>
                 <p>{line}</p>
+                {review ? <p className="gate-review">{review}</p> : null}
                 {label ? (
                   <button
                     type="button"
@@ -54,6 +74,18 @@ export function CompetitionGate({
                     onClick={() => onConnect(platform)}
                   >
                     {busy === platform ? 'Abrindo...' : label}
+                  </button>
+                ) : null}
+                {duty === 'ready' &&
+                account?.reviewStatus === 'changes_requested' &&
+                onRequestReview ? (
+                  <button
+                    type="button"
+                    className="cta"
+                    disabled={busy === account.id}
+                    onClick={() => onRequestReview(account.id)}
+                  >
+                    {busy === account.id ? 'Enviando...' : 'Já ajustei'}
                   </button>
                 ) : null}
               </div>

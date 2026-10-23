@@ -4,6 +4,7 @@ import { BrandMark } from '@/components/brand/BrandMark';
 import { useAuth } from '@/contexts/AuthContext';
 import { isRankingPath, useSurfaceTheme } from '@/lib/theme';
 import { LegalLinks } from './LegalLinks';
+import { NoticesBar } from './NoticesBar';
 
 const approvedNavItems = [
   { to: '/dashboard', label: 'Início', icon: Home },
@@ -68,6 +69,7 @@ export function AppShell() {
       </header>
 
       <main className="shell-main">
+        <NoticesBar />
         <Outlet />
       </main>
 

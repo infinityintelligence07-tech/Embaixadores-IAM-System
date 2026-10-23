@@ -9,7 +9,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   ApiError,
+  GENERAL_RANKING,
   api,
+  type Campaign,
   type ContentItem,
   type MyRankingResponse,
   type PlatformDashboardSlice,
@@ -67,6 +69,20 @@ function formatWhen(value: string | null): string {
   }).format(new Date(value));
 }
 
+/** "2026-10-31" vira "31/10", sem passar por fuso horário. */
+function shortDay(day: string): string {
+  const [, month, date] = day.split('-');
+  return `${date}/${month}`;
+}
+
+function campaignLine(campaign: Campaign | undefined): string {
+  if (!campaign) return 'Todos os vídeos desde o início do programa.';
+  const period = `${shortDay(campaign.firstDay)} a ${shortDay(campaign.lastDay)}`;
+  return campaign.state === 'finished'
+    ? `Encerrado. Contou os vídeos publicados de ${period}.`
+    : `Contam os vídeos publicados de ${period}.`;
+}
+
 export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const { profile } = useAuth();
   const locked = snapshot != null;
@@ -94,6 +110,9 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const [abandoned] = useState(() => (locked ? null : readAbandonedOAuth()));
   const [ladderOpen, setLadderOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaign, setCampaign] = useState<string | null>(locked ? GENERAL_RANKING : null);
+  const [requestBusy, setRequestBusy] = useState<string | null>(null);
   const picked = useRef(false);
   const patentRef = useRef<HTMLLIElement | null>(null);
   const ladderRef = useRef<HTMLDialogElement | null>(null);
@@ -106,6 +125,25 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
   useEffect(() => {
     if (locked) return;
+    let active = true;
+    api
+      .rankingCampaigns()
+      .then((result) => {
+        if (!active) return;
+        setCampaigns(result.items);
+        setCampaign(result.defaultId);
+      })
+      .catch(() => {
+        if (active) setCampaign(GENERAL_RANKING);
+      });
+    return () => {
+      active = false;
+    };
+  }, [locked]);
+
+  useEffect(() => {
+    if (locked || campaign === null) return;
+    const selected = campaign;
     let active = true;
 
     async function load() {
@@ -127,8 +165,13 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                 view: 'all',
                 page: 1,
                 pageSize: 100,
+                campaign: selected,
               }),
-              api.myRanking({ platform: pair.platform, category: pair.category }),
+              api.myRanking({
+                platform: pair.platform,
+                category: pair.category,
+                campaign: selected,
+              }),
             ]);
             return { id, board, standing };
           } catch (error) {
@@ -163,6 +206,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
       setBoards(nextBoards);
       setStandings(nextStandings);
       setErrors(nextErrors);
+      setExtra({});
       if (accountResult.status === 'fulfilled') setAccounts(accountResult.value);
       if (contentResult.status === 'fulfilled') setContents(contentResult.value);
       if (dashboardResult.status === 'fulfilled') {
@@ -181,7 +225,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     return () => {
       active = false;
     };
-  }, [locked, attempt]);
+  }, [locked, attempt, campaign]);
 
   useEffect(() => {
     if (picked.current || loading) return;
@@ -299,6 +343,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         view: 'all',
         page: nextPage,
         pageSize,
+        campaign: campaign ?? undefined,
       });
       setExtra((current) => ({
         ...current,
@@ -322,6 +367,28 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
   function openVideos() {
     setVideosOpen((open) => !open);
+  }
+
+  function selectCampaign(next: string) {
+    setLoading(true);
+    setRestOpen(false);
+    setQuery('');
+    setCampaign(next);
+  }
+
+  async function requestReview(id: string) {
+    setRequestBusy(id);
+    setConnectError(null);
+    try {
+      const next = await api.requestAccountReview(id);
+      setAccounts((current) => current.map((item) => (item.id === id ? next : item)));
+    } catch (error) {
+      setConnectError(
+        error instanceof Error ? error.message : 'Não foi possível pedir a nova análise.',
+      );
+    } finally {
+      setRequestBusy(null);
+    }
   }
 
   async function connect(next: SocialPlatform) {
@@ -397,8 +464,9 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
       {loading ? null : (
         <CompetitionGate
           accounts={accounts}
-          busy={connecting}
+          busy={connecting ?? requestBusy}
           onConnect={(next) => void connect(next)}
+          onRequestReview={locked ? undefined : (id) => void requestReview(id)}
         />
       )}
       {locked ? null : (
@@ -454,6 +522,26 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           </article>
         )
       ) : null}
+
+      {locked ? null : (
+        <div className="arena-campaign">
+          <label htmlFor="arena-campaign">Ranking</label>
+          <select
+            id="arena-campaign"
+            value={campaign ?? GENERAL_RANKING}
+            onChange={(event) => selectCampaign(event.target.value)}
+          >
+            {campaigns.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+                {item.state === 'finished' ? ' (encerrado)' : ''}
+              </option>
+            ))}
+            <option value={GENERAL_RANKING}>Geral, desde o início</option>
+          </select>
+          <p>{campaignLine(campaigns.find((item) => item.id === campaign))}</p>
+        </div>
+      )}
 
       <div className="arena-controls">
         <div className="arena-switch" role="group" aria-label="Tipo de ranking">

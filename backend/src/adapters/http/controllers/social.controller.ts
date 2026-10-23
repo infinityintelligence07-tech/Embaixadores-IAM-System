@@ -32,6 +32,7 @@ import {
 } from '../../../application/social/oauth-callback.use-case';
 import { SocialHandleUseCase } from '../../../application/social/social-handle.use-case';
 import { ApplicationsService } from '../../../application/applications/applications.service';
+import { AccountReviewService } from '../../../application/social/account-review.service';
 import { SocialAccount } from '../../../domain/entities';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { uuidPipe } from '../pipes/uuid.pipe';
@@ -50,6 +51,8 @@ function toAccountView(account: SocialAccount) {
     syncMessage: account.syncMessage,
     verificationCode:
       account.status === ConnectionStatus.PendingVerification ? account.verificationCode : null,
+    reviewStatus: account.reviewStatus,
+    reviewNote: account.reviewNote,
   };
 }
 
@@ -86,7 +89,18 @@ export class SocialController {
     private readonly oauthCallbackUseCase: OAuthCallbackUseCase,
     private readonly socialHandle: SocialHandleUseCase,
     private readonly applications: ApplicationsService,
+    private readonly accountReview: AccountReviewService,
   ) {}
+
+  @Post('accounts/:id/request-review')
+  @UseGuards(AuthGuard)
+  async requestReview(
+    @Req() req: { user: { id: string } },
+    @Param('id', uuidPipe('Conta inválida.')) id: string,
+  ) {
+    const account = await this.accountReview.requestNewReview(req.user.id as never, id);
+    return toAccountView(account);
+  }
 
   @Get('accounts')
   @UseGuards(AuthGuard)
@@ -255,7 +269,7 @@ export class SocialController {
     }
 
     if (account.status === ConnectionStatus.PendingVerification) {
-      throw new ConflictException('Confirme o código na bio do TikTok antes da primeira coleta.');
+      throw new ConflictException('Confirme o código na bio antes da primeira coleta.');
     }
 
     const settingCooldown = await this.settingsRepo.getNumber(

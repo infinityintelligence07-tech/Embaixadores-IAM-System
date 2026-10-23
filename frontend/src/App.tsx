@@ -15,7 +15,6 @@ import { OnboardingPage } from '@/pages/OnboardingPage';
 import { PrivacyPage } from '@/pages/PrivacyPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { RankingsPage } from '@/pages/RankingsPage';
-import { RegisterPage } from '@/pages/RegisterPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { TermsPage } from '@/pages/TermsPage';
 
@@ -29,7 +28,7 @@ export default function App() {
       <Route path="/" element={<CapturePage />} />
       <Route path="/sucesso" element={<CaptureSuccessPage />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/cadastro" element={<RegisterPage />} />
+      <Route path="/cadastro" element={<Navigate to="/#formulario" replace />} />
       <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/auth/reset" element={<ResetPasswordPage />} />

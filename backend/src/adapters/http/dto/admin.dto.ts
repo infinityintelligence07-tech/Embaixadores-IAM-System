@@ -53,4 +53,38 @@ export class UpdateSettingsDto {
 export class UpdateApplicationDto {
   @IsIn(['pending', 'approved', 'rejected'], { message: 'Status inválido.' })
   status!: 'pending' | 'approved' | 'rejected';
+
+  @IsOptional()
+  @IsString({ message: 'O motivo precisa ser um texto.' })
+  @MaxLength(500, { message: 'O motivo pode ter no máximo 500 caracteres.' })
+  note?: string;
+}
+
+export class ReviewAccountDto {
+  @IsIn(['approved', 'changes_requested', 'rejected'], {
+    message: 'Escolha aprovar, pedir ajuste ou reprovar.',
+  })
+  decision!: 'approved' | 'changes_requested' | 'rejected';
+
+  @IsOptional()
+  @IsString({ message: 'O recado precisa ser um texto.' })
+  @MaxLength(500, { message: 'O recado pode ter no máximo 500 caracteres.' })
+  note?: string;
+}
+
+export class CreateCampaignDto {
+  @IsString({ message: 'Dê um nome para a campanha.' })
+  @MaxLength(80, { message: 'O nome pode ter no máximo 80 caracteres.' })
+  name!: string;
+
+  @IsString({ message: 'Informe a data de início.' })
+  startDate!: string;
+
+  @IsString({ message: 'Informe a data de fim.' })
+  endDate!: string;
+}
+
+export class RankingModeDto {
+  @IsIn(['monthly', 'campaign'], { message: 'Escolha mensal ou por campanha.' })
+  mode!: 'monthly' | 'campaign';
 }

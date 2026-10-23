@@ -112,7 +112,7 @@ export function LoginPage() {
         <p className="text-center text-sm text-text-muted">
           Ainda não tem conta?{' '}
           <Link
-            to="/cadastro"
+            to="/#formulario"
             className="text-brand-violet underline-offset-4 hover:underline"
           >
             Cadastre-se

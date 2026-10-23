@@ -105,7 +105,11 @@ export class PgMetricsRepository implements MetricsRepository {
   
   async aggregateEligibleMetricsByAccount(
     socialAccountId: SocialAccountId,
+    window: { from: Date; to: Date } | null = null,
   ): Promise<AmbassadorMetricAggregate | null> {
+    // Sem período ($2/$3 nulos) vale tudo; com período, só vídeos publicados dentro dele.
+    const inWindow = (alias: string) =>
+      `($2::timestamptz IS NULL OR (${alias}.published_at >= $2 AND ${alias}.published_at < $3))`;
     const result = await this.pool.query(
       `SELECT 
          sa.profile_id,
@@ -120,6 +124,7 @@ export class PgMetricsRepository implements MetricsRepository {
              AND removed_on_platform = false
              AND latest_views IS NOT NULL
              AND ${rankedMediaSql('contents')}
+             AND ${inWindow('contents')}
            ORDER BY latest_views DESC
            LIMIT 1
          ) AS best_content_id
@@ -129,9 +134,10 @@ export class PgMetricsRepository implements MetricsRepository {
          AND c.excluded_at IS NULL
          AND c.removed_on_platform = false
          AND ${rankedMediaSql('c')}
+         AND ${inWindow('c')}
        WHERE sa.id = $1
        GROUP BY sa.profile_id, sa.id`,
-      [socialAccountId],
+      [socialAccountId, window?.from ?? null, window?.to ?? null],
     );
     
     if (!result.rows[0]) {

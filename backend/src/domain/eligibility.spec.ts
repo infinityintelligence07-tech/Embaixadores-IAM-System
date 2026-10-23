@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { isEligibleForRanking } from './eligibility';
-import { MembershipStatus, ConnectionStatus } from './types';
+import { AccountReviewStatus, MembershipStatus, ConnectionStatus } from './types';
 
 describe('eligibility', () => {
   const baseInput = {
     membershipStatus: MembershipStatus.Approved,
     connectionStatus: ConnectionStatus.Connected,
+    reviewStatus: AccountReviewStatus.Approved,
+    reviewNote: null,
     lastSyncedAt: new Date(),
     staleToleranceHours: 24,
     now: new Date(),
@@ -28,6 +30,34 @@ describe('eligibility', () => {
     expect(result.reason).toBeTruthy();
   });
   
+  it('keeps an account out until the team approves it', () => {
+    const result = isEligibleForRanking({
+      ...baseInput,
+      reviewStatus: AccountReviewStatus.Pending,
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBe('Conta em análise pela equipe.');
+  });
+
+  it('shows the adjustment the team asked for', () => {
+    const result = isEligibleForRanking({
+      ...baseInput,
+      reviewStatus: AccountReviewStatus.ChangesRequested,
+      reviewNote: 'Deixe o perfil público',
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toContain('Deixe o perfil público');
+  });
+
+  it('keeps a rejected account out of the ranking', () => {
+    const result = isEligibleForRanking({
+      ...baseInput,
+      reviewStatus: AccountReviewStatus.Rejected,
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toBeTruthy();
+  });
+
   it('rejects disconnected account', () => {
     const result = isEligibleForRanking({
       ...baseInput,

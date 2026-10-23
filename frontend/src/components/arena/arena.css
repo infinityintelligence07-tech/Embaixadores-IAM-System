@@ -209,6 +209,39 @@
   gap: 12px;
 }
 
+.arena-campaign {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.arena-campaign label {
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.arena-campaign select {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(7, 11, 20, 0.45);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.arena-campaign p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
 .arena-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -356,6 +389,15 @@
   color: var(--ink-muted);
   font-size: 13px;
   line-height: 1.4;
+}
+
+.gate-card .gate-review {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.gate-card[data-review='rejected'] .gate-review {
+  color: var(--bad);
 }
 
 .gate-card .cta,

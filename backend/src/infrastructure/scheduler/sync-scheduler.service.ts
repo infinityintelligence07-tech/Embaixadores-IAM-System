@@ -123,10 +123,6 @@ export class SyncSchedulerService implements OnModuleInit {
   }
 
   private async publishRankings(): Promise<void> {
-    for (const platform of [SocialPlatform.Instagram, SocialPlatform.TikTok]) {
-      for (const category of [RankingCategory.TotalViews, RankingCategory.BestVideo]) {
-        await this.computeRankingUseCase.execute(platform, category);
-      }
-    }
+    await this.computeRankingUseCase.publishAll();
   }
 }

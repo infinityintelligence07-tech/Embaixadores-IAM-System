@@ -42,6 +42,9 @@ import { OAuthCallbackUseCase } from './application/social/oauth-callback.use-ca
 import { SocialHandleUseCase } from './application/social/social-handle.use-case';
 import { SyncAccountUseCase } from './application/sync/sync-account.use-case';
 import { ComputeAndPublishRankingUseCase } from './application/rankings/compute-and-publish.use-case';
+import { CampaignsService } from './application/rankings/campaigns.service';
+import { AccountReviewService } from './application/social/account-review.service';
+import { NotificationsService } from './application/notifications/notifications.service';
 
 // HTTP - Controllers & Guards
 import { HealthController } from './adapters/http/controllers/health.controller';
@@ -51,6 +54,8 @@ import { SocialController } from './adapters/http/controllers/social.controller'
 import { RankingsController } from './adapters/http/controllers/rankings.controller';
 import { ContentsController } from './adapters/http/controllers/contents.controller';
 import { AdminController } from './adapters/http/controllers/admin.controller';
+import { AdminCompetitionController } from './adapters/http/controllers/admin-competition.controller';
+import { NotificationsController } from './adapters/http/controllers/notifications.controller';
 import {
   AdminApplicationsController,
   ApplicationsController,
@@ -161,6 +166,9 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     SocialHandleUseCase,
     SyncAccountUseCase,
     ComputeAndPublishRankingUseCase,
+    CampaignsService,
+    AccountReviewService,
+    NotificationsService,
     
     // Infrastructure
     SyncSchedulerService,
@@ -177,6 +185,8 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     RankingsController,
     ContentsController,
     AdminController,
+    AdminCompetitionController,
+    NotificationsController,
     ApplicationsController,
     AdminApplicationsController,
   ],

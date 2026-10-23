@@ -53,6 +53,14 @@ export enum ConnectionStatus {
   PendingVerification = 'pending_verification',
 }
 
+/** Decisão da equipe sobre a conta de cada rede: só `approved` entra no ranking. */
+export enum AccountReviewStatus {
+  Pending = 'pending',
+  Approved = 'approved',
+  ChangesRequested = 'changes_requested',
+  Rejected = 'rejected',
+}
+
 export enum SyncJobStatus {
   Pending = 'pending',
   Running = 'running',

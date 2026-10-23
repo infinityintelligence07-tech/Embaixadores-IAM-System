@@ -33,6 +33,8 @@ export class ApplicationsController {
         : [],
       instagram_handle: stringField(body.instagram_handle),
       tiktok_handle: stringField(body.tiktok_handle),
+      password: stringField(body.password),
+      ranking_consent: body.ranking_consent === true,
     });
   }
 }
@@ -53,7 +55,7 @@ export class AdminApplicationsController {
     @Param('id', uuidPipe('Candidatura inválida.')) id: string,
     @Body() body: UpdateApplicationDto,
   ) {
-    return this.applications.updateStatus(id, body.status, req.user.id);
+    return this.applications.updateStatus(id, body.status, req.user.id, body.note);
   }
 
   @Delete(':id')

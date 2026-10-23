@@ -1,19 +1,28 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getPool } from '../../infrastructure/db/pool';
 import { loadConfig } from '../../infrastructure/config/env';
+import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
+import { ClockPort } from '../../ports/clock.port';
+import { MembershipRepository } from '../../ports/repositories.port';
+import { ProfileId } from '../../domain/types';
+import { AccountReviewService } from '../social/account-review.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const NETWORKS = new Set(['instagram', 'tiktok']);
 // Domínio público das páginas; areaembaixadores.* só serve a API e redireciona as telas para cá.
 const LOGIN_REDIRECT = 'https://embaixadores.iamcontrol.com.br/auth/callback';
 
 const COLUMNS = `id, nome_completo, email, whatsapp, nome_conta, redes_sociais,
-  instagram_handle, tiktok_handle, status, created_at, updated_at, reviewed_at,
+  instagram_handle, tiktok_handle, status, created_at, updated_at, reviewed_at, review_note,
+  profile_id,
   (SELECT p.public_name FROM profiles p WHERE p.id = applications.reviewed_by) AS reviewed_by_name`;
 
 export interface ApplicationRow {
@@ -30,6 +39,8 @@ export interface ApplicationRow {
   updated_at: string;
   reviewed_at: string | null;
   reviewed_by_name: string | null;
+  review_note: string | null;
+  profile_id: string | null;
 }
 
 export interface SubmitApplicationInput {
@@ -39,6 +50,8 @@ export interface SubmitApplicationInput {
   redes_sociais?: string[];
   instagram_handle?: string;
   tiktok_handle?: string;
+  password?: string;
+  ranking_consent?: boolean;
 }
 
 /** Aceita "@fulano", "fulano" ou a URL do perfil colada (instagram.com/fulano, tiktok.com/@fulano). */
@@ -61,6 +74,15 @@ function normalizePhone(value: string): string {
 export class ApplicationsService {
   private areaAuth: SupabaseClient | null = null;
 
+  constructor(
+    @Inject(INJECTION_TOKENS.CLOCK)
+    private readonly clock: ClockPort,
+    @Inject(INJECTION_TOKENS.MEMBERSHIP_REPOSITORY)
+    private readonly membershipRepo: MembershipRepository,
+    private readonly accountReview: AccountReviewService,
+    private readonly notifications: NotificationsService,
+  ) {}
+
   private authClient(): SupabaseClient {
     if (!this.areaAuth) {
       const config = loadConfig();
@@ -71,7 +93,11 @@ export class ApplicationsService {
     return this.areaAuth;
   }
 
-  async submit(input: SubmitApplicationInput): Promise<{ id: string }> {
+  /**
+   * Cadastro pelo site: grava a candidatura e já cria a conta com a senha escolhida, sem
+   * e-mail de confirmação. A pessoa entra na hora, conecta as redes e aguarda a equipe.
+   */
+  async submit(input: SubmitApplicationInput): Promise<{ id: string; accountCreated: true }> {
     const nomeCompleto = input.nome_completo?.trim() ?? '';
     const email = input.email?.trim().toLowerCase() ?? '';
     const whatsapp = normalizePhone(input.whatsapp ?? '');
@@ -100,6 +126,19 @@ export class ApplicationsService {
       throw new BadRequestException('Informe o @ do TikTok');
     }
 
+    const password = input.password ?? '';
+    if (password.length < 8) {
+      throw new BadRequestException('A senha precisa ter pelo menos 8 caracteres.');
+    }
+    if (password.length > 72) {
+      throw new BadRequestException('A senha pode ter no máximo 72 caracteres.');
+    }
+    if (input.ranking_consent !== true) {
+      throw new BadRequestException(
+        'Para participar, autorize a divulgação do seu nome público no ranking.',
+      );
+    }
+
     const nomeConta = [
       redes.includes('instagram') ? `Instagram ${instagramHandle}` : '',
       redes.includes('tiktok') ? `TikTok ${tiktokHandle}` : '',
@@ -107,12 +146,56 @@ export class ApplicationsService {
       .filter(Boolean)
       .join(' · ');
 
+    const taken = await getPool().query(
+      `SELECT 1 FROM applications WHERE lower(email) = lower($1)
+       UNION ALL
+       SELECT 1 FROM profiles WHERE lower(email) = lower($1) AND deleted_at IS NULL
+       LIMIT 1`,
+      [email],
+    );
+    if (taken.rows[0]) {
+      throw new ConflictException(
+        'Já existe uma conta com este e-mail. Entre com a sua senha ou use "Esqueci minha senha".',
+      );
+    }
+
+    const created = await this.authClient().auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: nomeCompleto, public_name: nomeCompleto },
+    });
+    const userId = created.data.user?.id;
+    if (!userId) {
+      const message = (created.error?.message ?? '').toLowerCase();
+      if (message.includes('already') || message.includes('registered')) {
+        throw new ConflictException(
+          'Já existe uma conta com este e-mail. Entre com a sua senha ou use "Esqueci minha senha".',
+        );
+      }
+      if (message.includes('password')) {
+        throw new BadRequestException(
+          'Essa senha é fraca demais. Use letras e números, com pelo menos 8 caracteres.',
+        );
+      }
+      console.error('signup_create_user_error', created.error?.message);
+      throw new ServiceUnavailableException(
+        'Não foi possível criar sua conta agora. Tente de novo em instantes.',
+      );
+    }
+
     try {
+      // O gatilho do Supabase já criou o perfil e a participação "aguardando".
+      await getPool().query(
+        `UPDATE profiles SET onboarding_completed = true, updated_at = now() WHERE id = $1`,
+        [userId],
+      );
       const result = await getPool().query<{ id: string }>(
         `INSERT INTO applications (
-           nome_completo, email, whatsapp, nome_conta, redes_sociais, instagram_handle, tiktok_handle
+           nome_completo, email, whatsapp, nome_conta, redes_sociais, instagram_handle,
+           tiktok_handle, profile_id
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
         [
           nomeCompleto,
@@ -122,12 +205,16 @@ export class ApplicationsService {
           redes,
           redes.includes('instagram') ? instagramHandle : null,
           redes.includes('tiktok') ? tiktokHandle : null,
+          userId,
         ],
       );
-      return { id: result.rows[0].id };
+      return { id: result.rows[0].id, accountCreated: true };
     } catch (error) {
+      await this.authClient().auth.admin.deleteUser(userId).catch(() => undefined);
       if (isUniqueViolation(error)) {
-        throw new ConflictException('Este e-mail já foi cadastrado');
+        throw new ConflictException(
+          'Já existe uma conta com este e-mail. Entre com a sua senha ou use "Esqueci minha senha".',
+        );
       }
       throw error;
     }
@@ -144,10 +231,42 @@ export class ApplicationsService {
     id: string,
     status: ApplicationRow['status'],
     actorId: string,
+    rawNote?: string,
   ): Promise<ApplicationRow> {
     const current = await this.findById(id);
+    const note = rawNote?.trim() || null;
+    const profileId = current.profile_id ?? (await this.profileIdByEmail(current.email));
+
+    if (status === 'rejected' && profileId && (!note || note.length < 3)) {
+      throw new BadRequestException('Escreva o motivo. A pessoa recebe esse recado no app.');
+    }
+
     if (status === 'approved') {
-      await this.provisionAccess(current, actorId);
+      if (profileId) {
+        await this.membershipRepo.approve(
+          profileId as ProfileId,
+          actorId as ProfileId,
+          this.clock.now(),
+        );
+        const approved = await this.accountReview.approveAllFor(
+          profileId as ProfileId,
+          actorId as ProfileId,
+        );
+        if (approved === 0) {
+          await this.notifications.notify(
+            profileId,
+            'application_approved',
+            'Seu cadastro foi aprovado',
+            'Conecte o seu Instagram ou TikTok. A equipe confere a conta e ela entra no ranking.',
+          );
+        }
+      } else {
+        await this.provisionAccess(current, actorId);
+      }
+    }
+
+    if (status === 'rejected' && profileId && note) {
+      await this.accountReview.rejectAllFor(profileId as ProfileId, note, actorId as ProfileId);
     }
 
     const updated = await getPool().query<{ id: string }>(
@@ -155,10 +274,12 @@ export class ApplicationsService {
        SET status = $2,
            updated_at = now(),
            reviewed_at = CASE WHEN $2 = 'pending' THEN NULL ELSE now() END,
-           reviewed_by = CASE WHEN $2 = 'pending' THEN NULL ELSE $3::uuid END
+           reviewed_by = CASE WHEN $2 = 'pending' THEN NULL ELSE $3::uuid END,
+           review_note = $4,
+           profile_id = COALESCE(profile_id, $5::uuid)
        WHERE id = $1
        RETURNING id`,
-      [id, status, actorId],
+      [id, status, actorId, status === 'rejected' ? note : null, profileId],
     );
     if (!updated.rows[0]) throw new NotFoundException('Candidatura não encontrada');
 
@@ -195,6 +316,14 @@ export class ApplicationsService {
   async remove(id: string): Promise<void> {
     const result = await getPool().query(`DELETE FROM applications WHERE id = $1`, [id]);
     if (result.rowCount === 0) throw new NotFoundException('Candidatura não encontrada');
+  }
+
+  private async profileIdByEmail(email: string): Promise<string | null> {
+    const result = await getPool().query<{ id: string }>(
+      `SELECT id FROM profiles WHERE lower(email) = lower($1) AND deleted_at IS NULL LIMIT 1`,
+      [email.trim()],
+    );
+    return result.rows[0]?.id ?? null;
   }
 
   private async findById(id: string): Promise<ApplicationRow> {

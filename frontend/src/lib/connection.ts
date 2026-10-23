@@ -1,5 +1,74 @@
-import type { ConnectionStatus, SocialAccount, SocialPlatform } from '@/lib/api';
+import type {
+  AccountReviewStatus,
+  ConnectionStatus,
+  SocialAccount,
+  SocialPlatform,
+} from '@/lib/api';
 import { platformLabel } from '@/lib/format';
+
+/** Situação da conta na análise da equipe, para quem já conectou a rede. */
+export function reviewLine(
+  status: AccountReviewStatus | undefined,
+  note: string | null | undefined,
+): string | null {
+  switch (status) {
+    case undefined:
+    case 'approved':
+      return null;
+    case 'pending':
+      return 'Em análise pela equipe. Quando for aprovada, entra no ranking.';
+    case 'changes_requested':
+      return note ? `A equipe pediu um ajuste: ${note}` : 'A equipe pediu um ajuste nesta conta.';
+    case 'rejected':
+      return note
+        ? `Não aprovada para a competição: ${note}`
+        : 'Não aprovada para a competição.';
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+export function reviewBadge(
+  status: AccountReviewStatus,
+): { label: string; tone: 'success' | 'warning' | 'danger' } {
+  switch (status) {
+    case 'approved':
+      return { label: 'Aprovada no ranking', tone: 'success' };
+    case 'pending':
+      return { label: 'Em análise', tone: 'warning' };
+    case 'changes_requested':
+      return { label: 'Ajuste pedido', tone: 'warning' };
+    case 'rejected':
+      return { label: 'Não aprovada', tone: 'danger' };
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+/** Com as redes conectadas, avisa o que ainda falta na análise da equipe. */
+export function reviewHeadline(
+  accounts: Pick<SocialAccount, 'platform' | 'status' | 'reviewStatus'>[],
+): { title: string; detail: string } | null {
+  const connected = accounts.filter((item) => connectionDuty(item.status) === 'ready');
+  if (connected.some((item) => item.reviewStatus === 'changes_requested')) {
+    return {
+      title: 'A equipe pediu um ajuste',
+      detail: 'Veja o recado na rede abaixo. Depois de ajustar, toque em "Já ajustei".',
+    };
+  }
+  if (connected.some((item) => item.reviewStatus === 'pending')) {
+    return {
+      title: 'Sua conta está em análise',
+      detail:
+        'A equipe confere o perfil antes de liberar o ranking. Você recebe um aviso aqui quando for aprovado.',
+    };
+  }
+  return null;
+}
 
 export type DutyKind =
   | 'ready'
