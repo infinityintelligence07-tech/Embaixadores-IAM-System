@@ -567,3 +567,54 @@ html {
     scroll-behavior: auto !important;
   }
 }
+
+/* Entrada com Google: botão claro com a marca do Google, como o próprio Google pede. */
+.google-entry {
+  display: grid;
+  gap: 8px;
+}
+
+.google-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  background: #fff;
+  color: #1f1f1f;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.google-button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.google-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--bad);
+}
+
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}

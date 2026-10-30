@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompetitionGate } from '@/components/arena/CompetitionGate';
 import { GrowthCard } from '@/components/arena/GrowthCard';
+import { CompleteSignupCard } from '@/components/arena/CompleteSignupCard';
 import { SocialHandleDialog } from '@/components/social/SocialHandleDialog';
 import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Alert } from '@/components/ui/Alert';
@@ -84,7 +85,7 @@ function campaignLine(campaign: Campaign | undefined): string {
 }
 
 export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const locked = snapshot != null;
   const [platform, setPlatform] = useState<SocialPlatform>('instagram');
   const [category, setCategory] = useState<RankingCategory>('total_views');
@@ -468,7 +469,14 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         )}
       </header>
 
-      {loading ? null : (
+      {loading ? null : !locked && profile?.needsSignupDetails ? (
+        <CompleteSignupCard
+          onDone={async () => {
+            await refreshProfile();
+            retry();
+          }}
+        />
+      ) : (
         <CompetitionGate
           accounts={accounts}
           busy={connecting ?? requestBusy}

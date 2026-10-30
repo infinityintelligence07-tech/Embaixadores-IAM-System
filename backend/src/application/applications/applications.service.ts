@@ -95,6 +95,96 @@ export class ApplicationsService {
     return this.areaAuth;
   }
 
+  /** Quem entrou pelo Google ainda não tem candidatura: falta WhatsApp, rede e @. */
+  async needsSignupDetails(profileId: string, email: string): Promise<boolean> {
+    const found = await getPool().query(
+      `SELECT 1 FROM applications WHERE profile_id = $1 OR lower(email) = lower($2) LIMIT 1`,
+      [profileId, email],
+    );
+    return !found.rows[0];
+  }
+
+  /**
+   * Fecha o cadastro de quem entrou pelo Google: grava a candidatura com o nome e o e-mail
+   * da conta e já conecta os @ informados. A equipe aprova como qualquer outro cadastro.
+   */
+  async completeSignup(
+    profile: { id: string; email: string; fullName: string },
+    input: Omit<SubmitApplicationInput, 'nome_completo' | 'email' | 'password'>,
+  ): Promise<{ id: string }> {
+    const whatsapp = normalizePhone(input.whatsapp ?? '');
+    const redes = [
+      ...new Set(
+        (input.redes_sociais ?? [])
+          .map((item) => item.trim().toLowerCase())
+          .filter((item) => NETWORKS.has(item)),
+      ),
+    ];
+    const instagramHandle = normalizeHandle(input.instagram_handle ?? '');
+    const tiktokHandle = normalizeHandle(input.tiktok_handle ?? '');
+
+    if (whatsapp.length < 10) throw new BadRequestException('Informe um WhatsApp válido, com DDD.');
+    if (redes.length === 0) {
+      throw new BadRequestException('Selecione Instagram, TikTok ou os dois');
+    }
+    if (redes.includes('instagram') && !instagramHandle) {
+      throw new BadRequestException('Informe o @ do Instagram');
+    }
+    if (redes.includes('tiktok') && !tiktokHandle) {
+      throw new BadRequestException('Informe o @ do TikTok');
+    }
+    if (input.ranking_consent !== true) {
+      throw new BadRequestException(
+        'Para participar, autorize a divulgação do seu nome público no ranking.',
+      );
+    }
+    if (!(await this.needsSignupDetails(profile.id, profile.email))) {
+      throw new ConflictException('Seu cadastro já está completo.');
+    }
+
+    const nomeConta = [
+      redes.includes('instagram') ? `Instagram ${instagramHandle}` : '',
+      redes.includes('tiktok') ? `TikTok ${tiktokHandle}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    let applicationId: string;
+    try {
+      const result = await getPool().query<{ id: string }>(
+        `INSERT INTO applications (
+           nome_completo, email, whatsapp, nome_conta, redes_sociais, instagram_handle,
+           tiktok_handle, profile_id
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id`,
+        [
+          profile.fullName || profile.email.split('@')[0],
+          profile.email.toLowerCase(),
+          whatsapp,
+          nomeConta,
+          redes,
+          redes.includes('instagram') ? instagramHandle : null,
+          redes.includes('tiktok') ? tiktokHandle : null,
+          profile.id,
+        ],
+      );
+      applicationId = result.rows[0].id;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new ConflictException('Seu cadastro já está completo.');
+      throw error;
+    }
+    await getPool().query(
+      `UPDATE profiles SET onboarding_completed = true, updated_at = now() WHERE id = $1`,
+      [profile.id],
+    );
+    await this.connectHandles(profile.id as ProfileId, [
+      redes.includes('instagram') ? [SocialPlatform.Instagram, instagramHandle] : null,
+      redes.includes('tiktok') ? [SocialPlatform.TikTok, tiktokHandle] : null,
+    ]);
+    return { id: applicationId };
+  }
+
   /**
    * Cadastro pelo site: grava a candidatura e já cria a conta com a senha escolhida, sem
    * e-mail de confirmação. A pessoa entra na hora, conecta as redes e aguarda a equipe.

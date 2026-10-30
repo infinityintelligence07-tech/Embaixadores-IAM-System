@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { GoogleEntry } from "@/components/auth/GoogleButton";
 import { ApiError, api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { useSurfaceTheme } from "@/lib/theme";
@@ -232,10 +233,12 @@ export function CapturePage() {
             <p className="lp-form__eyebrow">Inscrição</p>
             <h2 className="lp-form__title">Crie sua conta</h2>
             <p className="lp-form__sub">
-              Marque Instagram, TikTok ou os dois. Ao enviar, você já entra na
-              área dos embaixadores. A equipe aprova o perfil para o ranking.
+              Em menos de 1 minuto você já está na área dos embaixadores. A
+              equipe aprova o perfil para o ranking.
             </p>
           </header>
+
+          <GoogleEntry className="lp-google" divider="ou crie com e-mail e senha" />
 
           <form className="lp-fields" onSubmit={onSubmit}>
             <div className="lp-fields__grid">

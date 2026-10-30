@@ -13,15 +13,29 @@ export function AuthCallbackPage() {
 
     async function handleCallback() {
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-      const hashError = hash.get('error_description') || hash.get('error');
+      const query = new URLSearchParams(window.location.search);
+      const hashError =
+        hash.get('error_description') ||
+        hash.get('error') ||
+        query.get('error_description') ||
+        query.get('error');
+      const cancelled = (hash.get('error') || query.get('error')) === 'access_denied';
 
       const { data, error: authError } = await supabase.auth.getSession();
 
       if (!active) return;
 
+      if (cancelled) {
+        navigate('/login', {
+          replace: true,
+          state: { reason: 'A entrada com o Google foi cancelada. Tente de novo quando quiser.' },
+        });
+        return;
+      }
+
       if (hashError || authError || !data.session) {
         setError(
-          'O link de confirmação expirou ou já foi usado. Entre com seu e-mail e senha ou peça um novo link.',
+          'Não foi possível concluir a entrada. Tente de novo com o Google ou entre com e-mail e senha.',
         );
         return;
       }

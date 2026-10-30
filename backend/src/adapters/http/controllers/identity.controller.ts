@@ -14,6 +14,7 @@ function present(result: GetMeResult) {
     role: result.role,
     status: result.status,
     onboardingCompleted: result.onboardingCompleted,
+    needsSignupDetails: result.needsSignupDetails,
     createdAt: result.createdAt.toISOString(),
   };
 }

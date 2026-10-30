@@ -112,7 +112,17 @@ export interface MeResponse {
   role: UserRole;
   status: UserStatus;
   onboardingCompleted: boolean;
+  /** Entrou pelo Google e ainda falta WhatsApp, rede e @. */
+  needsSignupDetails: boolean;
   createdAt: string;
+}
+
+export interface CompleteSignupPayload {
+  whatsapp: string;
+  redes_sociais: SocialPlatform[];
+  instagram_handle: string;
+  tiktok_handle: string;
+  ranking_consent: boolean;
 }
 
 export interface PlatformDashboardSlice {
@@ -418,6 +428,13 @@ export const api = {
 
   requestAccountReview: (id: string) =>
     fetchJson<SocialAccount>(`/api/social/accounts/${id}/request-review`, { method: 'POST' }),
+
+  /** Quem entrou pelo Google completa WhatsApp, rede e @. */
+  completeSignup: (payload: CompleteSignupPayload) =>
+    fetchJson<{ id: string }>('/api/applications/complete', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   /** Cadastro público: cria a conta na hora com a senha escolhida. */
   signup: (payload: SignupPayload) =>

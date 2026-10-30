@@ -1,0 +1,87 @@
+name: Apagar uma conta (temporário)
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "E-mail da conta de embaixador a apagar (conta de equipe não é apagada)"
+        required: true
+      confirm:
+        description: "Digite APAGAR para confirmar"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Conferir confirmação
+        if: inputs.confirm != 'APAGAR'
+        run: |
+          echo "Sem a confirmação APAGAR nada é apagado."
+          exit 1
+
+      - name: Configurar SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Apagar
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          TARGET_EMAIL: ${{ inputs.email }}
+        run: |
+          cat > delete.js <<'JS'
+          const { Pool } = require('pg');
+          const { createClient } = require('@supabase/supabase-js');
+          const email = String(process.env.TARGET_EMAIL || '').trim().toLowerCase();
+          const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+          (async () => {
+            const found = (await pool.query(
+              `SELECT id, role FROM profiles WHERE lower(email) = $1`, [email],
+            )).rows[0];
+            if (!found) throw new Error('Conta não encontrada.');
+            if (found.role === 'admin') throw new Error('Conta de equipe não é apagada por aqui.');
+            const client = await pool.connect();
+            try {
+              await client.query('BEGIN');
+              await client.query('DELETE FROM ranking_entries WHERE profile_id = $1', [found.id]);
+              await client.query('UPDATE audit_logs SET actor_id = NULL WHERE actor_id = $1', [found.id]);
+              await client.query('DELETE FROM social_accounts WHERE profile_id = $1', [found.id]);
+              await client.query('DELETE FROM applications WHERE profile_id = $1 OR lower(email) = $2', [found.id, email]);
+              await client.query('COMMIT');
+            } catch (error) {
+              await client.query('ROLLBACK');
+              throw error;
+            } finally {
+              client.release();
+            }
+            const auth = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false },
+            });
+            const { error } = await auth.auth.admin.deleteUser(found.id);
+            if (error) throw new Error(error.message);
+            await pool.query('DELETE FROM profiles WHERE id = $1', [found.id]);
+            const fs = require('fs');
+            for (const ext of ['jpg', 'png', 'webp']) {
+              fs.rmSync(`${process.env.AVATAR_DIR || '/app/cache/avatars'}/${found.id}.${ext}`, { force: true });
+            }
+            console.log('Conta apagada.');
+            await pool.end();
+          })().catch((error) => {
+            console.error('ERRO ' + (error && error.message ? error.message : error));
+            process.exit(1);
+          });
+          JS
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "cd /opt/embaixadores && docker compose -f docker-compose.yml -f docker-compose.vps.yml exec -T -e TARGET_EMAIL=$(printf '%q' "$TARGET_EMAIL") app node -" < delete.js

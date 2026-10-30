@@ -2,6 +2,7 @@ import { Mail, Lock } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '@/components/layout/AuthLayout';
+import { GoogleEntry } from '@/components/auth/GoogleButton';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -61,8 +62,9 @@ export function LoginPage() {
   return (
     <AuthLayout
       title="Entrar"
-      subtitle="Use o e-mail e a senha da sua conta de embaixador."
+      subtitle="Entre com o Google ou com o e-mail e a senha da sua conta."
     >
+      <GoogleEntry className="mb-4 grid gap-3.5" />
       <form onSubmit={handleSubmit} className="space-y-4">
         {error ? (
           <Alert variant="error" role="alert">

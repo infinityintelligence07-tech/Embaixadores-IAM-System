@@ -1239,3 +1239,79 @@ body:has(.tier-layer[open]) {
     animation: none;
   }
 }
+
+/* Primeiro acesso pelo Google: formulário curto dentro do cartão de conexão. */
+.complete-form {
+  display: grid;
+  gap: 14px;
+}
+
+.complete-networks {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.complete-networks legend {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.complete-networks > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.complete-network {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.complete-network[aria-pressed='true'] {
+  border-color: var(--accent-2);
+  background: var(--accent-soft);
+}
+
+.complete-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.complete-consent input {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin-top: 1px;
+  accent-color: var(--accent-2);
+}
+
+.complete-consent a {
+  color: var(--ink);
+}
+
+.complete-error {
+  margin: 0;
+  font-size: 14px;
+  color: var(--bad);
+}
+
+.complete-submit {
+  width: 100%;
+  min-height: 48px;
+}

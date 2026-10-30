@@ -546,3 +546,9 @@
     animation: none;
   }
 }
+
+.lp-google {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}

@@ -3,6 +3,7 @@ import { ProfileId } from '../../domain/types';
 import { ProfileRepository, MembershipRepository } from '../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 import { StaffAccessService } from './staff-access.service';
+import { ApplicationsService } from '../applications/applications.service';
 
 export interface GetMeResult {
   id: string;
@@ -13,6 +14,8 @@ export interface GetMeResult {
   role: 'ambassador' | 'admin';
   status: 'pending' | 'approved' | 'suspended';
   onboardingCompleted: boolean;
+  /** Entrou pelo Google e ainda não informou WhatsApp, rede e @. */
+  needsSignupDetails: boolean;
   createdAt: Date;
 }
 
@@ -24,6 +27,7 @@ export class GetMeUseCase {
     @Inject(INJECTION_TOKENS.MEMBERSHIP_REPOSITORY)
     private readonly membershipRepo: MembershipRepository,
     private readonly staff: StaffAccessService,
+    private readonly applications: ApplicationsService,
   ) {}
 
   async execute(profileId: ProfileId): Promise<GetMeResult> {
@@ -44,6 +48,8 @@ export class GetMeUseCase {
       role,
       status: membership?.status || 'pending',
       onboardingCompleted: role === 'admin' ? true : profile.onboardingCompleted,
+      needsSignupDetails:
+        role === 'admin' ? false : await this.applications.needsSignupDetails(profile.id, profile.email),
       createdAt: profile.createdAt,
     };
   }
