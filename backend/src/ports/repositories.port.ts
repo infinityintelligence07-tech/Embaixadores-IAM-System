@@ -252,6 +252,17 @@ export interface MetricsRepository {
     socialAccountId: SocialAccountId,
     window?: { from: Date; to: Date } | null,
   ): Promise<AmbassadorMetricAggregate | null>;
+  /**
+   * Views somadas no fim de cada dia (horário de Brasília), a partir das medições guardadas.
+   * Dias antes da primeira medição vêm com `measured = false`.
+   */
+  dailyViewsByAccount(socialAccountId: SocialAccountId, days: number): Promise<DailyViews[]>;
+}
+
+export interface DailyViews {
+  day: string;
+  views: number;
+  measured: boolean;
 }
 
 // ---------------------------------------------------------------------------

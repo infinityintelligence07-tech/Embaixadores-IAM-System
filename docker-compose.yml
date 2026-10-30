@@ -10,6 +10,7 @@ services:
     restart: unless-stopped
     volumes:
       - thumbnail_cache:/app/cache/thumbnails
+      - avatar_store:/app/cache/avatars
     expose:
       - "3000"
     networks:
@@ -55,3 +56,4 @@ networks:
 volumes:
   certbot_www:
   thumbnail_cache:
+  avatar_store:

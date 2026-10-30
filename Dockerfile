@@ -31,8 +31,9 @@ COPY supabase/migrations ./migrations
 
 ENV FRONTEND_DIST_PATH=/app/public
 ENV THUMBNAIL_CACHE_DIR=/app/cache/thumbnails
+ENV AVATAR_DIR=/app/cache/avatars
 # O volume nomeado herda dono e permissões deste diretório na primeira montagem.
-RUN mkdir -p /app/cache/thumbnails && chown -R app:app /app/cache
+RUN mkdir -p /app/cache/thumbnails /app/cache/avatars && chown -R app:app /app/cache
 
 USER app
 EXPOSE 3000

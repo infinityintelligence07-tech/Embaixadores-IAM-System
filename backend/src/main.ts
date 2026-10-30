@@ -13,6 +13,8 @@ async function bootstrap() {
   const config = loadConfig();
   
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // A foto de perfil chega em base64 dentro do JSON; o limite padrão de 100 KB não cabe.
+  app.useBodyParser('json', { limit: '3mb' });
   // Atrás do nginx (host ou rede do Docker): o IP real vem em X-Forwarded-For (usado pelo limite de requisições)
   app.set('trust proxy', 'loopback, linklocal, uniquelocal');
   

@@ -5,6 +5,7 @@ import {
   InsertContentSnapshotInput,
   InsertAccountSnapshotInput,
   AmbassadorMetricAggregate,
+  DailyViews,
 } from '../../../ports/repositories.port';
 import { ContentMetricSnapshot, AccountMetricSnapshot } from '../../../domain/entities';
 import {
@@ -103,6 +104,43 @@ export class PgMetricsRepository implements MetricsRepository {
     return result.rows[0] ? this.mapAccountRow(result.rows[0]) : null;
   }
   
+  async dailyViewsByAccount(socialAccountId: SocialAccountId, days: number): Promise<DailyViews[]> {
+    const result = await this.pool.query(
+      `WITH days AS (
+         SELECT generate_series(
+                  (now() AT TIME ZONE 'America/Sao_Paulo')::date - ($2::int - 1),
+                  (now() AT TIME ZONE 'America/Sao_Paulo')::date,
+                  interval '1 day'
+                )::date AS day
+       )
+       SELECT d.day::text AS day,
+              COALESCE(SUM(s.views), 0)::bigint AS views,
+              COUNT(s.views) > 0 AS measured
+       FROM days d
+       LEFT JOIN LATERAL (
+         SELECT DISTINCT ON (cs.content_id) cs.views
+         FROM content_metric_snapshots cs
+         JOIN contents c ON c.id = cs.content_id
+         WHERE c.social_account_id = $1
+           AND c.eligible = true
+           AND c.excluded_at IS NULL
+           AND c.removed_on_platform = false
+           AND ${rankedMediaSql('c')}
+           AND cs.views IS NOT NULL
+           AND cs.collected_at < ((d.day + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
+         ORDER BY cs.content_id, cs.collected_at DESC
+       ) s ON true
+       GROUP BY d.day
+       ORDER BY d.day`,
+      [socialAccountId, days],
+    );
+    return result.rows.map((row) => ({
+      day: String(row.day),
+      views: Number(row.views) || 0,
+      measured: Boolean(row.measured),
+    }));
+  }
+
   async aggregateEligibleMetricsByAccount(
     socialAccountId: SocialAccountId,
     window: { from: Date; to: Date } | null = null,

@@ -8,6 +8,7 @@ import { AppThrottlerGuard } from './adapters/http/guards/app-throttler.guard';
 import { INJECTION_TOKENS } from './infrastructure/tokens/injection-tokens';
 import { SyncSchedulerService } from './infrastructure/scheduler/sync-scheduler.service';
 import { ThumbnailCacheService } from './infrastructure/media/thumbnail-cache.service';
+import { AvatarStoreService } from './infrastructure/media/avatar-store.service';
 
 // Adapters - Auth & Crypto
 import { SupabaseAuthAdapter } from './adapters/auth/supabase-auth.adapter';
@@ -175,6 +176,7 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     // Infrastructure
     SyncSchedulerService,
     ThumbnailCacheService,
+    AvatarStoreService,
 
     // Guards (DI)
     AuthGuard,

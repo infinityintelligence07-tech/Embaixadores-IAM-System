@@ -160,6 +160,15 @@ export type ConnectStart =
   | { mode: 'oauth'; url: string }
   | { mode: 'handle'; suggestedHandle: string | null };
 
+export interface GrowthResponse {
+  platform: SocialPlatform;
+  /** Views somadas no fim de cada dia, da primeira medição até hoje. */
+  points: { day: string; views: number }[];
+  current: number | null;
+  /** Views ganhas nos últimos 7 dias; null enquanto não há uma semana de medição. */
+  lastWeek: number | null;
+}
+
 export interface ContentItem {
   id: string;
   platform: SocialPlatform;
@@ -446,13 +455,24 @@ export const api = {
   updateProfile: (payload: {
     fullName?: string;
     publicName?: string;
-    avatarUrl?: string;
     onboardingCompleted?: boolean;
   }) =>
     fetchJson<MeResponse>('/api/me', {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+
+  /** `image` é a foto já recortada no aparelho, em data URL JPEG. */
+  uploadAvatar: (image: string) =>
+    fetchJson<MeResponse>('/api/me/avatar', {
+      method: 'POST',
+      body: JSON.stringify({ image }),
+    }),
+
+  removeAvatar: () => fetchJson<MeResponse>('/api/me/avatar', { method: 'DELETE' }),
+
+  growth: (platform: SocialPlatform) =>
+    fetchJson<GrowthResponse>(`/api/dashboard/growth?platform=${platform}`),
 
   requestAccountDeletion: () =>
     fetchJson<{ ok: boolean }>('/api/me/delete-request', { method: 'POST' }),

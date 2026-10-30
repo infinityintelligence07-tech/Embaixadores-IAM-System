@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CompetitionGate } from '@/components/arena/CompetitionGate';
+import { GrowthCard } from '@/components/arena/GrowthCard';
 import { SocialHandleDialog } from '@/components/social/SocialHandleDialog';
 import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Alert } from '@/components/ui/Alert';
@@ -507,6 +508,16 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         </Alert>
       ) : null}
 
+      {loading || locked ? null : (
+        <GrowthCard
+          platform={platform}
+          connected={
+            connectionDuty(accounts.find((account) => account.platform === platform)?.status) ===
+            'ready'
+          }
+        />
+      )}
+
       {featured ? (
         featured.url ? (
           <a className="featured" href={featured.url} target="_blank" rel="noreferrer">
@@ -899,6 +910,7 @@ function Pedestal({
           url={entry.avatarUrl}
           size={place === 1 ? 'lg' : 'md'}
           views={entry.totalViews}
+          own={entry.isCurrentUser}
         />
         <span className="place-coin" aria-label={`${place}º lugar`}>
           <b>{place}</b>
@@ -930,7 +942,13 @@ function RankRow({
       aria-current={entry.isCurrentUser ? 'true' : undefined}
     >
       <span className="rank-pos">{entry.position}</span>
-      <Avatar name={entry.publicName} url={entry.avatarUrl} size="sm" views={entry.totalViews} />
+      <Avatar
+        name={entry.publicName}
+        url={entry.avatarUrl}
+        size="sm"
+        views={entry.totalViews}
+        own={entry.isCurrentUser}
+      />
       <p className="rank-name">
         <span className="rank-label">{entry.publicName}</span>
         {entry.isCurrentUser ? <span className="rank-you">Você</span> : null}
@@ -981,17 +999,29 @@ function Avatar({
   url,
   size,
   views,
+  own = false,
 }: {
   name: string;
   url: string | null;
   size: 'lg' | 'md' | 'sm';
   views: number;
+  /** Na própria linha vale a foto atual do perfil, sem esperar o ranking ser publicado de novo. */
+  own?: boolean;
 }) {
+  const { profile } = useAuth();
+  const src = own && profile ? profile.avatarUrl : url;
+  const [failed, setFailed] = useState<string | null>(null);
   const tier = patentFor(views).current;
   return (
     <span className={`avatar-wrap avatar-wrap-${size}`}>
-      {url ? (
-        <img className={`avatar avatar-${size}`} src={url} alt="" />
+      {src && failed !== src ? (
+        <img
+          className={`avatar avatar-${size}`}
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(src)}
+        />
       ) : (
         <span className={`avatar avatar-${size}`} aria-hidden>
           {initial(name)}
