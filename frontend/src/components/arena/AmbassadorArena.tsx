@@ -591,6 +591,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                   <NetworkGlyph platform={item} />
                   {platformLabel(item)}
                 </button>
+                {/* Conectar fica só no cartão de conexão acima, para não repetir o mesmo botão. */}
                 {href && !needsLogin ? (
                   <a
                     href={href}
@@ -600,11 +601,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                   >
                     Abrir
                   </a>
-                ) : (
-                  <button type="button" className="cta" onClick={() => void connect(item)}>
-                    Conectar
-                  </button>
-                )}
+                ) : null}
               </div>
             );
           })}
