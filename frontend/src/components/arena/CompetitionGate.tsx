@@ -49,10 +49,8 @@ export function CompetitionGate({
           const account = accounts.find((item) => item.platform === platform);
           const duty = connectionDuty(account?.status);
           const label = actionLabel(platform, duty);
-          const handle = account?.username?.replace(/^@/, '').trim();
           const review = duty === 'ready' ? reviewLine(account?.reviewStatus, account?.reviewNote) : null;
-          const line =
-            duty === 'ready' && handle ? `Conectado como @${handle}` : dutyLine(platform, duty);
+          const line = dutyLine(platform, duty);
 
           return (
             <article

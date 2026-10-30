@@ -51,6 +51,56 @@ export function isAllowedThumbnailUrl(raw: string): boolean {
   return ALLOWED_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
 }
 
+const MAX_REDIRECTS = 3;
+
+/**
+ * Segue redirecionamentos à mão: cada salto passa pela lista de CDNs, senão um redirect
+ * levaria o servidor a buscar um endereço interno.
+ */
+export async function fetchAllowedImage(
+  url: string,
+  fetcher: typeof fetch,
+): Promise<Response | null> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    if (!isAllowedThumbnailUrl(current)) return null;
+    const response = await fetcher(current, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { accept: 'image/avif,image/webp,image/jpeg,image/*;q=0.8' },
+    });
+    if (response.status < 300 || response.status >= 400) return response;
+    const location = response.headers.get('location');
+    await response.body?.cancel().catch(() => undefined);
+    if (!location) return null;
+    try {
+      current = new URL(location, current).toString();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Lê o corpo até o limite; sem content-length, um arquivo enorme não ocupa a memória toda. */
+export async function readLimited(response: Response, maxBytes: number): Promise<Buffer | null> {
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
 /** Formato pelos primeiros bytes: o content-type das CDNs nem sempre bate com o arquivo. */
 export function sniffImageType(body: Buffer): keyof typeof TYPES | null {
   if (body.length < 12) return null;
@@ -84,6 +134,7 @@ export class ThumbnailCacheService {
   private readonly queued = new Set<string>();
   private warming = 0;
   private dirReady: Promise<void> | null = null;
+  fetcher: typeof fetch = (input, init) => fetch(input, init);
 
   constructor(
     @Inject(INJECTION_TOKENS.CONTENT_REPOSITORY)
@@ -133,21 +184,17 @@ export class ThumbnailCacheService {
   }
 
   private async fetchAndStore(contentId: string, url: string): Promise<CachedThumbnail | null> {
-    if (!isAllowedThumbnailUrl(url)) return null;
     try {
-      const response = await fetch(url, {
-        redirect: 'follow',
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        headers: { accept: 'image/avif,image/webp,image/jpeg,image/*;q=0.8' },
-      });
+      const response = await fetchAllowedImage(url, this.fetcher);
+      if (!response) return null;
       if (!response.ok) {
         this.logger.debug(`Capa ${contentId} indisponível na CDN (status ${response.status})`);
         return null;
       }
       const declared = Number(response.headers.get('content-length') ?? 0);
       if (declared > MAX_BYTES) return null;
-      const body = Buffer.from(await response.arrayBuffer());
-      if (body.length === 0 || body.length > MAX_BYTES) return null;
+      const body = await readLimited(response, MAX_BYTES);
+      if (!body || body.length === 0) return null;
       const ext = sniffImageType(body);
       if (!ext) return null;
       await this.write(contentId, ext, body);

@@ -265,13 +265,14 @@ export class AdminController {
     @Param('id', uuidPipe('Conteúdo inválido.')) contentId: string,
     @Body() body: ExcludeContentDto,
   ) {
-    if (!body.reason.trim()) {
+    const reason = body.reason.trim();
+    if (!reason) {
       throw new BadRequestException('Informe a justificativa da exclusão.');
     }
 
     const content = await this.contentRepo.exclude(
       contentId as never,
-      body.reason,
+      reason,
       req.user.id as never,
       this.clock.now(),
     );
@@ -281,7 +282,7 @@ export class AdminController {
       action: 'exclude_content',
       entityType: 'content',
       entityId: contentId,
-      reason: body.reason,
+      reason,
     });
 
     return {

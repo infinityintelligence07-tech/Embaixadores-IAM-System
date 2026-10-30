@@ -1,4 +1,12 @@
-import { Controller, Get, Query, UseGuards, Req, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  NotFoundException,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '../guards/auth.guard';
 import {
   AccountReviewStatus,
@@ -80,7 +88,7 @@ export class RankingsController {
     if (value) {
       if (!UUID.test(value)) throw new BadRequestException('Campanha inválida.');
       const found = await this.campaigns.findById(value);
-      if (!found) throw new BadRequestException('Campanha não encontrada.');
+      if (!found) throw new NotFoundException('Essa campanha não existe mais. Escolha outra na lista.');
       return { id: found.id };
     }
     const now = this.clock.now();
@@ -221,7 +229,9 @@ export class RankingsController {
         (account.reviewStatus === AccountReviewStatus.ChangesRequested ||
           account.reviewStatus === AccountReviewStatus.Rejected);
 
-      if ((!membership || membership.status !== 'approved') && !teamNote) {
+      if (membership?.status === MembershipStatus.Suspended) {
+        reason = 'Cadastro suspenso';
+      } else if ((!membership || membership.status !== 'approved') && !teamNote) {
         reason = 'Cadastro ainda não aprovado';
       } else if (!membership) {
         reason = 'Cadastro ainda não aprovado';

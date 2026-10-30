@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ListFooter, useListWindow } from '@/components/admin/ListWindow';
 import { NoteDialog } from '@/components/admin/NoteDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   ApiError,
@@ -16,11 +16,13 @@ type Filter = ApplicationStatus | 'all';
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'pending', label: 'Aguardando' },
   { id: 'approved', label: 'Aprovados' },
-  { id: 'rejected', label: 'Rejeitados' },
+  { id: 'rejected', label: 'Reprovados' },
   { id: 'all', label: 'Todos' },
 ];
 
-const PAGE_SIZE = 10;
+type Entry =
+  | { kind: 'application'; id: string; createdAt: string; item: AmbassadorApplication }
+  | { kind: 'signup'; id: string; createdAt: string; user: AdminUser };
 
 function statusLabel(status: ApplicationStatus): string {
   switch (status) {
@@ -29,7 +31,7 @@ function statusLabel(status: ApplicationStatus): string {
     case 'approved':
       return 'Aprovado';
     case 'rejected':
-      return 'Rejeitado';
+      return 'Reprovado';
     default: {
       const exhaustive: never = status;
       return exhaustive;
@@ -90,6 +92,14 @@ function whatsappLink(digits: string): string {
   return `https://wa.me/${full}`;
 }
 
+function networksLine(item: AmbassadorApplication): string {
+  const names = [
+    item.redes_sociais.includes('instagram') ? 'Instagram' : null,
+    item.redes_sociais.includes('tiktok') ? 'TikTok' : null,
+  ].filter((name): name is string => name !== null);
+  return names.length > 0 ? names.join(' e ') : 'Sem rede informada';
+}
+
 function NetworkLine({
   network,
   handle,
@@ -118,7 +128,7 @@ export function NewMembersSection({
   onMessage,
   onError,
 }: {
-  /** Cadastros feitos direto no site, ainda aguardando aprovação. */
+  /** Pessoas com conta; as pendentes sem candidatura aparecem aqui para aprovar. */
   pendingSignups: AdminUser[];
   preview: boolean;
   approvingUserId: string | null;
@@ -129,17 +139,21 @@ export function NewMembersSection({
   onError: (message: string) => void;
 }) {
   const [applications, setApplications] = useState<AmbassadorApplication[]>([]);
-  const [loading, setLoading] = useState(!preview);
+  const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState<Filter>('pending');
   const [openId, setOpenId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [pendingReject, setPendingReject] = useState<AmbassadorApplication | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<AmbassadorApplication | null>(null);
-  const [visible, setVisible] = useState(PAGE_SIZE);
 
   const load = useCallback(async () => {
-    if (preview) return;
+    if (preview) {
+      const demo = await import('@/components/admin/previewData');
+      setApplications(demo.previewApplications);
+      setLoading(false);
+      return;
+    }
     try {
       setApplications(await api.applications());
       setLoadFailed(false);
@@ -158,11 +172,14 @@ export function NewMembersSection({
     () => new Set(applications.map((item) => item.email.toLowerCase())),
     [applications],
   );
-  // Quem preencheu o formulário já aparece pela candidatura; aqui ficam só os cadastros diretos.
+  // Quem preencheu o cadastro aparece pela candidatura; aqui ficam só as contas sem formulário.
   const directSignups = useMemo(
     () =>
       pendingSignups.filter(
-        (user) => user.status === 'pending' && !applicationEmails.has(user.email.toLowerCase()),
+        (user) =>
+          user.status === 'pending' &&
+          user.role !== 'admin' &&
+          !applicationEmails.has(user.email.toLowerCase()),
       ),
     [applicationEmails, pendingSignups],
   );
@@ -182,26 +199,51 @@ export function NewMembersSection({
     if (!loading) onPendingCount(counts.pending);
   }, [counts.pending, loading, onPendingCount]);
 
-  const shownApplications = useMemo(
-    () => (filter === 'all' ? applications : applications.filter((item) => item.status === filter)),
-    [applications, filter],
-  );
-  const shownSignups = filter === 'pending' || filter === 'all' ? directSignups : [];
-  const total = shownApplications.length + shownSignups.length;
+  const entries = useMemo<Entry[]>(() => {
+    const fromApplications: Entry[] = applications
+      .filter((item) => filter === 'all' || item.status === filter)
+      .map((item) => ({ kind: 'application', id: item.id, createdAt: item.created_at, item }));
+    const fromSignups: Entry[] =
+      filter === 'pending' || filter === 'all'
+        ? directSignups.map((user) => ({
+            kind: 'signup',
+            id: user.id,
+            createdAt: user.createdAt,
+            user,
+          }))
+        : [];
+    return [...fromApplications, ...fromSignups].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+  }, [applications, directSignups, filter]);
+
+  const list = useListWindow(entries.length);
 
   async function review(item: AmbassadorApplication, status: ApplicationStatus, note?: string) {
     setUpdatingId(item.id);
     try {
-      const updated = await api.updateApplication(item.id, status, note);
+      const updated: AmbassadorApplication = preview
+        ? {
+            ...item,
+            status,
+            reviewed_at: new Date().toISOString(),
+            reviewed_by_name: 'Você',
+            review_note: status === 'rejected' ? (note ?? null) : null,
+          }
+        : await api.updateApplication(item.id, status, note);
       setApplications((current) => current.map((row) => (row.id === item.id ? updated : row)));
       onMessage(
         status === 'approved'
-          ? `${updated.nome_completo} aprovado. As redes que ele já confirmou entram no ranking, e ele recebeu o aviso no app.`
-          : `Candidatura de ${updated.nome_completo} reprovada. O motivo aparece no app dele.`,
+          ? `${updated.nome_completo} aprovado. O acesso foi liberado, as contas informadas entram no ranking e a pessoa recebeu o aviso no app.`
+          : `Cadastro de ${updated.nome_completo} reprovado. O motivo aparece no app.`,
       );
-      onChanged();
+      if (!preview) onChanged();
     } catch (err) {
-      onError(err instanceof ApiError ? err.message : 'Não foi possível atualizar a candidatura.');
+      onError(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível salvar a decisão. Confira a internet e tente de novo.',
+      );
     } finally {
       setUpdatingId(null);
       setPendingReject(null);
@@ -211,22 +253,227 @@ export function NewMembersSection({
   async function remove(item: AmbassadorApplication) {
     setUpdatingId(item.id);
     try {
-      await api.deleteApplication(item.id);
+      if (!preview) await api.deleteApplication(item.id);
       setApplications((current) => current.filter((row) => row.id !== item.id));
-      onMessage('Candidatura excluída.');
+      setOpenId(null);
+      onMessage(`Cadastro de ${item.nome_completo} excluído.`);
     } catch (err) {
-      onError(err instanceof ApiError ? err.message : 'Não foi possível excluir a candidatura.');
+      onError(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível excluir o cadastro. Confira a internet e tente de novo.',
+      );
     } finally {
       setUpdatingId(null);
       setPendingRemoval(null);
     }
   }
 
+  function renderApplication(item: AmbassadorApplication) {
+    const open = openId === item.id;
+    const busy = updatingId === item.id;
+    return (
+      <article key={item.id} className="admin-row admin-member">
+        <div className="admin-person">
+          <strong>
+            {item.nome_completo}
+            <span className="admin-status" data-tone={statusTone(item.status)}>
+              <i />
+              {statusLabel(item.status)}
+            </span>
+          </strong>
+          <span>
+            {networksLine(item)} · cadastro em {formatWhen(item.created_at)}
+          </span>
+        </div>
+        <div className="admin-actions">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={`member-${item.id}`}
+            onClick={() => setOpenId(open ? null : item.id)}
+          >
+            {open ? 'Ocultar dados' : 'Ver dados'}
+          </button>
+          {item.status === 'pending' ? (
+            <button
+              type="button"
+              className="is-stop"
+              disabled={busy}
+              onClick={() => setPendingReject(item)}
+            >
+              Reprovar
+            </button>
+          ) : null}
+          {item.status !== 'approved' ? (
+            <button
+              type="button"
+              className="admin-primary"
+              disabled={busy}
+              onClick={() => void review(item, 'approved')}
+            >
+              {busy ? 'Salvando...' : item.status === 'rejected' ? 'Aprovar mesmo assim' : 'Aprovar'}
+            </button>
+          ) : null}
+        </div>
+
+        {open ? (
+          <dl id={`member-${item.id}`} className="admin-details">
+            <div>
+              <dt>Nome completo</dt>
+              <dd>{item.nome_completo}</dd>
+            </div>
+            <div>
+              <dt>E-mail</dt>
+              <dd>
+                <a href={`mailto:${item.email}`}>{item.email}</a>
+              </dd>
+            </div>
+            <div>
+              <dt>WhatsApp</dt>
+              <dd>
+                <a href={whatsappLink(item.whatsapp)} target="_blank" rel="noreferrer">
+                  {formatPhone(item.whatsapp)}
+                </a>
+              </dd>
+            </div>
+            {item.redes_sociais.includes('instagram') ? (
+              <div>
+                <dt>Instagram</dt>
+                <dd>
+                  <NetworkLine
+                    network="instagram"
+                    handle={item.instagram_handle}
+                    fallback={item.nome_conta}
+                  />
+                </dd>
+              </div>
+            ) : null}
+            {item.redes_sociais.includes('tiktok') ? (
+              <div>
+                <dt>TikTok</dt>
+                <dd>
+                  <NetworkLine
+                    network="tiktok"
+                    handle={item.tiktok_handle}
+                    fallback={item.nome_conta}
+                  />
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>Cadastro em</dt>
+              <dd>{formatWhen(item.created_at)}</dd>
+            </div>
+            {item.reviewed_at ? (
+              <div>
+                <dt>{item.status === 'approved' ? 'Aprovado em' : 'Reprovado em'}</dt>
+                <dd>
+                  {formatWhen(item.reviewed_at)}
+                  {item.reviewed_by_name ? ` por ${item.reviewed_by_name}` : ''}
+                </dd>
+              </div>
+            ) : null}
+            {item.review_note ? (
+              <div>
+                <dt>Motivo enviado</dt>
+                <dd>{item.review_note}</dd>
+              </div>
+            ) : null}
+            <div className="admin-details-foot">
+              <span className="admin-meta">
+                Excluir apaga os dados do cadastro. O acesso de quem já foi aprovado continua.
+              </span>
+              <button
+                type="button"
+                className="is-stop"
+                disabled={busy}
+                onClick={() => setPendingRemoval(item)}
+              >
+                Excluir cadastro
+              </button>
+            </div>
+          </dl>
+        ) : null}
+      </article>
+    );
+  }
+
+  function renderSignup(user: AdminUser) {
+    const open = openId === user.id;
+    const busy = approvingUserId === user.id;
+    return (
+      <article key={user.id} className="admin-row admin-member">
+        <div className="admin-person">
+          <strong>
+            {user.fullName || user.publicName}
+            <span className="admin-status" data-tone="wait">
+              <i />
+              Aguardando
+            </span>
+          </strong>
+          <span>Conta criada sem o cadastro completo · {formatWhen(user.createdAt)}</span>
+        </div>
+        <div className="admin-actions">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={`member-${user.id}`}
+            onClick={() => setOpenId(open ? null : user.id)}
+          >
+            {open ? 'Ocultar dados' : 'Ver dados'}
+          </button>
+          <button
+            type="button"
+            className="admin-primary"
+            disabled={busy}
+            onClick={() => onApproveSignup(user.id)}
+          >
+            {busy ? 'Salvando...' : 'Aprovar'}
+          </button>
+        </div>
+
+        {open ? (
+          <dl id={`member-${user.id}`} className="admin-details">
+            <div>
+              <dt>Nome completo</dt>
+              <dd>{user.fullName || 'Não informado'}</dd>
+            </div>
+            <div>
+              <dt>Nome público</dt>
+              <dd>{user.publicName}</dd>
+            </div>
+            <div>
+              <dt>E-mail</dt>
+              <dd>
+                <a href={`mailto:${user.email}`}>{user.email}</a>
+              </dd>
+            </div>
+            <div>
+              <dt>Conta criada em</dt>
+              <dd>{formatWhen(user.createdAt)}</dd>
+            </div>
+            <p className="admin-details-note">
+              Essa pessoa criou a conta, mas não completou o cadastro, por isso não há WhatsApp nem
+              @ das redes. Ao aprovar, ela ganha acesso e pode informar o @ pelo app.
+            </p>
+          </dl>
+        ) : null}
+      </article>
+    );
+  }
+
   return (
-    <section className="admin-panel" aria-label="Novos membros">
-      <h2>Novos membros</h2>
-      <div className="admin-row">
-        <div className="admin-actions" role="group" aria-label="Filtrar por situação">
+    <section className="admin-panel" aria-labelledby="new-members-title">
+      <div className="admin-panel-head">
+        <h2 id="new-members-title">Cadastros</h2>
+        <p>
+          Quem entrou no programa pelo site. Ao aprovar, a pessoa ganha acesso completo e as contas
+          que ela informou entram no ranking.
+        </p>
+      </div>
+      <div className="admin-toolbar">
+        <div className="admin-segment" role="group" aria-label="Filtrar por situação">
           {FILTERS.map((item) => (
             <button
               key={item.id}
@@ -234,10 +481,12 @@ export function NewMembersSection({
               aria-pressed={filter === item.id}
               onClick={() => {
                 setFilter(item.id);
-                setVisible(PAGE_SIZE);
+                setOpenId(null);
+                list.reset();
               }}
             >
-              {item.label} ({counts[item.id]})
+              {item.label}
+              {loading ? null : <span className="admin-segment-count">{counts[item.id]}</span>}
             </button>
           ))}
         </div>
@@ -245,238 +494,61 @@ export function NewMembersSection({
 
       {loading ? (
         <div className="admin-row">
-          <Spinner label="Carregando candidaturas..." />
+          <Spinner label="Carregando cadastros..." />
         </div>
       ) : null}
 
       {loadFailed ? (
-        <div className="admin-row">
-          <span className="admin-meta">Não foi possível carregar as candidaturas.</span>
-          <button type="button" className="admin-more" onClick={() => void load()}>
-            Tentar de novo
-          </button>
+        <div className="admin-empty" role="alert">
+          <strong>Não foi possível carregar os cadastros</strong>
+          <p>Confira a internet e tente de novo. Se continuar, avise o suporte técnico.</p>
+          <div className="admin-actions">
+            <button type="button" onClick={() => void load()}>
+              Tentar de novo
+            </button>
+          </div>
         </div>
       ) : null}
 
-      {!loading && !loadFailed && total === 0 ? (
-        <EmptyState
-          title={filter === 'pending' ? 'Ninguém aguardando aprovação' : 'Nada com esse filtro'}
-          description={
-            filter === 'pending'
-              ? 'Quando alguém preencher o formulário ou criar conta no site, aparece aqui.'
-              : 'Troque o filtro para ver outras candidaturas.'
-          }
-        />
-      ) : null}
-
-      {shownApplications.slice(0, visible).map((item) => {
-        const open = openId === item.id;
-        const busy = updatingId === item.id;
-        return (
-          <article key={item.id} className="admin-row admin-member">
-            <div className="admin-person">
-              <strong>
-                {item.nome_completo}
-                <span className="admin-status" data-tone={statusTone(item.status)}>
-                  <i />
-                  {statusLabel(item.status)}
-                </span>
-              </strong>
-              <span>
-                Formulário · enviado em {formatWhen(item.created_at)}
-              </span>
-            </div>
+      {!loading && !loadFailed && entries.length === 0 ? (
+        <div className="admin-empty" role="status">
+          <strong>
+            {filter === 'pending' ? 'Ninguém aguardando aprovação' : 'Nada com esse filtro'}
+          </strong>
+          <p>
+            {filter === 'pending'
+              ? 'Quando alguém se cadastrar no site, o pedido aparece aqui para você aprovar.'
+              : 'Escolha outro filtro para ver os demais cadastros.'}
+          </p>
+          {filter !== 'all' && counts.all > 0 ? (
             <div className="admin-actions">
               <button
                 type="button"
-                aria-expanded={open}
-                aria-controls={`member-${item.id}`}
-                onClick={() => setOpenId(open ? null : item.id)}
+                onClick={() => {
+                  setFilter('all');
+                  list.reset();
+                }}
               >
-                {open ? 'Ocultar dados' : 'Ver dados do formulário'}
-              </button>
-              {item.status !== 'approved' ? (
-                <button
-                  type="button"
-                  className="admin-primary"
-                  disabled={busy || preview}
-                  onClick={() => void review(item, 'approved')}
-                >
-                  Aprovar
-                </button>
-              ) : null}
-              {item.status === 'pending' ? (
-                <button
-                  type="button"
-                  className="is-stop"
-                  disabled={busy || preview}
-                  onClick={() => setPendingReject(item)}
-                >
-                  Reprovar
-                </button>
-              ) : null}
-            </div>
-
-            {open ? (
-              <dl id={`member-${item.id}`} className="admin-details">
-                <div>
-                  <dt>Nome completo</dt>
-                  <dd>{item.nome_completo}</dd>
-                </div>
-                <div>
-                  <dt>E-mail</dt>
-                  <dd>
-                    <a href={`mailto:${item.email}`}>{item.email}</a>
-                  </dd>
-                </div>
-                <div>
-                  <dt>WhatsApp</dt>
-                  <dd>
-                    <a href={whatsappLink(item.whatsapp)} target="_blank" rel="noreferrer">
-                      {formatPhone(item.whatsapp)}
-                    </a>
-                  </dd>
-                </div>
-                {item.redes_sociais.includes('instagram') ? (
-                  <div>
-                    <dt>Instagram</dt>
-                    <dd>
-                      <NetworkLine
-                        network="instagram"
-                        handle={item.instagram_handle}
-                        fallback={item.nome_conta}
-                      />
-                    </dd>
-                  </div>
-                ) : null}
-                {item.redes_sociais.includes('tiktok') ? (
-                  <div>
-                    <dt>TikTok</dt>
-                    <dd>
-                      <NetworkLine
-                        network="tiktok"
-                        handle={item.tiktok_handle}
-                        fallback={item.nome_conta}
-                      />
-                    </dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt>Enviado em</dt>
-                  <dd>{formatWhen(item.created_at)}</dd>
-                </div>
-                {item.reviewed_at ? (
-                  <div>
-                    <dt>{item.status === 'approved' ? 'Aprovado' : 'Reprovado'}</dt>
-                    <dd>
-                      {formatWhen(item.reviewed_at)}
-                      {item.reviewed_by_name ? ` por ${item.reviewed_by_name}` : ''}
-                    </dd>
-                  </div>
-                ) : null}
-                {item.review_note ? (
-                  <div>
-                    <dt>Motivo enviado</dt>
-                    <dd>{item.review_note}</dd>
-                  </div>
-                ) : null}
-                <div className="admin-details-foot">
-                  <button
-                    type="button"
-                    className="is-stop"
-                    disabled={busy || preview}
-                    onClick={() => setPendingRemoval(item)}
-                  >
-                    Excluir candidatura
-                  </button>
-                </div>
-              </dl>
-            ) : null}
-          </article>
-        );
-      })}
-
-      {shownSignups.map((user) => {
-        const open = openId === user.id;
-        return (
-          <article key={user.id} className="admin-row admin-member">
-            <div className="admin-person">
-              <strong>
-                {user.fullName || user.publicName}
-                <span className="admin-status" data-tone="wait">
-                  <i />
-                  Aguardando
-                </span>
-              </strong>
-              <span>Criou conta direto no site · {formatWhen(user.createdAt)}</span>
-            </div>
-            <div className="admin-actions">
-              <button
-                type="button"
-                aria-expanded={open}
-                aria-controls={`member-${user.id}`}
-                onClick={() => setOpenId(open ? null : user.id)}
-              >
-                {open ? 'Ocultar dados' : 'Ver dados'}
-              </button>
-              <button
-                type="button"
-                className="admin-primary"
-                disabled={approvingUserId === user.id}
-                onClick={() => onApproveSignup(user.id)}
-              >
-                Aprovar
+                Ver todos os cadastros
               </button>
             </div>
-
-            {open ? (
-              <dl id={`member-${user.id}`} className="admin-details">
-                <div>
-                  <dt>Nome completo</dt>
-                  <dd>{user.fullName || 'Não informado'}</dd>
-                </div>
-                <div>
-                  <dt>Nome público</dt>
-                  <dd>{user.publicName}</dd>
-                </div>
-                <div>
-                  <dt>E-mail</dt>
-                  <dd>
-                    <a href={`mailto:${user.email}`}>{user.email}</a>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Conta criada em</dt>
-                  <dd>{formatWhen(user.createdAt)}</dd>
-                </div>
-                <p className="admin-details-note">
-                  Essa pessoa criou conta pela tela de cadastro e não preencheu o formulário de
-                  candidatura, por isso não há WhatsApp nem @ das redes.
-                </p>
-              </dl>
-            ) : null}
-          </article>
-        );
-      })}
-
-      {shownApplications.length > visible ? (
-        <div className="admin-row">
-          <button
-            type="button"
-            className="admin-more"
-            onClick={() => setVisible((count) => count + PAGE_SIZE)}
-          >
-            Mostrar mais {Math.min(PAGE_SIZE, shownApplications.length - visible)} de{' '}
-            {shownApplications.length - visible} restantes
-          </button>
+          ) : null}
         </div>
       ) : null}
+
+      {entries
+        .slice(list.start, list.end)
+        .map((entry) =>
+          entry.kind === 'application' ? renderApplication(entry.item) : renderSignup(entry.user),
+        )}
+
+      <ListFooter list={list} label="cadastros" />
 
       <NoteDialog
         open={pendingReject !== null}
-        title={`Reprovar a candidatura de ${pendingReject?.nome_completo ?? ''}?`}
-        description="As redes dela ficam fora do ranking e ela vê o motivo no app. Você pode aprovar depois, se mudar de ideia."
-        confirmLabel="Reprovar"
+        title={`Reprovar o cadastro de ${pendingReject?.nome_completo ?? ''}?`}
+        description="As redes dessa pessoa ficam fora do ranking e ela vê o motivo no app. Você pode aprovar depois, se mudar de ideia."
+        confirmLabel="Reprovar cadastro"
         suggestions={[
           'O perfil não publica conteúdo do programa.',
           'Os dados do cadastro não conferem com o perfil informado.',
@@ -490,9 +562,9 @@ export function NewMembersSection({
 
       <ConfirmDialog
         open={pendingRemoval !== null}
-        title={`Excluir a candidatura de ${pendingRemoval?.nome_completo ?? ''}?`}
+        title={`Excluir o cadastro de ${pendingRemoval?.nome_completo ?? ''}?`}
         description="Os dados do formulário são apagados e não podem ser recuperados. O acesso de quem já foi aprovado continua."
-        confirmLabel="Excluir"
+        confirmLabel="Excluir cadastro"
         busy={pendingRemoval !== null && updatingId === pendingRemoval.id}
         onConfirm={() => {
           if (pendingRemoval) void remove(pendingRemoval);

@@ -36,7 +36,11 @@ export function describeChase(input: ChaseInput): ChaseCopy {
     };
   }
 
-  const place = `${ordinal(input.position)} de ${new Intl.NumberFormat('pt-BR').format(input.total)}`;
+  // A posição já está em destaque no título; aqui entra só o tamanho do grupo.
+  const field =
+    input.total > 1
+      ? `${sentence(categoryPhrase(input.category))} no ${platformLabel(input.platform)}, entre ${new Intl.NumberFormat('pt-BR').format(input.total)} embaixadores.`
+      : `${context} Só você no ranking por enquanto.`;
 
   if (input.position === 1) {
     const lead =
@@ -44,7 +48,7 @@ export function describeChase(input: ChaseInput): ChaseCopy {
         ? `Você lidera. A 2ª posição está a ${formatViews(input.belowGap)} views.`
         : 'Você lidera este ranking.';
     return {
-      context: `${context} ${place}.`,
+      context: field,
       detail: lead,
       progress: 1,
     };
@@ -54,14 +58,14 @@ export function describeChase(input: ChaseInput): ChaseCopy {
     const mine = input.myScore ?? 0;
     const denom = mine + input.gapToAbove;
     return {
-      context: `${context} ${place}.`,
+      context: field,
       detail: `Faltam ${formatViews(input.gapToAbove)} views para a ${ordinal(input.position - 1)} posição.`,
       progress: denom > 0 ? mine / denom : 0,
     };
   }
 
   return {
-    context: `${context} ${place}.`,
+    context: field,
     detail: 'Empate em views. A ordem segue o critério de desempate.',
     progress: 1,
   };

@@ -18,6 +18,7 @@ import {
   SocialMetricsProvider,
   SocialCredentials,
   SocialAuthError,
+  SocialProfileNotFoundError,
   SocialRateLimitError,
   SocialContentItem,
 } from '../../ports/social-metrics.port';
@@ -30,6 +31,9 @@ const MAX_PAGES = 100; // Safety limit per run
 const SNAPSHOT_MIN_INTERVAL_MS = 60 * 60 * 1000; // Skip duplicate snapshots within 1 hour
 const RATE_LIMIT_BACKOFF_MS = 30 * 60 * 1000; // At least 30 minutes
 const ASSUMED_TOKEN_LIFETIME_MS = 60 * 60 * 1000; // Credentials without expiresAt
+/** Contas com mais de MAX_PAGES páginas seguem em rodadas seguidas, a partir do cursor salvo. */
+const CONTINUE_DELAY_MS = 60 * 1000;
+const MAX_CONTINUATIONS = 5;
 
 interface RunCounters {
   itemsFetched: number;
@@ -40,10 +44,24 @@ const MESSAGES = {
   authExpired: 'A autorização expirou. Conecte a conta de novo para voltar ao ranking.',
   rateLimited: 'A rede limitou as consultas. A coleta continua em breve.',
   failed: 'A coleta falhou. Tente sincronizar de novo.',
+  notFound: (network: string, handle: string | null) =>
+    `Não encontramos ${handle ? `@${handle.replace(/^@+/, '')}` : 'a conta'} no ${network}. Se você trocou o @, informe o novo em Conexões.`,
   emptyComplete: 'Coleta concluída. Nenhum conteúdo encontrado ainda.',
   complete: (total: number) => `Coleta concluída. ${total} conteúdos.`,
   partial: (total: number) => `Coleta parcial. ${total} conteúdos até agora.`,
 };
+
+function networkName(platform: SocialPlatform): string {
+  return platform === SocialPlatform.Instagram ? 'Instagram' : 'TikTok';
+}
+
+/** A coleta perdeu a vez: o job foi cancelado, reassumido por outro worker ou a conta mudou. */
+class SyncSupersededError extends Error {
+  constructor() {
+    super('Coleta interrompida: a conta mudou ou outra coleta assumiu.');
+    this.name = 'SyncSupersededError';
+  }
+}
 
 /**
  * Syncs a social account: fetches all content with pagination,
@@ -143,6 +161,7 @@ export class SyncAccountUseCase {
           ? checkpoint.cursor
           : null;
       const resumedFromCheckpoint = cursor !== null;
+      const continuations = resumedFromCheckpoint ? Number(checkpoint?.continuations) || 0 : 0;
       if (resumedFromCheckpoint) {
         // Carry the counters of the interrupted run so the final message
         // reflects everything collected, not only the pages after resume.
@@ -157,6 +176,7 @@ export class SyncAccountUseCase {
       while (pagesFetched < MAX_PAGES) {
         const page = await provider.listContents(freshCreds, cursor);
         pagesFetched++;
+        await this.assertStillOwned(job, account);
         
         for (const item of page.items) {
           seenPlatformIds.add(item.platformContentId);
@@ -173,10 +193,21 @@ export class SyncAccountUseCase {
         
         cursor = page.nextCursor;
         
-        // Update checkpoint
+        // Checkpoint e lock renovado: sem isso, uma coleta longa passaria de 30 minutos
+        // e outro worker reassumiria o mesmo job em paralelo.
         await this.syncJobRepo.update(job.id, {
-          checkpoint: { cursor, totalFetched, totalUpserted },
+          checkpoint: { cursor, totalFetched, totalUpserted, continuations },
+          lockedAt: this.clock.now(),
         });
+      }
+
+      // Conta enorme: depois de algumas rodadas seguidas, o que já foi lido basta para classificar.
+      const continueLater = !completed && cursor !== null && continuations < MAX_CONTINUATIONS;
+      if (!completed && !continueLater) {
+        this.logger.warn(
+          `Account ${account.id} still has pages after ${continuations} continuations; treating as complete`,
+        );
+        completed = true;
       }
 
       // Deleted posts: only after a full pass that started from the first
@@ -208,6 +239,8 @@ export class SyncAccountUseCase {
       const coverageRatio = completed
         ? 1.0
         : Math.min(pagesFetched / MAX_PAGES, 0.99);
+
+      await this.assertStillOwned(job, account);
       
       // Finish run
       await this.syncJobRepo.finishRun(run.id, {
@@ -219,10 +252,21 @@ export class SyncAccountUseCase {
         metadata: { pagesFetched, completed, resumedFromCheckpoint },
       });
       
-      // Update job
-      await this.syncJobRepo.update(job.id, {
-        status: SyncJobStatus.Succeeded,
-      });
+      // Update job: a conta com mais páginas continua daqui a pouco, do cursor salvo.
+      if (continueLater) {
+        await this.syncJobRepo.update(job.id, {
+          status: SyncJobStatus.Pending,
+          checkpoint: { cursor, totalFetched, totalUpserted, continuations: continuations + 1 },
+          attempts: 0,
+          lockedAt: null,
+          lockedBy: null,
+          nextAttemptAt: new Date(this.clock.now().getTime() + CONTINUE_DELAY_MS),
+        });
+      } else {
+        await this.syncJobRepo.update(job.id, {
+          status: SyncJobStatus.Succeeded,
+        });
+      }
       
       // Update account
       let syncMessage: string;
@@ -234,11 +278,16 @@ export class SyncAccountUseCase {
         syncMessage = MESSAGES.complete(totalFetched);
       }
 
+      // Enquanto as rodadas seguintes leem o resto, uma conta que já tinha cobertura completa
+      // não sai do ranking por causa da rodada parcial.
+      const keepPreviousCoverage =
+        !completed && (account.syncCoverageRatio ?? 0) >= 0.99;
+
       await this.socialAccountRepo.update(account.id, {
         status: ConnectionStatus.Connected,
         lastSyncedAt: now,
         lastSuccessfulSyncAt: now,
-        syncCoverageRatio: coverageRatio,
+        ...(keepPreviousCoverage ? {} : { syncCoverageRatio: coverageRatio }),
         syncMessage,
       });
       
@@ -247,6 +296,24 @@ export class SyncAccountUseCase {
       );
     } catch (error) {
       const counters = { itemsFetched: totalFetched, itemsUpserted: totalUpserted };
+
+      // Um job cancelado (conta desconectada ou @ trocado) não pode voltar à fila nem
+      // devolver a conta para "conectada" ao registrar a própria falha.
+      const superseded =
+        error instanceof SyncSupersededError || !(await this.isStillOwned(job, account));
+      if (superseded) {
+        const reason = new SyncSupersededError().message;
+        this.logger.warn(`Sync ${job.id} for account ${account.id} stopped: ${reason}`);
+        await this.syncJobRepo.finishRun(run.id, {
+          status: SyncJobStatus.Cancelled,
+          finishedAt: this.clock.now(),
+          itemsFetched: totalFetched,
+          itemsUpserted: totalUpserted,
+          coverageRatio: null,
+          errorMessage: reason,
+        });
+        return;
+      }
 
       if (error instanceof SocialAuthError) {
         await this.handleAuthExpired(job, run, account, error, counters);
@@ -281,11 +348,17 @@ export class SyncAccountUseCase {
       const newStatus =
         job.attempts >= job.maxAttempts ? SyncJobStatus.Failed : SyncJobStatus.Pending;
       
+      // @ apagado ou trocado: a pessoa precisa saber o que fazer, não só que falhou.
+      const userMessage =
+        error instanceof SocialProfileNotFoundError
+          ? MESSAGES.notFound(networkName(account.platform), account.username)
+          : MESSAGES.failed;
+
       // lastError is shown in the admin UI: keep it in Portuguese. The
       // technical message stays in the logs and in sync_runs.error_message.
       await this.syncJobRepo.update(job.id, {
         status: newStatus,
-        lastError: MESSAGES.failed,
+        lastError: userMessage,
         nextAttemptAt: newStatus === SyncJobStatus.Pending ? nextAttemptAt : null,
       });
       
@@ -293,7 +366,7 @@ export class SyncAccountUseCase {
       await this.socialAccountRepo.update(account.id, {
         status: ConnectionStatus.Connected,
         lastSyncedAt: now,
-        syncMessage: MESSAGES.failed,
+        syncMessage: userMessage,
       });
       
       throw error;
@@ -347,6 +420,30 @@ export class SyncAccountUseCase {
       source: `${account.platform}_${account.transport}`,
       syncRunId: run.id,
     });
+  }
+
+  private async isStillOwned(job: SyncJob, account: SocialAccount): Promise<boolean> {
+    try {
+      const [currentJob, currentAccount] = await Promise.all([
+        this.syncJobRepo.findById(job.id),
+        this.socialAccountRepo.findById(account.id),
+      ]);
+      if (!currentJob || currentJob.status !== SyncJobStatus.Running) return false;
+      if (job.lockedBy && currentJob.lockedBy && currentJob.lockedBy !== job.lockedBy) return false;
+      if (!currentAccount) return false;
+      return (
+        currentAccount.platformUserId === account.platformUserId &&
+        currentAccount.transport === account.transport
+      );
+    } catch (error) {
+      // Sem como conferir (banco instável), segue o fluxo normal de falha.
+      this.logger.warn(`Could not confirm sync ownership for job ${job.id}: ${error}`);
+      return true;
+    }
+  }
+
+  private async assertStillOwned(job: SyncJob, account: SocialAccount): Promise<void> {
+    if (!(await this.isStillOwned(job, account))) throw new SyncSupersededError();
   }
 
   private async markMissingAsRemoved(

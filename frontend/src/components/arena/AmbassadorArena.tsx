@@ -37,6 +37,8 @@ import './arena.css';
 
 const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
 const CATEGORIES: RankingCategory[] = ['total_views', 'best_video'];
+/** Acima de 30 posições o restante vira páginas; até 30 abre inteiro. */
+const TAIL_PAGE = 20;
 
 type BoardKey = `${SocialPlatform}:${RankingCategory}`;
 
@@ -100,6 +102,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const [errors, setErrors] = useState<Partial<Record<BoardKey, string>>>({});
   const [loading, setLoading] = useState(!locked);
   const [restOpen, setRestOpen] = useState(false);
+  const [tailPage, setTailPage] = useState(0);
   const [query, setQuery] = useState('');
   const [videosOpen, setVideosOpen] = useState(false);
   const [extra, setExtra] = useState<Partial<Record<BoardKey, RankingEntry[]>>>({});
@@ -304,6 +307,13 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     ? tail.filter((item) => item.publicName.toLowerCase().includes(query.trim().toLowerCase()))
     : tail;
   const youAreInTail = (standing?.position ?? 0) > 10;
+  const paged = total > 30;
+  const tailSize = query.trim() ? visibleTail.length : Math.max(0, total - 10);
+  const tailPages = Math.max(1, Math.ceil(tailSize / TAIL_PAGE));
+  const shownTail = paged
+    ? visibleTail.slice(tailPage * TAIL_PAGE, (tailPage + 1) * TAIL_PAGE)
+    : visibleTail;
+  const needsSignup = !locked && !loading && Boolean(profile?.needsSignupDetails);
 
   useEffect(() => {
     const dialog = ladderRef.current;
@@ -330,17 +340,36 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   function selectPlatform(next: SocialPlatform) {
     setPlatform(next);
     setRestOpen(false);
+    setTailPage(0);
     setQuery('');
   }
 
   function selectCategory(next: RankingCategory) {
     setCategory(next);
     setRestOpen(false);
+    setTailPage(0);
     setQuery('');
   }
 
-  async function loadMore() {
-    if (!board || locked) return;
+  function toggleRest() {
+    if (!restOpen && paged && youAreInTail && standing?.position != null) {
+      const yours = Math.floor((standing.position - 11) / TAIL_PAGE);
+      setTailPage(tail.some((item) => item.isCurrentUser) ? yours : 0);
+    }
+    setRestOpen((open) => !open);
+  }
+
+  async function goToTailPage(next: number) {
+    const needed = Math.min(total, 10 + (next + 1) * TAIL_PAGE);
+    if (!query.trim() && items.length < needed) {
+      const ok = await loadMore();
+      if (!ok) return;
+    }
+    setTailPage(next);
+  }
+
+  async function loadMore(): Promise<boolean> {
+    if (!board || locked) return false;
     const pageSize = board.pageSize || 100;
     const nextPage = Math.floor(items.length / pageSize) + 1;
     setLoadingMore(true);
@@ -363,11 +392,13 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         delete next[activeKey];
         return next;
       });
+      return true;
     } catch {
       setErrors((current) => ({
         ...current,
         [activeKey]: 'Não foi possível carregar mais posições. Tente de novo.',
       }));
+      return false;
     } finally {
       setLoadingMore(false);
     }
@@ -380,6 +411,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   function selectCampaign(next: string) {
     setLoading(true);
     setRestOpen(false);
+    setTailPage(0);
     setQuery('');
     setCampaign(next);
   }
@@ -435,16 +467,20 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
             <i />
             <i />
           </div>
+        ) : needsSignup ? (
+          <h1 className="arena-standing">Falta pouco para entrar na competição</h1>
         ) : blocked ? (
           <h1 className="arena-standing">Falta só o seu @</h1>
         ) : standing?.eligible && standing.position != null ? (
           <h1 className="arena-standing">
-            Você está na{' '}
-            <span className="arena-ordinal" data-place={placeTone}>
-              {standing.position}
-              <sup>ª</sup>
-            </span>{' '}
-            posição
+            <span className="arena-standing-lead">Você está na</span>{' '}
+            <span className="arena-standing-place">
+              <span className="arena-ordinal" data-place={placeTone}>
+                {standing.position}
+                <sup>ª</sup>
+              </span>{' '}
+              posição
+            </span>
           </h1>
         ) : (
           <h1 className="arena-standing">Você ainda não está neste ranking</h1>
@@ -469,7 +505,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         )}
       </header>
 
-      {loading ? null : !locked && profile?.needsSignupDetails ? (
+      {loading ? null : needsSignup ? (
         <CompleteSignupCard
           onDone={async () => {
             await refreshProfile();
@@ -550,7 +586,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
       {locked ? null : (
         <div className="arena-campaign">
-          <label htmlFor="arena-campaign">Ranking</label>
+          <label htmlFor="arena-campaign">Período</label>
           <select
             id="arena-campaign"
             value={campaign ?? GENERAL_RANKING}
@@ -607,7 +643,8 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                     rel="noreferrer"
                     aria-label={`Abrir perfil no ${platformLabel(item)}`}
                   >
-                    Abrir
+                    <span className="arena-network-text">Perfil</span>
+                    <ExternalGlyph />
                   </a>
                 ) : null}
               </div>
@@ -621,6 +658,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
             onClick={openVideos}
           >
             Vídeos mais acessados
+            <Chevron className="arena-chevron" />
           </button>
         </div>
       </div>
@@ -640,11 +678,21 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           ) : videos.length === 0 ? (
             <EmptyState
               title="Nenhum vídeo coletado"
-              description="Conecte a rede e aguarde a coleta para ver os vídeos com mais views."
+              description={
+                blocked
+                  ? 'Conecte a rede e aguarde a coleta para ver os vídeos com mais views.'
+                  : 'Em coleta. Os vídeos com mais views aparecem aqui depois da próxima leitura.'
+              }
               action={
-                <Link className="arena-link" to="/conexoes">
-                  Conectar redes
-                </Link>
+                blocked ? (
+                  <Link className="arena-link" to="/conexoes">
+                    Conectar redes
+                  </Link>
+                ) : (
+                  <Link className="arena-link" to="/conteudos">
+                    Ver todos os conteúdos
+                  </Link>
+                )
               }
             />
           ) : (
@@ -686,10 +734,27 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           )}
         </Alert>
       ) : !board || total === 0 ? (
-        <EmptyState
-          title="Ranking ainda vazio"
-          description={`Quando houver views em ${platformLabel(platform)}, o pódio aparece aqui.`}
-        />
+        videosOpen && videos.length === 0 ? null : (
+          <EmptyState
+            title="Ranking ainda vazio"
+            description={
+              needsSignup
+                ? 'Complete o cadastro acima para entrar assim que o ranking abrir.'
+                : blocked
+                  ? `Conecte o ${platformLabel(platform)} no cartão acima para entrar assim que o ranking abrir.`
+                  : activeCampaign
+                    ? `Ninguém tem views no ${platformLabel(platform)} em ${periodName(activeCampaign)} ainda. Publique um vídeo para sair na frente.`
+                    : `Quando houver views no ${platformLabel(platform)}, o pódio aparece aqui.`
+            }
+            action={
+              locked || blocked || needsSignup ? undefined : (
+                <Link className="arena-link" to="/conteudos">
+                  Ver seus conteúdos
+                </Link>
+              )
+            }
+          />
+        )
       ) : (
         <>
           <section className="podium-wrap" aria-label="Pódio">
@@ -731,34 +796,58 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                 className="rest-toggle"
                 aria-expanded={restOpen}
                 aria-controls="ranking-restante"
-                onClick={() => setRestOpen((open) => !open)}
+                onClick={toggleRest}
               >
                 <span>
-                  {restOpen ? 'Fechar lista' : `Mostrar do 11º ao ${formatViews(total)}º`}
+                  {restOpen ? 'Fechar lista' : `Ver do 11º ao ${formatViews(total)}º`}
                   {youAreInTail && !restOpen ? (
-                    <small> Sua posição está neste trecho.</small>
+                    <small>Sua posição está neste trecho.</small>
                   ) : null}
                 </span>
-                <span aria-hidden>{restOpen ? 'Fechar' : 'Abrir'}</span>
+                <Chevron className="arena-chevron" />
               </button>
               {restOpen ? (
                 <div className="rest-panel" id="ranking-restante">
                   <input
                     className="rest-search"
+                    type="search"
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setTailPage(0);
+                    }}
                     placeholder="Buscar embaixador"
                     aria-label="Buscar embaixador"
                   />
                   <ol className="rank-list">
-                    {visibleTail.map((entry) => (
+                    {shownTail.map((entry) => (
                       <RankRow key={entry.profileId} entry={entry} category={category} />
                     ))}
                   </ol>
                   {visibleTail.length === 0 ? (
                     <p className="arena-note">Nenhum embaixador com esse nome neste trecho.</p>
                   ) : null}
-                  {!locked && items.length < total ? (
+                  {paged && tailPages > 1 ? (
+                    <nav className="rest-pages" aria-label="Páginas do ranking">
+                      <button
+                        type="button"
+                        onClick={() => void goToTailPage(tailPage - 1)}
+                        disabled={tailPage === 0 || loadingMore}
+                      >
+                        Anterior
+                      </button>
+                      <span aria-live="polite">
+                        Página {tailPage + 1} de {tailPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void goToTailPage(tailPage + 1)}
+                        disabled={tailPage >= tailPages - 1 || loadingMore}
+                      >
+                        {loadingMore ? 'Carregando' : 'Próxima'}
+                      </button>
+                    </nav>
+                  ) : !locked && !paged && items.length < total ? (
                     <button
                       type="button"
                       className="more-btn"
@@ -799,6 +888,13 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                 ? `Faltam ${formatViews(patent.remaining)} views para ${patent.next.name}.`
                 : 'Você chegou ao nível máximo.'}
             </em>
+            <span className="tier-progress" aria-hidden>
+              <i style={{ width: `${Math.max(4, Math.round(patent.progress * 100))}%` }} />
+            </span>
+          </span>
+          <span className="tier-more">
+            <span>Ver níveis</span>
+            <Chevron className="arena-chevron" />
           </span>
         </button>
       </section>
@@ -869,7 +965,10 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
       {criteria ? (
         <details className="arena-criteria">
-          <summary>Como a ordem é definida</summary>
+          <summary>
+            Como a ordem é definida
+            <Chevron className="arena-chevron" />
+          </summary>
           <p>{criteria}</p>
         </details>
       ) : null}
@@ -1032,4 +1131,34 @@ function Avatar({
 
 function NetworkGlyph({ platform }: { platform: SocialPlatform }) {
   return <PlatformMark platform={platform} size={22} />;
+}
+
+function Chevron({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" aria-hidden focusable="false">
+      <path
+        d="M4 6l4 4 4-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ExternalGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden focusable="false">
+      <path
+        d="M4.5 2.5h5v5M9.5 2.5l-7 7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }

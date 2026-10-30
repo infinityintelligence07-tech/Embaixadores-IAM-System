@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -133,13 +132,26 @@ export class AccountReviewService {
     return updated;
   }
 
-  /** Aprovar a pessoa aprova junto as contas que ela já conectou e ainda não foram analisadas. */
-  async approveAllFor(profileId: ProfileId, actorId: ProfileId): Promise<number> {
+  /**
+   * Aprovar a pessoa aprova junto as contas que ela já conectou e ainda não foram analisadas.
+   * Com `rejectedWithNote`, também volta as contas reprovadas junto com a candidatura (mesmo recado);
+   * contas reprovadas pela equipe por outro motivo continuam reprovadas.
+   */
+  async approveAllFor(
+    profileId: ProfileId,
+    actorId: ProfileId,
+    rejectedWithNote: string | null = null,
+    options: { fromApplication?: boolean } = {},
+  ): Promise<number> {
     let approved = 0;
     for (const platform of [SocialPlatform.Instagram, SocialPlatform.TikTok]) {
       const account = await this.socialAccountRepo.findByProfileAndPlatform(profileId, platform);
-      if (account && account.reviewStatus === AccountReviewStatus.Pending) {
-        await this.applyDecision(account, AccountReviewStatus.Approved, null, actorId);
+      const rejectedWithApplication =
+        rejectedWithNote !== null &&
+        account?.reviewStatus === AccountReviewStatus.Rejected &&
+        account.reviewNote === rejectedWithNote;
+      if (account && (account.reviewStatus === AccountReviewStatus.Pending || rejectedWithApplication)) {
+        await this.applyDecision(account, AccountReviewStatus.Approved, null, actorId, options);
         approved += 1;
       }
     }
@@ -170,8 +182,10 @@ export class AccountReviewService {
   /** O embaixador avisa que fez o ajuste pedido; a conta volta para a fila da equipe. */
   async requestNewReview(profileId: ProfileId, accountId: string): Promise<SocialAccount> {
     const account = await this.socialAccountRepo.findById(accountId as SocialAccountId);
-    if (!account) throw new NotFoundException('Conta não encontrada.');
-    if (account.profileId !== profileId) throw new ForbiddenException('Essa conta não é sua.');
+    // Conta de outra pessoa responde como inexistente, igual a desconectar e sincronizar.
+    if (!account || account.profileId !== profileId) {
+      throw new NotFoundException('Conta não encontrada.');
+    }
     if (account.reviewStatus !== AccountReviewStatus.ChangesRequested) {
       throw new BadRequestException('Essa conta não tem ajuste pendente.');
     }
@@ -188,11 +202,42 @@ export class AccountReviewService {
     return updated;
   }
 
+  /**
+   * A conta aprovada fecha a candidatura pendente da mesma pessoa, para ela não seguir
+   * no painel de novos cadastros. Candidatura reprovada continua reprovada.
+   */
+  private async approvePendingApplications(profileId: ProfileId, actorId: ProfileId): Promise<void> {
+    const result = await getPool().query<{ id: string; nome_completo: string; email: string }>(
+      `UPDATE applications
+       SET status = 'approved',
+           reviewed_at = now(),
+           reviewed_by = $2,
+           review_note = NULL,
+           profile_id = COALESCE(profile_id, $1),
+           updated_at = now()
+       WHERE status = 'pending'
+         AND (profile_id = $1
+           OR lower(email) = lower((SELECT email FROM profiles WHERE id = $1)))
+       RETURNING id, nome_completo, email`,
+      [profileId, actorId],
+    );
+    for (const row of result.rows) {
+      await this.auditRepo.append({
+        actorId,
+        action: 'approve_application',
+        entityType: 'application',
+        entityId: row.id,
+        metadata: { name: row.nome_completo, email: row.email },
+      });
+    }
+  }
+
   private async applyDecision(
     account: SocialAccount,
     decision: ReviewDecision,
     note: string | null,
     actorId: ProfileId,
+    options: { fromApplication?: boolean } = {},
   ): Promise<SocialAccount> {
     const now = this.clock.now();
     const updated = await this.socialAccountRepo.update(account.id, {
@@ -209,13 +254,9 @@ export class AccountReviewService {
       const membership = await this.membershipRepo.findByProfileId(account.profileId);
       if (!membership || membership.status !== 'approved') {
         await this.membershipRepo.approve(account.profileId, actorId, now);
-        await getPool().query(
-          `UPDATE applications
-           SET status = 'approved', reviewed_at = now(), reviewed_by = $2, updated_at = now()
-           WHERE status = 'pending'
-             AND (profile_id = $1 OR lower(email) = lower((SELECT email FROM profiles WHERE id = $1)))`,
-          [account.profileId, actorId],
-        );
+      }
+      if (!options.fromApplication) {
+        await this.approvePendingApplications(account.profileId, actorId);
       }
       await this.notifications.notify(
         account.profileId,

@@ -10,6 +10,7 @@ import { ConnectionsPage } from '@/pages/ConnectionsPage';
 import { ContentsPage } from '@/pages/ContentsPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { NotFoundPage, PublicHome } from '@/pages/NotFoundPage';
 import { PrivacyPage } from '@/pages/PrivacyPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { RankingsPage } from '@/pages/RankingsPage';
@@ -23,7 +24,7 @@ const DevPreview = import.meta.env.DEV
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<CapturePage />} />
+      <Route path="/" element={<PublicHome><CapturePage /></PublicHome>} />
       <Route path="/sucesso" element={<CaptureSuccessPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/cadastro" element={<Navigate to="/#formulario" replace />} />
@@ -63,7 +64,7 @@ export default function App() {
         />
       ) : null}
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

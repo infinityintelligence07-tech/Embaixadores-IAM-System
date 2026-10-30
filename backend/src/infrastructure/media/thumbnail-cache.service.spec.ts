@@ -1,5 +1,58 @@
-import { describe, expect, it } from 'vitest';
-import { isAllowedThumbnailUrl, sniffImageType } from './thumbnail-cache.service';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  fetchAllowedImage,
+  isAllowedThumbnailUrl,
+  readLimited,
+  sniffImageType,
+} from './thumbnail-cache.service';
+
+function redirect(location: string): Response {
+  return new Response(null, { status: 302, headers: { location } });
+}
+
+describe('fetchAllowedImage', () => {
+  it('não segue redirecionamento para fora das CDNs', async () => {
+    const fetcher = vi.fn().mockResolvedValue(redirect('http://169.254.169.254/latest/meta-data'));
+    const result = await fetchAllowedImage('https://scontent.cdninstagram.com/x.jpg', fetcher);
+    expect(result).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
+  });
+
+  it('segue redirecionamento entre CDNs permitidas', async () => {
+    const image = new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200 });
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(redirect('https://p16.tiktokcdn.com/cover.jpg'))
+      .mockResolvedValueOnce(image);
+    const result = await fetchAllowedImage('https://p19.tiktokcdn.com/cover.jpg', fetcher);
+    expect(result).toBe(image);
+    expect(fetcher.mock.calls[1][0]).toBe('https://p16.tiktokcdn.com/cover.jpg');
+  });
+
+  it('desiste depois de muitos redirecionamentos', async () => {
+    const fetcher = vi.fn().mockImplementation(async () => redirect('https://a.cdninstagram.com/loop.jpg'));
+    expect(await fetchAllowedImage('https://a.cdninstagram.com/loop.jpg', fetcher)).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it('nem tenta buscar um endereço fora da lista', async () => {
+    const fetcher = vi.fn();
+    expect(await fetchAllowedImage('https://127.0.0.1/x.jpg', fetcher)).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe('readLimited', () => {
+  it('lê o corpo inteiro dentro do limite', async () => {
+    const body = await readLimited(new Response(new Uint8Array(10)), 100);
+    expect(body?.length).toBe(10);
+  });
+
+  it('para de ler quando passa do limite, mesmo sem content-length', async () => {
+    expect(await readLimited(new Response(new Uint8Array(200)), 100)).toBeNull();
+  });
+});
 
 describe('isAllowedThumbnailUrl', () => {
   it('aceita as CDNs do Instagram e do TikTok', () => {

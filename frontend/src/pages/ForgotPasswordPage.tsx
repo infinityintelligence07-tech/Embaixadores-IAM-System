@@ -7,19 +7,35 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
 
+const backLinkClass =
+  'flex min-h-[44px] items-center justify-center text-sm font-medium text-[var(--accent-2)] underline-offset-4 hover:underline';
+
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setLoading(true);
     setError(null);
 
+    const cleanEmail = email.trim();
+    const invalid = !cleanEmail
+      ? 'Informe o e-mail da sua conta.'
+      : /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)
+        ? undefined
+        : 'Esse e-mail parece incompleto. Confira o @ e o domínio.';
+    setEmailError(invalid);
+    if (invalid) {
+      document.getElementById('email')?.focus();
+      return;
+    }
+
+    setLoading(true);
     const redirectTo = `${window.location.origin}/auth/reset`;
-    const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error: authError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
       redirectTo,
     });
 
@@ -40,23 +56,20 @@ export function ForgotPasswordPage() {
   return (
     <AuthLayout
       title="Recuperar senha"
-      subtitle="Enviaremos um link seguro para redefinir sua senha."
+      subtitle="Enviaremos um link seguro para você criar uma nova senha."
     >
       {success ? (
         <div className="space-y-4">
           <Alert variant="success" title="E-mail enviado">
-            Se existir uma conta com esse endereço, você receberá instruções em
-            instantes.
+            Se existir uma conta com {email.trim()}, o link chega em instantes. Confira também a
+            caixa de spam.
           </Alert>
-          <Link
-            to="/login"
-            className="block text-center text-sm text-brand-violet underline-offset-4 hover:underline"
-          >
+          <Link to="/login" className={backLinkClass}>
             Voltar ao login
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           {error ? (
             <Alert variant="error" role="alert">
               {error}
@@ -68,20 +81,24 @@ export function ForgotPasswordPage() {
             name="email"
             type="email"
             autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            error={emailError}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) setEmailError(undefined);
+            }}
             leading={<Mail className="size-4" aria-hidden />}
           />
 
-          <Button type="submit" className="w-full" loading={loading}>
-            Enviar link
+          <Button type="submit" size="lg" className="min-h-12 w-full" loading={loading}>
+            {loading ? 'Enviando...' : 'Enviar link'}
           </Button>
 
-          <Link
-            to="/login"
-            className="block text-center text-sm text-text-muted underline-offset-4 hover:underline"
-          >
+          <Link to="/login" className={backLinkClass}>
             Voltar ao login
           </Link>
         </form>

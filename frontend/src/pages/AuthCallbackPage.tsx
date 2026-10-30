@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { supabase } from '@/lib/supabase';
+import { useSurfaceTheme } from '@/lib/theme';
 
 export function AuthCallbackPage() {
+  useSurfaceTheme('arena');
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
@@ -34,9 +37,7 @@ export function AuthCallbackPage() {
       }
 
       if (hashError || authError || !data.session) {
-        setError(
-          'Não foi possível concluir a entrada. Tente de novo com o Google ou entre com e-mail e senha.',
-        );
+        setError('Tente de novo pelo login ou entre com o e-mail e a senha da sua conta.');
         return;
       }
 
@@ -52,32 +53,31 @@ export function AuthCallbackPage() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <div className="max-w-md space-y-4">
-          <Alert variant="error" role="alert" title="Não foi possível entrar">
+      <AuthLayout title="Não foi possível entrar" subtitle="O Google não confirmou a sua entrada.">
+        <div className="space-y-4">
+          <Alert variant="error" role="alert">
             {error}
           </Alert>
-          <div className="flex flex-wrap gap-2.5">
-            <Link
-              to="/login"
-              className="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-brand-violet px-4 text-sm font-medium text-white"
-            >
-              Ir para o login
-            </Link>
-            <Link
-              to="/recuperar-senha"
-              className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-border bg-surface-card px-4 text-sm font-medium text-text"
-            >
-              Recuperar senha
-            </Link>
-          </div>
+          <Link
+            to="/login"
+            className="flex min-h-12 w-full items-center justify-center rounded-xl bg-brand-violet px-5 text-base font-medium text-white hover:bg-brand-violet-muted"
+          >
+            Voltar ao login
+          </Link>
+          <Link
+            to="/#formulario"
+            className="flex min-h-[44px] items-center justify-center text-sm font-medium text-[var(--accent-2)] underline-offset-4 hover:underline"
+          >
+            Criar conta com e-mail e senha
+          </Link>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-surface px-4 text-center">
+      <img src="/brand/apple-touch-icon.png" alt="" width={56} height={56} className="rounded-[14px]" />
       <Spinner label="Confirmando sua entrada..." />
     </div>
   );

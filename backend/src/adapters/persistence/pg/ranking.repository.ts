@@ -73,6 +73,12 @@ export class PgRankingRepository implements RankingRepository {
     
     try {
       await client.query('BEGIN');
+
+      // Duas publicações do mesmo quadro ao mesmo tempo (agendador e "recalcular", ou duas
+      // instâncias) deixariam duas versões publicadas. A trava serializa por quadro.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+        `ranking:${input.platform}:${input.category}:${input.campaignId ?? 'geral'}`,
+      ]);
       
       // Supersede current published version
       await client.query(

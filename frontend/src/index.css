@@ -23,6 +23,13 @@
   --bad-soft: rgba(180, 35, 24, 0.08);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.04);
   --radius: 14px;
+  /* Azul legível como texto e ícone sobre o fundo do tema. */
+  --accent-ink: #0034b8;
+  --field-bg: #ffffff;
+  --field-line: rgba(0, 0, 0, 0.14);
+  --field-line-hover: rgba(0, 0, 0, 0.28);
+  --focus-ring: rgba(0, 52, 184, 0.18);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%236e6e73' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
 }
 
@@ -48,6 +55,12 @@
   --bad-soft: rgba(255, 141, 134, 0.12);
   --shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
   --radius: 14px;
+  --accent-ink: #8aaaff;
+  --field-bg: #0c1324;
+  --field-line: rgba(255, 255, 255, 0.16);
+  --field-line-hover: rgba(255, 255, 255, 0.3);
+  --focus-ring: rgba(76, 125, 255, 0.34);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23c3cbe0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 @theme inline {
@@ -57,6 +70,9 @@
   --color-brand-gold-muted: var(--gold);
   --color-brand-violet: var(--accent);
   --color-brand-violet-muted: #002a96;
+  --color-accent-ink: var(--accent-ink);
+  --color-field: var(--field-bg);
+  --color-field-line: var(--field-line);
   --color-surface: var(--bg);
   --color-surface-elevated: var(--bg-elevated);
   --color-surface-card: var(--bg-card);
@@ -98,18 +114,22 @@ h3,
   letter-spacing: -0.03em;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 }
 
 /* Controles com 42 px de altura e campo com 16 px no celular (evita o zoom do iOS). */
-input:not([type='checkbox']):not([type='radio']),
-select,
-button {
-  min-height: 42px;
+@layer base {
+  input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+  select,
+  button {
+    min-height: 42px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -118,6 +138,131 @@ button {
   textarea {
     font-size: 16px;
   }
+}
+
+/*
+ * Campos nativos com a cara do sistema nos dois temas. Ficam na camada base para que
+ * classes utilitárias e o CSS de cada tela continuem podendo ajustar o visual.
+ */
+@layer base {
+  input:where(:not([type='checkbox'], [type='radio'], [type='file'], [type='range'], [type='color'], [type='hidden'], [type='submit'], [type='button'], [type='reset'], [type='image'])),
+  textarea,
+  select {
+    border: 1px solid var(--field-line);
+    border-radius: 12px;
+    background-color: var(--field-bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.4;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      background-color 0.15s ease;
+  }
+
+  input:where(:not([type='checkbox'], [type='radio'], [type='file'], [type='range'], [type='color'], [type='hidden'], [type='submit'], [type='button'], [type='reset'], [type='image'])),
+  select {
+    padding: 0 14px;
+  }
+
+  textarea {
+    display: block;
+    min-height: 96px;
+    padding: 11px 14px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  input:hover:not(:disabled):not(:focus),
+  textarea:hover:not(:disabled):not(:focus),
+  select:hover:not(:disabled):not(:focus) {
+    border-color: var(--field-line-hover);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--ink-muted);
+    opacity: 1;
+  }
+
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  [aria-invalid='true'] {
+    border-color: var(--bad);
+  }
+
+  select option,
+  select optgroup {
+    background-color: var(--bg-elevated);
+    color: var(--ink);
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  [data-theme='arena'] input[type='checkbox'],
+  [data-theme='arena'] input[type='radio'] {
+    accent-color: var(--accent-2);
+  }
+
+  input[type='checkbox']:disabled,
+  input[type='radio']:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/*
+ * Lista suspensa: a seta é do sistema, com folga fixa da borda direita. O seletor tem peso
+ * extra para que estilos de tela que usam o atalho "background" não apaguem a seta.
+ */
+select:not([multiple]):not([size]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 40px;
+  background-image: var(--chevron);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+select:not([multiple]):not([size]):disabled {
+  cursor: not-allowed;
+}
+
+select::-ms-expand {
+  display: none;
+}
+
+/* Preenchimento automático do navegador sem o fundo amarelo ou branco no palco escuro. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--ink);
+  box-shadow: 0 0 0 1000px var(--field-bg) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+input:-webkit-autofill:focus {
+  box-shadow:
+    0 0 0 1000px var(--field-bg) inset,
+    0 0 0 4px var(--focus-ring);
 }
 
 :focus-visible {
@@ -129,8 +274,26 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  border-color: var(--accent-ink);
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible {
+  outline: 3px solid var(--accent-ink);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+[aria-invalid='true']:focus-visible {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 4px var(--bad-soft);
+}
+
+/* No palco escuro o azul da marca como texto some; links e tints usam o azul claro. */
+[data-theme='arena'] .text-brand-violet,
+[data-theme='arena'] .hover\:text-brand-violet:hover {
+  color: var(--accent-ink);
 }
 
 ::selection {
@@ -191,6 +354,11 @@ html {
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.cta:hover:not(:disabled) {
+  filter: brightness(1.06);
 }
 
 .cta:disabled {
@@ -238,6 +406,21 @@ html {
   background: var(--bg-elevated);
   color: var(--ink);
   box-shadow: var(--shadow);
+}
+
+.confirm-dialog[open] {
+  animation: confirm-in 0.16s ease-out;
+}
+
+[data-theme='arena'] .confirm-dialog::backdrop {
+  background: rgba(2, 4, 10, 0.68);
+}
+
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
 }
 
 .confirm-dialog::backdrop {
@@ -289,8 +472,10 @@ html {
 
 .auth-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
-  padding: 40px 16px;
+  padding: max(40px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(32px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 
 [data-theme='arena'] .auth-screen {
@@ -310,39 +495,33 @@ html {
   text-align: center;
 }
 
-.auth-brand img {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  border-radius: 14px;
+.auth-brand-link {
+  display: inline-flex;
+  border-radius: 10px;
 }
 
-.auth-brand p {
-  margin: 0;
+.auth-brand .brand-wordmark {
+  height: 64px;
+  margin: 0 auto;
 }
 
-.auth-brand p:first-of-type {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-
-.auth-brand p:nth-of-type(2) {
-  margin-top: 4px;
-  font-size: 14px;
-  color: var(--ink-muted);
+[data-theme='arena'] .auth-brand .brand-wordmark {
+  mix-blend-mode: screen;
 }
 
 .auth-brand h1 {
-  margin: 22px 0 0;
+  margin: 28px 0 0;
   font-size: 32px;
   font-weight: 700;
+  line-height: 1.15;
+  color: var(--ink);
 }
 
-.auth-brand p:last-of-type {
-  margin-top: 8px;
+.auth-subtitle {
+  max-width: 36ch;
+  margin: 10px auto 0;
   font-size: 14px;
+  line-height: 1.5;
   color: var(--ink-muted);
 }
 
@@ -354,20 +533,53 @@ html {
   box-shadow: var(--shadow);
 }
 
+[data-theme='arena'] .auth-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
+    var(--bg-card);
+  backdrop-filter: blur(12px);
+}
+
+.auth-legal {
+  margin-top: 20px;
+}
+
 @media (max-width: 640px) {
+  .auth-brand .brand-wordmark {
+    height: 56px;
+  }
+
   .auth-brand h1 {
+    margin-top: 24px;
     font-size: 28px;
+  }
+
+  .auth-card {
+    padding: 20px;
   }
 }
 
 .shell {
-  /* Folga para a barra de abas fixa no mobile. Quem administra tem uma segunda linha. */
-  --tabbar-clearance: 88px;
+  /* Altura da barra de abas fixa do mobile: abas de 60 px e borda. Admin tem a segunda linha de 44 px. */
+  --tabbar-h: 61px;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .shell-has-admin-links {
-  --tabbar-clearance: 150px;
+  --tabbar-h: 106px;
+}
+
+/* A última coisa da página fica sempre 16 px acima da barra de abas, inclusive no iPhone. */
+@media (max-width: 899px) {
+  .shell-with-tabbar,
+  .shell:has(> .shell-tabbar) {
+    padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
+  }
+
+  html:has(.shell-tabbar) {
+    scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
+  }
 }
 
 .shell-arena {
@@ -385,7 +597,9 @@ html {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px max(16px, calc((100% - 1120px) / 2));
+  min-height: 64px;
+  padding: 8px max(16px, env(safe-area-inset-right), calc((100% - 1120px) / 2)) 8px
+    max(16px, env(safe-area-inset-left), calc((100% - 1120px) / 2));
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: saturate(160%) blur(18px);
@@ -396,6 +610,8 @@ html {
   flex: none;
   align-items: center;
   gap: 10px;
+  min-height: 44px;
+  border-radius: 10px;
   color: inherit;
   text-decoration: none;
 }
@@ -423,14 +639,28 @@ html {
   align-items: center;
   gap: 8px;
   min-height: 42px;
-  padding: 0 12px;
+  padding: 0 14px;
   border-radius: 999px;
   font-size: 14px;
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.shell-nav a:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
 }
 
 .shell-nav a[aria-current='page'] {
   background: var(--accent-soft);
   color: var(--ink);
+  font-weight: 600;
+}
+
+.shell-nav a[aria-current='page'] svg {
+  color: var(--accent-ink);
 }
 
 .shell-user {
@@ -469,7 +699,7 @@ html {
 .shell-foot {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 8px 0 calc(var(--tabbar-clearance) + env(safe-area-inset-bottom));
+  padding: 8px 0;
   border-top: 1px solid var(--line);
 }
 
@@ -477,10 +707,10 @@ html {
   position: fixed;
   inset: auto 0 0;
   z-index: 30;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
-  backdrop-filter: blur(16px);
+  backdrop-filter: saturate(160%) blur(16px);
 }
 
 .shell-tabbar ul {
@@ -488,21 +718,48 @@ html {
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   margin: 0;
-  padding: 0;
+  padding: 0 8px;
   list-style: none;
 }
 
-.shell-tabbar a {
+.shell-tabbar ul a {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 10px 4px 12px;
+  height: 60px;
+  padding: 0 4px;
+  border-radius: 12px;
   font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.shell-tabbar a[aria-current='page'] {
-  color: var(--accent-2);
+/* Indicador do lugar atual: pílula atrás do ícone, como nas barras nativas. */
+.shell-tabbar ul a svg {
+  box-sizing: content-box;
+  padding: 4px 18px;
+  border-radius: 999px;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.shell-tabbar ul a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.shell-tabbar ul a[aria-current='page'] svg {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.shell-tabbar ul a:focus-visible,
+.shell-admin-link:focus-visible {
+  outline-offset: -3px;
 }
 
 .shell-admin-links {
@@ -516,10 +773,11 @@ html {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 8px;
+  height: 44px;
+  padding: 0 16px;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   text-decoration: none;
 }
 
@@ -529,11 +787,12 @@ html {
 
 /* No palco escuro o azul da marca some; o anel de foco usa o azul claro. */
 [data-theme='arena'] :focus-visible {
-  outline-color: var(--accent-2, #4c7dff);
+  outline-color: var(--accent-ink);
 }
 
 .shell-admin-link[aria-current='page'] {
-  color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
 }
 
 @media (min-width: 900px) {

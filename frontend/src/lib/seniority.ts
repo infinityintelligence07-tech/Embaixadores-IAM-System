@@ -12,7 +12,7 @@ export const PATENTS: readonly Patent[] = [
     level: 1,
     name: 'Despertar',
     minViews: 0,
-    line: 'Você entra aqui, antes da primeira mil views.',
+    line: 'Você entra aqui, antes das primeiras mil views.',
     image: '/brand/tiers/despertar.png',
     step: 'Nível inicial',
   },

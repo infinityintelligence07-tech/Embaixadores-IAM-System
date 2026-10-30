@@ -26,7 +26,7 @@ export function AppShell() {
   return (
     <div
       className={[
-        'shell',
+        'shell shell-with-tabbar',
         apple ? 'shell-apple' : 'shell-arena',
         isAdmin ? 'shell-has-admin-links' : '',
       ]

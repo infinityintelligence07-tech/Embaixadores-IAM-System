@@ -35,6 +35,10 @@ import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 
 const VERIFY_COOLDOWN_MS = 15_000;
 
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
+}
+
 function networkName(platform: SocialPlatform): string {
   switch (platform) {
     case SocialPlatform.Instagram:
@@ -132,12 +136,15 @@ export class SocialHandleUseCase {
       profileUrl: profile.profileUrl,
     };
 
+    // Mesma conta já em coleta: só atualiza nome e foto. Com a coleta parada (falha, conta
+    // privada), segue o caminho completo para voltar a "conectada" e coletar de novo.
     if (
       mine &&
       mine.platformUserId === profile.platformUserId &&
       mine.disconnectedAt === null &&
       mine.transport === SocialTransport.PublicApi &&
-      mine.verifiedAt
+      mine.verifiedAt &&
+      (mine.status === ConnectionStatus.Connected || mine.status === ConnectionStatus.Syncing)
     ) {
       return this.socialAccountRepo.update(mine.id, identity);
     }
@@ -153,28 +160,35 @@ export class SocialHandleUseCase {
     };
 
     let account: SocialAccount;
-    if (mine) {
-      await this.syncJobRepo.cancelActiveForAccount(mine.id);
-      await this.socialAccountRepo.deleteCredentials(mine.id);
-      // Os ids de conteúdo da leitura pelo @ não batem com os da API oficial nem com outra conta.
-      if (!sameAccount || mine.transport !== SocialTransport.PublicApi) {
-        await this.retireContents(mine.id);
+    try {
+      if (mine) {
+        await this.syncJobRepo.cancelActiveForAccount(mine.id);
+        await this.socialAccountRepo.deleteCredentials(mine.id);
+        // Os ids de conteúdo da leitura pelo @ não batem com os da API oficial nem com outra conta.
+        if (!sameAccount || mine.transport !== SocialTransport.PublicApi) {
+          await this.retireContents(mine.id);
+        }
+        account = await this.socialAccountRepo.update(mine.id, {
+          ...identity,
+          ...connected,
+          // Outra conta precisa de nova análise; a mesma conta mantém a decisão da equipe.
+          ...(sameAccount ? {} : { reviewStatus: AccountReviewStatus.Pending, reviewNote: null }),
+        });
+      } else {
+        const created = await this.socialAccountRepo.create({
+          profileId,
+          platform,
+          ...identity,
+          transport: SocialTransport.PublicApi,
+          status: ConnectionStatus.Connected,
+        });
+        account = await this.socialAccountRepo.update(created.id, connected);
       }
-      account = await this.socialAccountRepo.update(mine.id, {
-        ...identity,
-        ...connected,
-        // Outra conta precisa de nova análise; a mesma conta mantém a decisão da equipe.
-        ...(sameAccount ? {} : { reviewStatus: AccountReviewStatus.Pending, reviewNote: null }),
-      });
-    } else {
-      const created = await this.socialAccountRepo.create({
-        profileId,
-        platform,
-        ...identity,
-        transport: SocialTransport.PublicApi,
-        status: ConnectionStatus.Connected,
-      });
-      account = await this.socialAccountRepo.update(created.id, connected);
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      // Dois pedidos ao mesmo tempo (clique duplo, cadastro e Conexões) ou outra pessoa
+      // conectou o mesmo @ entre a conferência e a gravação.
+      return this.resolveConcurrentClaim(profileId, platform, accountIds);
     }
     await this.syncJobRepo.enqueue({ socialAccountId: account.id, priority: 200 });
 
@@ -244,6 +258,28 @@ export class SocialHandleUseCase {
     });
     this.lastVerifyAt.delete(throttleKey);
     return verified;
+  }
+
+  private async resolveConcurrentClaim(
+    profileId: ProfileId,
+    platform: SocialPlatform,
+    accountIds: string[],
+  ): Promise<SocialAccount> {
+    const mine = await this.socialAccountRepo.findAnyByProfileAndPlatform(profileId, platform);
+    if (mine && mine.disconnectedAt === null && accountIds.includes(mine.platformUserId)) {
+      return mine;
+    }
+    for (const accountId of accountIds) {
+      const holder = await this.socialAccountRepo.findAnyByPlatformUserId(platform, accountId);
+      if (holder && holder.profileId !== profileId) {
+        throw new ConflictException(
+          'Esse @ já está conectado a outro embaixador. Se ele é seu, fale com a equipe.',
+        );
+      }
+    }
+    throw new ConflictException(
+      'Recebemos dois pedidos de conexão ao mesmo tempo. Atualize a página para ver a sua conta.',
+    );
   }
 
   private lookupFor(platform: SocialPlatform): PublicProfileLookup | undefined {

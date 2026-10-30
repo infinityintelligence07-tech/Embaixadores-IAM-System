@@ -11,12 +11,12 @@ const sizeMap = {
 
 export function Spinner({ label = 'Carregando', size = 'md' }: SpinnerProps) {
   return (
-    <div role="status" className="inline-flex items-center gap-2 text-text-muted">
+    <div role="status" className="inline-flex items-center gap-2.5 text-text-muted">
       <span
         aria-hidden
-        className={`animate-spin rounded-full border-brand-violet border-r-transparent ${sizeMap[size]}`}
+        className={`shrink-0 animate-spin rounded-full border-accent-ink border-r-transparent ${sizeMap[size]}`}
       />
-      <span className="text-sm">{label}</span>
+      <span className="text-sm leading-5">{label}</span>
     </div>
   );
 }

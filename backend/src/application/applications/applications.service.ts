@@ -16,6 +16,7 @@ import { ProfileId, SocialPlatform } from '../../domain/types';
 import { AccountReviewService } from '../social/account-review.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SocialHandleUseCase } from '../social/social-handle.use-case';
+import { parseHandle } from '../../domain/social-handle';
 
 const NETWORKS = new Set(['instagram', 'tiktok']);
 // Domínio público das páginas; areaembaixadores.* só serve a API e redireciona as telas para cá.
@@ -71,6 +72,66 @@ function normalizePhone(value: string): string {
   return value.replace(/\D/g, '');
 }
 
+const MAX_NAME_LENGTH = 120;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_PHONE_DIGITS = 15;
+
+export interface SignupDetails {
+  whatsapp: string;
+  redes: string[];
+  instagramHandle: string;
+  tiktokHandle: string;
+}
+
+/** Mesmas regras no cadastro por e-mail e no complemento de quem entrou pelo Google. */
+export function validateSignupDetails(
+  input: Pick<
+    SubmitApplicationInput,
+    'whatsapp' | 'redes_sociais' | 'instagram_handle' | 'tiktok_handle' | 'ranking_consent'
+  >,
+): SignupDetails {
+  const whatsapp = normalizePhone(input.whatsapp ?? '');
+  const redes = [
+    ...new Set(
+      (input.redes_sociais ?? [])
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => NETWORKS.has(item)),
+    ),
+  ];
+  const instagramHandle = normalizeHandle(input.instagram_handle ?? '');
+  const tiktokHandle = normalizeHandle(input.tiktok_handle ?? '');
+
+  if (whatsapp.length < 10) throw new BadRequestException('Informe um WhatsApp válido, com DDD.');
+  if (whatsapp.length > MAX_PHONE_DIGITS) {
+    throw new BadRequestException('Esse WhatsApp tem dígitos demais. Confira o número com DDD.');
+  }
+  if (redes.length === 0) {
+    throw new BadRequestException('Selecione Instagram, TikTok ou os dois.');
+  }
+  if (redes.includes('instagram')) {
+    if (!instagramHandle) throw new BadRequestException('Informe o @ do Instagram.');
+    if (!parseHandle(SocialPlatform.Instagram, instagramHandle)) {
+      throw new BadRequestException(
+        'Esse @ do Instagram não é válido. Use só letras, números, ponto e sublinhado, até 30 caracteres.',
+      );
+    }
+  }
+  if (redes.includes('tiktok')) {
+    if (!tiktokHandle) throw new BadRequestException('Informe o @ do TikTok.');
+    if (!parseHandle(SocialPlatform.TikTok, tiktokHandle)) {
+      throw new BadRequestException(
+        'Esse @ do TikTok não é válido. Use só letras, números, ponto e sublinhado, de 2 a 24 caracteres.',
+      );
+    }
+  }
+  if (input.ranking_consent !== true) {
+    throw new BadRequestException(
+      'Para participar, autorize a divulgação do seu nome público no ranking.',
+    );
+  }
+  return { whatsapp, redes, instagramHandle, tiktokHandle };
+}
+
 @Injectable()
 export class ApplicationsService {
   private areaAuth: SupabaseClient | null = null;
@@ -112,32 +173,7 @@ export class ApplicationsService {
     profile: { id: string; email: string; fullName: string },
     input: Omit<SubmitApplicationInput, 'nome_completo' | 'email' | 'password'>,
   ): Promise<{ id: string }> {
-    const whatsapp = normalizePhone(input.whatsapp ?? '');
-    const redes = [
-      ...new Set(
-        (input.redes_sociais ?? [])
-          .map((item) => item.trim().toLowerCase())
-          .filter((item) => NETWORKS.has(item)),
-      ),
-    ];
-    const instagramHandle = normalizeHandle(input.instagram_handle ?? '');
-    const tiktokHandle = normalizeHandle(input.tiktok_handle ?? '');
-
-    if (whatsapp.length < 10) throw new BadRequestException('Informe um WhatsApp válido, com DDD.');
-    if (redes.length === 0) {
-      throw new BadRequestException('Selecione Instagram, TikTok ou os dois');
-    }
-    if (redes.includes('instagram') && !instagramHandle) {
-      throw new BadRequestException('Informe o @ do Instagram');
-    }
-    if (redes.includes('tiktok') && !tiktokHandle) {
-      throw new BadRequestException('Informe o @ do TikTok');
-    }
-    if (input.ranking_consent !== true) {
-      throw new BadRequestException(
-        'Para participar, autorize a divulgação do seu nome público no ranking.',
-      );
-    }
+    const { whatsapp, redes, instagramHandle, tiktokHandle } = validateSignupDetails(input);
     if (!(await this.needsSignupDetails(profile.id, profile.email))) {
       throw new ConflictException('Seu cadastro já está completo.');
     }
@@ -190,32 +226,15 @@ export class ApplicationsService {
    * e-mail de confirmação. A pessoa entra na hora, conecta as redes e aguarda a equipe.
    */
   async submit(input: SubmitApplicationInput): Promise<{ id: string; accountCreated: true }> {
-    const nomeCompleto = input.nome_completo?.trim() ?? '';
+    const nomeCompleto = (input.nome_completo ?? '').trim().replace(/\s+/g, ' ');
     const email = input.email?.trim().toLowerCase() ?? '';
-    const whatsapp = normalizePhone(input.whatsapp ?? '');
-    const redes = [
-      ...new Set(
-        (input.redes_sociais ?? [])
-          .map((item) => item.trim().toLowerCase())
-          .filter((item) => NETWORKS.has(item)),
-      ),
-    ];
-    const instagramHandle = normalizeHandle(input.instagram_handle ?? '');
-    const tiktokHandle = normalizeHandle(input.tiktok_handle ?? '');
 
-    if (nomeCompleto.length < 2) throw new BadRequestException('Informe o nome completo');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new BadRequestException('Informe um e-mail válido');
+    if (nomeCompleto.length < 2) throw new BadRequestException('Informe o nome completo.');
+    if (nomeCompleto.length > MAX_NAME_LENGTH) {
+      throw new BadRequestException(`O nome pode ter até ${MAX_NAME_LENGTH} caracteres.`);
     }
-    if (whatsapp.length < 10) throw new BadRequestException('Informe um WhatsApp válido');
-    if (redes.length === 0) {
-      throw new BadRequestException('Selecione Instagram, TikTok ou os dois');
-    }
-    if (redes.includes('instagram') && !instagramHandle) {
-      throw new BadRequestException('Informe o @ do Instagram');
-    }
-    if (redes.includes('tiktok') && !tiktokHandle) {
-      throw new BadRequestException('Informe o @ do TikTok');
+    if (email.length > MAX_EMAIL_LENGTH || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('Informe um e-mail válido.');
     }
 
     const password = input.password ?? '';
@@ -225,11 +244,7 @@ export class ApplicationsService {
     if (password.length > 72) {
       throw new BadRequestException('A senha pode ter no máximo 72 caracteres.');
     }
-    if (input.ranking_consent !== true) {
-      throw new BadRequestException(
-        'Para participar, autorize a divulgação do seu nome público no ranking.',
-      );
-    }
+    const { whatsapp, redes, instagramHandle, tiktokHandle } = validateSignupDetails(input);
 
     const nomeConta = [
       redes.includes('instagram') ? `Instagram ${instagramHandle}` : '',
@@ -260,7 +275,13 @@ export class ApplicationsService {
     const userId = created.data.user?.id;
     if (!userId) {
       const message = (created.error?.message ?? '').toLowerCase();
-      if (message.includes('already') || message.includes('registered')) {
+      const errorCode = (created.error as { code?: unknown } | null)?.code;
+      if (
+        errorCode === 'email_exists' ||
+        errorCode === 'user_already_exists' ||
+        message.includes('already') ||
+        message.includes('registered')
+      ) {
         throw new ConflictException(
           'Já existe uma conta com este e-mail. Entre com a sua senha ou use "Esqueci minha senha".',
         );
@@ -371,9 +392,13 @@ export class ApplicationsService {
           actorId as ProfileId,
           this.clock.now(),
         );
+        // Reprovar a candidatura reprovou as contas com o mesmo recado; aprovar depois desfaz isso.
         const approved = await this.accountReview.approveAllFor(
           profileId as ProfileId,
           actorId as ProfileId,
+          current.status === 'rejected' ? current.review_note : null,
+          // A própria candidatura é atualizada e auditada logo abaixo.
+          { fromApplication: true },
         );
         if (approved === 0) {
           await this.notifications.notify(
@@ -481,7 +506,9 @@ export class ApplicationsService {
       });
       userId = created.data.user?.id ?? null;
       if (!userId) {
-        throw new BadRequestException('Não foi possível criar o acesso na área');
+        throw new ServiceUnavailableException(
+          'Não foi possível criar o acesso na área agora. Tente aprovar de novo em instantes.',
+        );
       }
     }
 
@@ -495,7 +522,9 @@ export class ApplicationsService {
       { onConflict: 'profile_id' },
     );
     if (membership.error) {
-      throw new BadRequestException('Não foi possível liberar o acesso na área');
+      throw new ServiceUnavailableException(
+        'Não foi possível liberar o acesso na área agora. Tente aprovar de novo em instantes.',
+      );
     }
 
     await auth.from('profiles').update({ full_name: name, public_name: name }).eq('id', userId);

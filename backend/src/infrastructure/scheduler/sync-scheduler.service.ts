@@ -55,6 +55,8 @@ export class SyncSchedulerService implements OnModuleInit {
     try {
       const ran = await this.drainQueue(3);
       if (ran > 0) await this.publishRankings();
+    } catch (error) {
+      this.logger.error(`Falha ao processar a fila de coletas: ${error}`);
     } finally {
       this.isProcessing = false;
       this.resumeSweep();

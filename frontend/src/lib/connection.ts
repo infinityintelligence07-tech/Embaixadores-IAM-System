@@ -35,7 +35,7 @@ export function reviewBadge(
 ): { label: string; tone: 'success' | 'warning' | 'danger' } {
   switch (status) {
     case 'approved':
-      return { label: 'Aprovada no ranking', tone: 'success' };
+      return { label: 'Aprovada', tone: 'success' };
     case 'pending':
       return { label: 'Em análise', tone: 'warning' };
     case 'changes_requested':
@@ -47,6 +47,60 @@ export function reviewBadge(
       return exhaustive;
     }
   }
+}
+
+export function statusBadge(
+  status: ConnectionStatus,
+): { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' } {
+  switch (status) {
+    case 'connected':
+      return { label: 'Conectado', tone: 'success' };
+    case 'syncing':
+      return { label: 'Em coleta', tone: 'neutral' };
+    case 'pending_verification':
+      return { label: 'Falta confirmar o @', tone: 'warning' };
+    case 'authorization_expired':
+      return { label: 'Conexão expirou', tone: 'danger' };
+    case 'insufficient_permission':
+      return { label: 'Falta permissão', tone: 'danger' };
+    case 'incompatible_account':
+      return { label: 'Conta não profissional', tone: 'danger' };
+    case 'integration_unavailable':
+      return { label: 'Indisponível no momento', tone: 'danger' };
+    case 'disconnected':
+      return { label: 'Desconectado', tone: 'neutral' };
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+const POST_PATHS = new Set(['p', 'reel', 'reels', 'stories', 'tv', 'explore', 'video']);
+
+/**
+ * Aceita "@perfil", "perfil" ou o link do perfil colado do app.
+ * Link de publicação não tem o @ e volta vazio.
+ */
+export function normalizeHandle(input: string | null | undefined): string {
+  let value = (input ?? '').trim();
+  const fromUrl = value.match(/(?:instagram\.com|tiktok\.com)\/(@?[^/?#\s]+)/i);
+  if (fromUrl) {
+    const segment = fromUrl[1];
+    if (!segment.startsWith('@') && POST_PATHS.has(segment.toLowerCase())) return '';
+    value = segment;
+  }
+  return value.replace(/^@+/, '').trim();
+}
+
+const HANDLE_MAX: Record<SocialPlatform, number> = { instagram: 30, tiktok: 24 };
+
+/** Confere o @ já normalizado. Devolve a mensagem de erro, ou null quando está certo. */
+export function handleError(platform: SocialPlatform, handle: string): string | null {
+  if (!/^[A-Za-z0-9._]+$/.test(handle)) return 'Use só letras, números, ponto e sublinhado.';
+  const max = HANDLE_MAX[platform];
+  if (handle.length > max) return `O @ do ${platformLabel(platform)} tem no máximo ${max} caracteres.`;
+  return null;
 }
 
 /** Com as redes conectadas, avisa o que ainda falta na análise da equipe. */
@@ -107,15 +161,15 @@ export function dutyLine(platform: SocialPlatform, duty: DutyKind): string {
     case 'ready':
       return 'Conectado';
     case 'reconnect':
-      return `A autorização do ${name} expirou. Entre de novo para continuar no ranking.`;
+      return `A conexão com o ${name} expirou. Conecte de novo para continuar no ranking.`;
     case 'permission':
       return `Falta permissão para ler as views do ${name}. Conecte de novo e aceite o acesso.`;
     case 'incompatible':
-      return 'A conta do Instagram precisa ser profissional para as views entrarem.';
+      return 'A conta do Instagram precisa ser profissional (criador ou empresa) para as views entrarem.';
     case 'unavailable':
-      return `A conexão com o ${name} ainda não está liberada. Avise a equipe.`;
+      return `A conexão com o ${name} está fora do ar no momento. Tente mais tarde ou avise a equipe.`;
     case 'connect':
-      return `Informe o seu @ do ${name} para entrar neste ranking.`;
+      return `Digite o seu @ do ${name} para entrar neste ranking.`;
     case 'verify':
       return `Falta confirmar o seu @ do ${name}.`;
     default: {
@@ -132,7 +186,6 @@ export function actionLabel(platform: SocialPlatform, duty: DutyKind): string | 
     case 'unavailable':
       return null;
     case 'reconnect':
-      return `Entrar de novo no ${name}`;
     case 'permission':
       return `Conectar ${name} de novo`;
     case 'incompatible':
@@ -161,13 +214,13 @@ export function gateHeadline(
   if (pending.length === 2) {
     return {
       title: 'Conecte o Instagram ou o TikTok',
-      detail: 'Escolha a rede onde você posta e digite o @. Não pede senha.',
+      detail: 'Escolha a rede onde você posta e digite o seu @. Não pedimos senha.',
     };
   }
 
   const name = platformLabel(pending[0]);
   return {
     title: `Quer disputar também no ${name}?`,
-    detail: `Informe o seu @ do ${name}. Cada rede tem o seu ranking.`,
+    detail: `Digite o seu @ do ${name}. Cada rede tem o seu ranking.`,
   };
 }

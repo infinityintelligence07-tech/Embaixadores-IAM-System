@@ -4,6 +4,27 @@ export function formatViews(value: number): string {
   return new Intl.NumberFormat('pt-BR').format(value);
 }
 
+function validDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** "30 de out. de 2026". Sem data válida, devolve null. */
+export function formatDay(value: string | null | undefined): string | null {
+  const date = validDate(value);
+  return date ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(date) : null;
+}
+
+/** "30/10/2026 às 20:15". Sem data válida, devolve null. */
+export function formatDateTime(value: string | null | undefined): string | null {
+  const date = validDate(value);
+  if (!date) return null;
+  const day = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(date);
+  const time = new Intl.DateTimeFormat('pt-BR', { timeStyle: 'short' }).format(date);
+  return `${day} às ${time}`;
+}
+
 export function firstName(
   fullName?: string | null,
   publicName?: string | null,

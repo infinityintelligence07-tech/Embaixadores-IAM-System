@@ -45,19 +45,19 @@ export function NoticesBar() {
   }
 
   return (
-    <div className="mb-5 space-y-2.5" aria-label="Avisos da equipe">
+    <section className="mb-6 grid gap-2.5" aria-label="Avisos da equipe">
       {notices.slice(0, 3).map((notice) => (
         <Alert key={notice.id} variant={variantFor(notice.kind)} title={notice.title}>
           <span className="block">{notice.body}</span>
           <button
             type="button"
-            className="mt-2 text-sm font-semibold underline underline-offset-4"
+            className="-mb-2 -ml-2 mt-0.5 inline-flex min-h-[44px] items-center rounded-lg px-2 text-sm font-semibold text-accent-ink underline-offset-4 hover:underline"
             onClick={() => void dismiss(notice.id)}
           >
             Entendi
           </button>
         </Alert>
       ))}
-    </div>
+    </section>
   );
 }

@@ -59,17 +59,22 @@ function messageFor(item: AccountReviewItem, decision: ReviewDecision, note: str
 
 export function AccountReviewsPanel({
   preview,
+  reloadKey = 0,
   onCount,
+  onChanged,
   onMessage,
   onError,
 }: {
   preview: boolean;
+  /** Muda quando outro painel aprova ou reprova alguém, para a lista não ficar velha. */
+  reloadKey?: number;
   onCount: (count: number) => void;
+  onChanged?: () => void;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
 }) {
   const [items, setItems] = useState<AccountReviewItem[]>([]);
-  const [loading, setLoading] = useState(!preview);
+  const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [asking, setAsking] = useState<{
@@ -79,7 +84,12 @@ export function AccountReviewsPanel({
   const [lastNotice, setLastNotice] = useState<{ href: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
-    if (preview) return;
+    if (preview) {
+      const demo = await import('@/components/admin/previewData');
+      setItems(demo.previewAccountReviews);
+      setLoading(false);
+      return;
+    }
     try {
       setItems(await api.adminAccountReviews());
       setFailed(false);
@@ -91,8 +101,9 @@ export function AccountReviewsPanel({
   }, [preview]);
 
   useEffect(() => {
+    if (preview && reloadKey > 0) return;
     void load();
-  }, [load]);
+  }, [load, preview, reloadKey]);
 
   const waiting = items.filter((item) => item.reviewStatus === 'pending');
   const adjusting = items.filter((item) => item.reviewStatus === 'changes_requested');
@@ -104,20 +115,39 @@ export function AccountReviewsPanel({
   async function decide(item: AccountReviewItem, decision: ReviewDecision, note = '') {
     setBusyId(item.accountId);
     try {
-      await api.adminReviewAccount(item.accountId, decision, note || undefined);
+      if (preview) {
+        setItems((current) =>
+          decision === 'changes_requested'
+            ? current.map((row) =>
+                row.accountId === item.accountId
+                  ? { ...row, reviewStatus: decision, reviewNote: note }
+                  : row,
+              )
+            : current.filter((row) => row.accountId !== item.accountId),
+        );
+      } else {
+        await api.adminReviewAccount(item.accountId, decision, note || undefined);
+      }
       const network = platformLabel(item.platform);
       onMessage(
         decision === 'approved'
-          ? `${network} de ${item.publicName} aprovado. Ele entra no ranking na próxima atualização, em até 10 minutos, e recebeu o aviso no app.`
+          ? `${network} de ${item.publicName} aprovado. Entra no ranking na próxima atualização, em até 10 minutos, e a pessoa recebeu o aviso no app.`
           : decision === 'changes_requested'
-            ? `Ajuste pedido para ${item.publicName}. O recado aparece no app dele.`
-            : `${network} de ${item.publicName} reprovado. O motivo aparece no app dele.`,
+            ? `Ajuste pedido para ${item.publicName}. O recado aparece no app.`
+            : `${network} de ${item.publicName} reprovado. O motivo aparece no app.`,
       );
       const href = whatsappHref(item, messageFor(item, decision, note));
       setLastNotice(href ? { href, name: item.publicName } : null);
-      await load();
+      if (!preview) {
+        await load();
+        onChanged?.();
+      }
     } catch (err) {
-      onError(err instanceof ApiError ? err.message : 'Não foi possível salvar a decisão.');
+      onError(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível salvar a decisão. Confira a internet e tente de novo.',
+      );
     } finally {
       setBusyId(null);
       setAsking(null);
@@ -128,18 +158,15 @@ export function AccountReviewsPanel({
     const busy = busyId === item.accountId;
     const href = profileHref(item);
     const handle = item.username ? `@${item.username.replace(/^@/, '')}` : 'sem @';
-    const confirmed = item.connectionStatus !== 'pending_verification';
+    const pending = item.reviewStatus === 'pending';
     return (
       <article key={item.accountId} className="admin-row admin-member">
         <div className="admin-person">
           <strong>
             {item.fullName || item.publicName}
-            <span
-              className="admin-status"
-              data-tone={item.reviewStatus === 'pending' ? 'wait' : 'stop'}
-            >
+            <span className="admin-status" data-tone={pending ? 'wait' : undefined}>
               <i />
-              {item.reviewStatus === 'pending' ? 'Aguardando' : 'Ajuste pedido'}
+              {pending ? 'Aguardando decisão' : 'Aguardando o ajuste'}
             </span>
           </strong>
           <span>
@@ -154,38 +181,36 @@ export function AccountReviewsPanel({
             · {item.email}
           </span>
           <span>
-            {confirmed
-              ? `Conectado em ${formatWhen(item.verifiedAt ?? item.connectedAt)}`
-              : 'Ainda não confirmou o @'}
-            {item.membershipStatus === 'pending' ? ' · cadastro novo' : ''}
+            Conta informada em {formatWhen(item.verifiedAt ?? item.connectedAt)}
+            {item.membershipStatus === 'pending' ? ' · Cadastro ainda não aprovado' : ''}
           </span>
-          {item.reviewStatus === 'changes_requested' && item.reviewNote ? (
-            <span>Recado enviado: {item.reviewNote}</span>
+          {!pending && item.reviewNote ? (
+            <span className="admin-note">Recado enviado: {item.reviewNote}</span>
           ) : null}
         </div>
         <div className="admin-actions">
           <button
             type="button"
-            className="admin-primary"
-            disabled={busy || preview}
-            onClick={() => void decide(item, 'approved')}
-          >
-            Aprovar no ranking
-          </button>
-          <button
-            type="button"
-            disabled={busy || preview}
+            disabled={busy}
             onClick={() => setAsking({ item, decision: 'changes_requested' })}
           >
-            Pedir ajuste
+            {pending ? 'Pedir ajuste' : 'Mudar o recado'}
           </button>
           <button
             type="button"
             className="is-stop"
-            disabled={busy || preview}
+            disabled={busy}
             onClick={() => setAsking({ item, decision: 'rejected' })}
           >
             Reprovar
+          </button>
+          <button
+            type="button"
+            className="admin-primary"
+            disabled={busy}
+            onClick={() => void decide(item, 'approved')}
+          >
+            {busy ? 'Salvando...' : 'Aprovar no ranking'}
           </button>
         </div>
       </article>
@@ -193,19 +218,26 @@ export function AccountReviewsPanel({
   }
 
   return (
-    <section className="admin-panel" aria-label="Contas para aprovar no ranking">
-      <h2>Contas para aprovar no ranking</h2>
-      <p className="admin-row admin-meta">
-        Cada Instagram ou TikTok conectado espera a sua decisão. Só conta aprovada entra no
-        ranking. A pessoa recebe o aviso no app.
-      </p>
+    <section className="admin-panel" aria-labelledby="account-reviews-title">
+      <div className="admin-panel-head">
+        <h2 id="account-reviews-title">Contas para o ranking</h2>
+        <p>
+          Cada Instagram ou TikTok informado no cadastro espera a sua decisão. Só conta aprovada
+          entra no ranking, e a pessoa recebe o aviso no app.
+        </p>
+      </div>
 
       {lastNotice ? (
         <div className="admin-row">
           <span className="admin-meta">Quer avisar {lastNotice.name} no WhatsApp também?</span>
-          <a className="admin-more" href={lastNotice.href} target="_blank" rel="noreferrer">
-            Abrir WhatsApp com o recado
-          </a>
+          <div className="admin-actions">
+            <button type="button" onClick={() => setLastNotice(null)}>
+              Agora não
+            </button>
+            <a href={lastNotice.href} target="_blank" rel="noreferrer">
+              Abrir WhatsApp com o recado
+            </a>
+          </div>
         </div>
       ) : null}
 
@@ -215,21 +247,29 @@ export function AccountReviewsPanel({
         </div>
       ) : null}
       {failed ? (
-        <div className="admin-row">
-          <span className="admin-meta">Não foi possível carregar as contas.</span>
-          <button type="button" className="admin-more" onClick={() => void load()}>
-            Tentar de novo
-          </button>
+        <div className="admin-empty" role="alert">
+          <strong>Não foi possível carregar as contas</strong>
+          <p>Confira a internet e tente de novo. Se continuar, avise o suporte técnico.</p>
+          <div className="admin-actions">
+            <button type="button" onClick={() => void load()}>
+              Tentar de novo
+            </button>
+          </div>
         </div>
       ) : null}
       {!loading && !failed && items.length === 0 ? (
-        <p className="admin-row admin-meta">Nenhuma conta esperando análise agora.</p>
+        <div className="admin-empty" role="status">
+          <strong>Nenhuma conta esperando decisão</strong>
+          <p>Quando alguém se cadastrar com o @ de uma rede, a conta aparece aqui.</p>
+        </div>
       ) : null}
 
       {waiting.map(renderItem)}
       {adjusting.length > 0 ? (
         <>
-          <h3 className="admin-row admin-subhead">Esperando o ajuste do embaixador</h3>
+          <h3 className="admin-subhead">
+            Esperando o ajuste do embaixador<span>{adjusting.length}</span>
+          </h3>
           {adjusting.map(renderItem)}
         </>
       ) : null}
@@ -246,7 +286,7 @@ export function AccountReviewsPanel({
             ? 'A conta fica fora do ranking. A pessoa vê o motivo no app.'
             : 'A conta fica fora do ranking até o ajuste. A pessoa vê o recado no app e avisa quando terminar.'
         }
-        confirmLabel={asking?.decision === 'rejected' ? 'Reprovar' : 'Enviar pedido de ajuste'}
+        confirmLabel={asking?.decision === 'rejected' ? 'Reprovar conta' : 'Enviar pedido de ajuste'}
         tone={asking?.decision === 'rejected' ? 'danger' : 'primary'}
         suggestions={asking?.decision === 'rejected' ? REJECT_SUGGESTIONS : ADJUST_SUGGESTIONS}
         busy={asking !== null && busyId === asking.item.accountId}

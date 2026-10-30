@@ -43,8 +43,13 @@ export class ComputeAndPublishRankingUseCase {
   /** Ranking geral e de cada campanha ou mês que ainda recebe views. */
   async publishAll(): Promise<void> {
     const now = this.clock.now();
+    let firstError: unknown = null;
     // O ranking geral sai primeiro e não depende das campanhas.
-    await this.publishBoards(null);
+    try {
+      await this.publishBoards(null);
+    } catch (error) {
+      firstError = error;
+    }
     let open: Campaign[] = [];
     try {
       await this.campaigns.ensureCurrentMonth(now);
@@ -53,16 +58,31 @@ export class ComputeAndPublishRankingUseCase {
       this.logger.error(`Falha ao preparar rankings por período: ${error}`);
     }
     for (const campaign of open) {
-      await this.publishBoards(campaign);
-    }
-  }
-
-  async publishBoards(campaign: Campaign | null): Promise<void> {
-    for (const platform of PLATFORMS) {
-      for (const category of CATEGORIES) {
-        await this.execute(platform, category, campaign);
+      try {
+        await this.publishBoards(campaign);
+      } catch (error) {
+        firstError ??= error;
       }
     }
+    if (firstError) throw firstError;
+  }
+
+  /** Um quadro com erro não impede os outros de publicar; o primeiro erro sobe no fim. */
+  async publishBoards(campaign: Campaign | null): Promise<void> {
+    let firstError: unknown = null;
+    for (const platform of PLATFORMS) {
+      for (const category of CATEGORIES) {
+        try {
+          await this.execute(platform, category, campaign);
+        } catch (error) {
+          this.logger.error(
+            `Falha ao publicar ${platform}/${category}${campaign ? ` (${campaign.name})` : ''}: ${error}`,
+          );
+          firstError ??= error;
+        }
+      }
+    }
+    if (firstError) throw firstError;
   }
   
   async execute(

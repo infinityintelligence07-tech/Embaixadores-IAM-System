@@ -46,7 +46,24 @@ describe('describeChase', () => {
     });
     expect(copy.detail).toBe('Faltam 12.400 views para a 9ª posição.');
     expect(copy.progress).toBeGreaterThan(0.9);
-    expect(copy.context).toContain('10ª de 48');
+    expect(copy.context).toBe('Views totais no Instagram, entre 48 embaixadores.');
+    expect(copy.context).not.toContain('10ª');
+  });
+
+  it('não fala em grupo quando só há uma pessoa', () => {
+    const copy = describeChase({
+      eligible: true,
+      reason: null,
+      position: 1,
+      total: 1,
+      gapToAbove: null,
+      myScore: 300,
+      belowGap: null,
+      category: 'total_views',
+      platform: 'instagram',
+    });
+    expect(copy.context).toBe('Views totais no Instagram. Só você no ranking por enquanto.');
+    expect(copy.detail).toBe('Você lidera este ranking.');
   });
 
   it('celebra a liderança com a folga para a segunda', () => {

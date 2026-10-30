@@ -114,4 +114,22 @@ describe('eligibility', () => {
     expect(result.eligible).toBe(false);
     expect(result.reason).toBeTruthy();
   });
+
+  it('keeps an account in the ranking while its next sync is running', () => {
+    const result = isEligibleForRanking({
+      ...baseInput,
+      connectionStatus: ConnectionStatus.Syncing,
+    });
+    expect(result.eligible).toBe(true);
+  });
+
+  it('removes disconnected or expired accounts', () => {
+    for (const connectionStatus of [
+      ConnectionStatus.Disconnected,
+      ConnectionStatus.AuthorizationExpired,
+      ConnectionStatus.PendingVerification,
+    ]) {
+      expect(isEligibleForRanking({ ...baseInput, connectionStatus }).eligible).toBe(false);
+    }
+  });
 });

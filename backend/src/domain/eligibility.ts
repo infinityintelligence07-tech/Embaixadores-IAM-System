@@ -56,7 +56,11 @@ export function isEligibleForRanking(
     return { eligible: false, reason: 'Conta em análise pela equipe.' };
   }
 
-  if (input.connectionStatus !== ConnectionStatus.Connected) {
+  // Durante a coleta a conta fica "syncing"; os dados da coleta anterior continuam valendo.
+  if (
+    input.connectionStatus !== ConnectionStatus.Connected &&
+    input.connectionStatus !== ConnectionStatus.Syncing
+  ) {
     return {
       eligible: false,
       reason: 'Conta não conectada ou com autorização inválida.',

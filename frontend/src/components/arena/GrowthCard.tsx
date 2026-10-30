@@ -84,7 +84,7 @@ export function GrowthCard({ platform, connected }: { platform: SocialPlatform; 
       ) : (
         <>
           <p className="growth-total">
-            <strong>{formatViews(data?.current ?? 0)}</strong> views somadas hoje
+            <strong>{formatViews(data?.current ?? 0)}</strong> views acumuladas até hoje
           </p>
           <svg
             className="growth-chart"

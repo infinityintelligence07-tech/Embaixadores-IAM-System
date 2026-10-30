@@ -69,9 +69,9 @@ export function CompleteSignupCard({ onDone }: { onDone: () => Promise<void> }) 
   }
 
   return (
-    <section className="gate" aria-labelledby="complete-signup-title">
+    <section className="gate gate-split" aria-labelledby="complete-signup-title">
       <div>
-        <h2 id="complete-signup-title">Falta pouco para entrar na competição</h2>
+        <h2 id="complete-signup-title">Complete o seu cadastro</h2>
         <p className="gate-lead">Informe o seu WhatsApp e o @ onde você posta. Não pede senha da rede.</p>
       </div>
       <form className="complete-form" onSubmit={submit} noValidate>
@@ -84,7 +84,9 @@ export function CompleteSignupCard({ onDone }: { onDone: () => Promise<void> }) 
           placeholder="(11) 99999-9999"
           value={whatsapp}
           onChange={(event) => setWhatsapp(event.target.value)}
-          onBlur={() => setTouched(true)}
+          onBlur={() => {
+            if (whatsapp.trim()) setTouched(true);
+          }}
           error={phoneError}
           disabled={busy}
         />

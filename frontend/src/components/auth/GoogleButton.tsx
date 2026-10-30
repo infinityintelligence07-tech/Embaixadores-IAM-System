@@ -69,7 +69,13 @@ export function GoogleButton({ label = 'Continuar com Google' }: { label?: strin
 
   return (
     <div className="google-entry">
-      <button type="button" className="google-button" onClick={() => void start()} disabled={busy}>
+      <button
+        type="button"
+        className="google-button"
+        onClick={() => void start()}
+        disabled={busy}
+        aria-busy={busy || undefined}
+      >
         <GoogleMark />
         <span>{busy ? 'Abrindo o Google...' : label}</span>
       </button>

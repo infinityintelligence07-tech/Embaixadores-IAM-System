@@ -60,8 +60,17 @@ export class PgMembershipRepository implements MembershipRepository {
        VALUES ($1, 'approved', $2, $3)
        ON CONFLICT (profile_id) DO UPDATE SET
          status = 'approved',
-         approved_at = $2,
-         approved_by = $3,
+         -- Aprovar de novo quem já está aprovado não muda a data: ela desempata o ranking.
+         approved_at = CASE
+           WHEN ambassador_memberships.status = 'approved'
+             THEN COALESCE(ambassador_memberships.approved_at, $2)
+           ELSE $2
+         END,
+         approved_by = CASE
+           WHEN ambassador_memberships.status = 'approved'
+             THEN COALESCE(ambassador_memberships.approved_by, $3)
+           ELSE $3
+         END,
          suspended_at = NULL,
          suspension_reason = NULL,
          updated_at = NOW()

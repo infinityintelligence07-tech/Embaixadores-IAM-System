@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { useSurfaceTheme } from '@/lib/theme';
 import { LegalLinks } from './LegalLinks';
 
@@ -15,17 +17,17 @@ export function AuthLayout({
 
   return (
     <div className="auth-screen">
-      <div className="auth-wrap">
+      <main className="auth-wrap">
         <div className="auth-brand">
-          <img src="/brand/apple-touch-icon.png" alt="" width={56} height={56} />
-          <p>Embaixadores</p>
-          <p>Acorde Sua Mente</p>
+          <Link to="/" className="auth-brand-link">
+            <BrandMark variant="wordmark" />
+          </Link>
           <h1>{title}</h1>
-          <p>{subtitle}</p>
+          <p className="auth-subtitle">{subtitle}</p>
         </div>
         <div className="auth-card">{children}</div>
-        <LegalLinks className="mt-6" />
-      </div>
+        <LegalLinks className="auth-legal" />
+      </main>
     </div>
   );
 }

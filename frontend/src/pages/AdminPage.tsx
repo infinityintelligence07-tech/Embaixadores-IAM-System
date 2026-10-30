@@ -2,11 +2,11 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AccountReviewsPanel } from '@/components/admin/AccountReviewsPanel';
 import { CampaignsSection } from '@/components/admin/CampaignsSection';
+import { ListFooter, useListWindow } from '@/components/admin/ListWindow';
 import { NewMembersSection } from '@/components/admin/NewMembersSection';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import {
@@ -71,7 +71,7 @@ function statusLabel(status: UserStatus): string {
     case 'approved':
       return 'Aprovado';
     case 'pending':
-      return 'Pendente';
+      return 'Aguardando';
     case 'suspended':
       return 'Suspenso';
     default: {
@@ -99,9 +99,9 @@ function statusTone(status: UserStatus): 'ok' | 'wait' | 'stop' {
 function syncStatusLabel(status: AdminSyncJob['status']): string {
   switch (status) {
     case 'pending':
-      return 'Pendente';
+      return 'Na fila';
     case 'running':
-      return 'Em execução';
+      return 'Em andamento';
     case 'succeeded':
       return 'Concluída';
     case 'failed':
@@ -134,8 +134,8 @@ function platformName(platform: SocialPlatform): string {
 }
 
 const AUDIT_ACTIONS: Record<string, string> = {
-  approve_application: 'Candidatura aprovada',
-  reject_application: 'Candidatura rejeitada',
+  approve_application: 'Cadastro aprovado',
+  reject_application: 'Cadastro reprovado',
   approve_membership: 'Embaixador aprovado',
   review_account_approved: 'Conta aprovada no ranking',
   review_account_changes_requested: 'Ajuste pedido na conta',
@@ -146,35 +146,37 @@ const AUDIT_ACTIONS: Record<string, string> = {
   update_ranking_mode: 'Modo do ranking alterado',
   suspend_membership: 'Embaixador suspenso',
   connect_social_account: 'Rede conectada',
-  claim_social_handle: 'Rede informada pelo @',
-  verify_social_handle: 'Rede confirmada pela bio',
-  exclude_content: 'Conteúdo retirado do ranking',
+  claim_social_handle: '@ da rede informado',
+  verify_social_handle: 'Rede confirmada',
+  exclude_content: 'Vídeo retirado do ranking',
   recalculate_rankings: 'Rankings recalculados',
   request_sync: 'Coleta solicitada',
   update_settings: 'Regras alteradas',
 };
 
 const AUDIT_ENTITIES: Record<string, string> = {
-  application: 'candidatura de',
+  application: 'cadastro de',
   campaign: 'campanha',
-  content: 'conteúdo',
+  content: 'vídeo',
   membership: 'embaixador',
   ranking: 'ranking',
   settings: 'regras',
-  social_account: 'conta social',
+  social_account: 'conta',
   profile: 'perfil',
 };
 
 function auditActionLabel(action: string): string {
-  return AUDIT_ACTIONS[action] ?? action.replace(/_/g, ' ');
+  const known = AUDIT_ACTIONS[action];
+  if (known) return known;
+  const text = action.replace(/_/g, ' ').trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function auditEntityLabel(entry: AdminAuditEntry): string {
-  const type = AUDIT_ENTITIES[entry.entityType] ?? entry.entityType;
+  const type = AUDIT_ENTITIES[entry.entityType] ?? entry.entityType.replace(/_/g, ' ');
   if (entry.entityName && entry.entityType === 'social_account') return entry.entityName;
   if (entry.entityName) return `${type} ${entry.entityName}`;
-  if (entry.entityType === 'ranking' || entry.entityType === 'settings') return type;
-  return entry.entityId ? `${type} ${entry.entityId.slice(0, 8)}` : type;
+  return type.replace(/ de$/, '');
 }
 
 function formatWhen(value: string | null): string {
@@ -184,26 +186,11 @@ function formatWhen(value: string | null): string {
   );
 }
 
-const PAGE_SIZE = 10;
+const CONTENT_CODE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-function ShowMore({
-  total,
-  visible,
-  onMore,
-}: {
-  total: number;
-  visible: number;
-  onMore: () => void;
-}) {
-  if (total <= visible) return null;
-  const remaining = total - visible;
-  return (
-    <div className="admin-row">
-      <button type="button" className="admin-more" onClick={onMore}>
-        Mostrar mais {Math.min(PAGE_SIZE, remaining)} de {remaining} restantes
-      </button>
-    </div>
-  );
+/** Acha o código do vídeo no que a equipe colar: o código sozinho, uma mensagem ou um link. */
+function findContentCode(value: string): string | null {
+  return value.match(CONTENT_CODE)?.[0].toLowerCase() ?? null;
 }
 
 export function AdminPage({ preview }: { preview?: AdminPreview }) {
@@ -217,17 +204,22 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [syncs, setSyncs] = useState<AdminSyncJob[]>(preview?.syncs ?? []);
   const [audit, setAudit] = useState<AdminAuditEntry[]>(preview?.audit ?? []);
   const [settings, setSettings] = useState<AdminSettings | null>(preview?.settings ?? null);
+  const [savedSettings, setSavedSettings] = useState<AdminSettings | null>(
+    preview?.settings ?? null,
+  );
   const [loading, setLoading] = useState(!preview);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingSuspend, setPendingSuspend] = useState<AdminUser | null>(null);
-  const [visibleUsers, setVisibleUsers] = useState(PAGE_SIZE);
-  const [visibleSyncs, setVisibleSyncs] = useState(PAGE_SIZE);
-  const [visibleAudit, setVisibleAudit] = useState(PAGE_SIZE);
   const [waitingCount, setWaitingCount] = useState(0);
   const [waitingAccounts, setWaitingAccounts] = useState(0);
+  const [reviewsReloadKey, setReviewsReloadKey] = useState(0);
   const hasLoadedRef = useRef(false);
+
+  const usersList = useListWindow(users.length);
+  const syncsList = useListWindow(syncs.length);
+  const auditList = useListWindow(audit.length);
 
   const showMessage = useCallback((text: string) => {
     setError(null);
@@ -245,7 +237,6 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     }
     // O spinner de página inteira só aparece na primeira carga; depois a tela atualiza no lugar.
     setLoading((current) => current && !hasLoadedRef.current);
-    setError(null);
     // Cada bloco carrega por conta própria: uma falha não derruba a página inteira.
     const [usersData, syncsData, auditData, settingsData] = await Promise.allSettled([
       api.adminUsers(),
@@ -256,7 +247,10 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     if (usersData.status === 'fulfilled') setUsers(usersData.value);
     if (syncsData.status === 'fulfilled') setSyncs(syncsData.value);
     if (auditData.status === 'fulfilled') setAudit(auditData.value);
-    if (settingsData.status === 'fulfilled') setSettings(settingsData.value);
+    if (settingsData.status === 'fulfilled') {
+      setSettings(settingsData.value);
+      setSavedSettings(settingsData.value);
+    }
 
     const failed = [
       usersData.status === 'rejected' ? 'pessoas' : null,
@@ -265,6 +259,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
       settingsData.status === 'rejected' ? 'regras' : null,
     ].filter((item): item is string => item !== null);
     if (failed.length > 0) {
+      setMessage(null);
       setError(
         `Não foi possível carregar ${failed.join(', ')}. Atualize a página para tentar de novo.`,
       );
@@ -274,6 +269,11 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   }, [preview]);
 
   useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
+  const membersChanged = useCallback(() => {
+    setReviewsReloadKey((key) => key + 1);
     void loadAll();
   }, [loadAll]);
 
@@ -288,9 +288,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         );
       } else {
         await api.adminApproveUser(id);
+        setReviewsReloadKey((key) => key + 1);
         await loadAll();
       }
-      setMessage('Embaixador aprovado. O acesso completo foi liberado.');
+      setMessage(
+        'Embaixador aprovado. O acesso completo foi liberado e as contas informadas entram no ranking.',
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível aprovar. Tente de novo.');
     } finally {
@@ -311,7 +314,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminSuspendUser(id);
         await loadAll();
       }
-      setMessage('Embaixador suspenso.');
+      setMessage('Embaixador suspenso. Ele saiu dos rankings e perdeu o acesso ao painel.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível suspender. Tente de novo.');
     } finally {
@@ -330,7 +333,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminRequestSync(userId, platform);
         await loadAll();
       }
-      setMessage('Coleta solicitada. Os dados chegam em alguns minutos.');
+      setMessage(`Coleta do ${platformName(platform)} pedida. Os dados chegam em alguns minutos.`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Não foi possível pedir a coleta. Tente de novo.',
@@ -350,11 +353,13 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminExcludeContent(contentId.trim(), reason.trim());
         await loadAll();
       }
-      setMessage('Conteúdo retirado do ranking.');
+      setMessage(
+        'Vídeo retirado do ranking. As views dele deixam de contar na próxima atualização.',
+      );
       return true;
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Não foi possível retirar o conteúdo. Tente de novo.',
+        err instanceof Error ? err.message : 'Não foi possível retirar o vídeo. Tente de novo.',
       );
       return false;
     } finally {
@@ -371,7 +376,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         await api.adminRecalculateRankings();
         await loadAll();
       }
-      setMessage('Recálculo de rankings iniciado.');
+      setMessage('Recálculo dos rankings iniciado. Os números novos aparecem em alguns minutos.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível recalcular. Tente de novo.');
     } finally {
@@ -383,18 +388,21 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     event.preventDefault();
     if (!settings) return;
     setActionLoading('settings');
+    setError(null);
+    setMessage(null);
     try {
       if (preview) {
-        setMessage('Regras salvas.');
+        setSavedSettings(settings);
       } else {
         const updated = await api.adminUpdateSettings({
           staleToleranceHours: settings.staleToleranceHours,
           manualSyncCooldownSeconds: settings.manualSyncCooldownSeconds,
         });
         setSettings(updated);
-        setMessage('Regras salvas.');
+        setSavedSettings(updated);
         await loadAll();
       }
+      setMessage('Regras salvas. Valem a partir da próxima atualização do ranking.');
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Não foi possível salvar as regras. Tente de novo.',
@@ -412,21 +420,65 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     );
   }
 
+  const settingsChanged =
+    settings !== null &&
+    savedSettings !== null &&
+    (settings.staleToleranceHours !== savedSettings.staleToleranceHours ||
+      settings.manualSyncCooldownSeconds !== savedSettings.manualSyncCooldownSeconds);
+  const settingsValid =
+    settings !== null &&
+    Number.isFinite(settings.staleToleranceHours) &&
+    settings.staleToleranceHours >= 1 &&
+    Number.isFinite(settings.manualSyncCooldownSeconds) &&
+    settings.manualSyncCooldownSeconds >= 0;
+
+  const sortedUsers = [...users].sort((a, b) =>
+    peopleOrder === 'posts'
+      ? (b.postsLast30Days ?? 0) - (a.postsLast30Days ?? 0)
+      : (b.daysWithoutPosting ?? -1) - (a.daysWithoutPosting ?? -1),
+  );
+
   return (
     <div className="admin">
       <header>
         <h1 className="page-title">Administração</h1>
         <p className="admin-lead">
-          Aprove embaixadores, acompanhe as coletas e ajuste as regras do programa.
+          Aprove novos membros, acompanhe as coletas e ajuste as regras do programa.
         </p>
       </header>
 
-      {error ? (
-        <Alert variant="error" role="alert">
-          {error}
-        </Alert>
+      {error || message ? (
+        <div className="admin-feedback">
+          {error ? (
+            <Alert variant="error" role="alert">
+              <span className="admin-feedback-body">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  className="admin-feedback-close"
+                  onClick={() => setError(null)}
+                >
+                  Fechar
+                </button>
+              </span>
+            </Alert>
+          ) : null}
+          {message ? (
+            <Alert variant="success">
+              <span className="admin-feedback-body">
+                <span>{message}</span>
+                <button
+                  type="button"
+                  className="admin-feedback-close"
+                  onClick={() => setMessage(null)}
+                >
+                  Fechar
+                </button>
+              </span>
+            </Alert>
+          ) : null}
+        </div>
       ) : null}
-      {message ? <Alert variant="success">{message}</Alert> : null}
 
       <div className="admin-layout">
         <nav className="admin-nav" aria-label="Seções da administração">
@@ -455,20 +507,22 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         </nav>
 
         {section === 'novos' ? (
-          <div className="grid gap-4">
-            <AccountReviewsPanel
-              preview={preview != null}
-              onCount={setWaitingAccounts}
-              onMessage={showMessage}
-              onError={showError}
-            />
+          <div className="admin-stack">
             <NewMembersSection
               pendingSignups={users}
               preview={preview != null}
               approvingUserId={actionLoading}
               onApproveSignup={(id) => void handleApprove(id)}
-              onChanged={() => void loadAll()}
+              onChanged={membersChanged}
               onPendingCount={setWaitingCount}
+              onMessage={showMessage}
+              onError={showError}
+            />
+            <AccountReviewsPanel
+              preview={preview != null}
+              reloadKey={reviewsReloadKey}
+              onCount={setWaitingAccounts}
+              onChanged={() => void loadAll()}
               onMessage={showMessage}
               onError={showError}
             />
@@ -484,235 +538,329 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         ) : null}
 
         {section === 'pessoas' ? (
-          <section className="admin-panel" aria-label="Pessoas">
-            <h2>Embaixadores</h2>
-            <div className="admin-row">
-              <div className="admin-actions">
-                <button
-                  type="button"
-                  aria-pressed={peopleOrder === 'posts'}
-                  onClick={() => setPeopleOrder('posts')}
-                >
-                  Quem posta mais
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={peopleOrder === 'silence'}
-                  onClick={() => setPeopleOrder('silence')}
-                >
-                  Mais tempo sem postar
-                </button>
-              </div>
+          <section className="admin-panel" aria-labelledby="people-title">
+            <div className="admin-panel-head">
+              <h2 id="people-title">Embaixadores</h2>
+              <p>
+                Todas as pessoas com conta no programa. Contas da equipe aparecem aqui, mas não
+                entram no ranking.
+              </p>
             </div>
+            {users.length > 0 ? (
+              <div className="admin-toolbar">
+                <span className="admin-toolbar-label" id="people-order">
+                  Ordenar por
+                </span>
+                <div className="admin-segment" role="group" aria-labelledby="people-order">
+                  <button
+                    type="button"
+                    aria-pressed={peopleOrder === 'posts'}
+                    onClick={() => {
+                      setPeopleOrder('posts');
+                      usersList.reset();
+                    }}
+                  >
+                    Mais posts
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={peopleOrder === 'silence'}
+                    onClick={() => {
+                      setPeopleOrder('silence');
+                      usersList.reset();
+                    }}
+                  >
+                    Mais dias sem postar
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {users.length === 0 ? (
-              <EmptyState
-                title="Nenhum embaixador cadastrado"
-                description="Quando alguém criar conta ou for aprovado nas candidaturas, aparece aqui."
-              />
+              <div className="admin-empty" role="status">
+                <strong>Nenhum embaixador cadastrado</strong>
+                <p>
+                  Quando alguém se cadastrar no site, a pessoa aparece em Novos membros para
+                  aprovar e depois aqui.
+                </p>
+              </div>
             ) : (
-              [...users]
-                .sort((a, b) =>
-                  peopleOrder === 'posts'
-                    ? (b.postsLast30Days ?? 0) - (a.postsLast30Days ?? 0)
-                    : (b.daysWithoutPosting ?? -1) - (a.daysWithoutPosting ?? -1),
-                )
-                .slice(0, visibleUsers)
-                .map((user) => (
-                <article key={user.id} className="admin-row">
-                  <div className="admin-person">
-                    <strong>
-                      {user.publicName}
-                      <span className="admin-status" data-tone={statusTone(user.status)}>
-                        <i />
-                        {statusLabel(user.status)}
+              sortedUsers.slice(usersList.start, usersList.end).map((user) => {
+                const team = user.role === 'admin';
+                const busy = actionLoading === user.id;
+                return (
+                  <article key={user.id} className="admin-row">
+                    <div className="admin-person">
+                      <strong>
+                        {user.publicName}
+                        <span className="admin-status" data-tone={statusTone(user.status)}>
+                          <i />
+                          {statusLabel(user.status)}
+                        </span>
+                        {team ? (
+                          <span className="admin-status">
+                            <i />
+                            Equipe, fora do ranking
+                          </span>
+                        ) : null}
+                      </strong>
+                      <span>
+                        {user.fullName} · {user.email}
                       </span>
-                    </strong>
-                    <span>
-                      {user.fullName} · {user.email}
-                    </span>
-                    <span>{postingLine(user)}</span>
-                  </div>
-                  <div className="admin-actions">
-                    {user.status !== 'approved' ? (
+                      <span>{postingLine(user)}</span>
+                    </div>
+                    <div className="admin-actions">
                       <button
                         type="button"
-                        className="admin-primary"
-                        disabled={actionLoading === user.id}
-                        onClick={() => void handleApprove(user.id)}
+                        disabled={actionLoading === `${user.id}-instagram`}
+                        onClick={() => void handleRequestSync(user.id, 'instagram')}
                       >
-                        Aprovar
+                        {actionLoading === `${user.id}-instagram`
+                          ? 'Pedindo...'
+                          : 'Coletar Instagram'}
                       </button>
-                    ) : null}
-                    {user.status !== 'suspended' ? (
                       <button
                         type="button"
-                        className="is-stop"
-                        disabled={actionLoading === user.id}
-                        onClick={() => setPendingSuspend(user)}
+                        disabled={actionLoading === `${user.id}-tiktok`}
+                        onClick={() => void handleRequestSync(user.id, 'tiktok')}
                       >
-                        Suspender
+                        {actionLoading === `${user.id}-tiktok` ? 'Pedindo...' : 'Coletar TikTok'}
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={actionLoading === `${user.id}-instagram`}
-                      onClick={() => void handleRequestSync(user.id, 'instagram')}
-                    >
-                      Coletar Instagram
-                    </button>
-                    <button
-                      type="button"
-                      disabled={actionLoading === `${user.id}-tiktok`}
-                      onClick={() => void handleRequestSync(user.id, 'tiktok')}
-                    >
-                      Coletar TikTok
-                    </button>
-                  </div>
-                </article>
-              ))
+                      {user.status !== 'suspended' ? (
+                        <button
+                          type="button"
+                          className="is-stop"
+                          disabled={busy}
+                          onClick={() => setPendingSuspend(user)}
+                        >
+                          Suspender
+                        </button>
+                      ) : null}
+                      {user.status !== 'approved' ? (
+                        <button
+                          type="button"
+                          className="admin-primary"
+                          disabled={busy}
+                          onClick={() => void handleApprove(user.id)}
+                        >
+                          {busy ? 'Salvando...' : user.status === 'suspended' ? 'Reativar' : 'Aprovar'}
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })
             )}
-            <ShowMore
-              total={users.length}
-              visible={visibleUsers}
-              onMore={() => setVisibleUsers((count) => count + PAGE_SIZE)}
-            />
+            <ListFooter list={usersList} label="embaixadores" />
           </section>
         ) : null}
 
         {section === 'sincronizacao' ? (
-          <section className="admin-panel" aria-label="Coletas">
-            <h2>Coletas recentes</h2>
-            {syncs.length === 0 ? (
-              <p className="admin-row admin-meta">
-                Nenhuma coleta registrada ainda. Ela começa quando um embaixador conecta uma rede.
+          <section className="admin-panel" aria-labelledby="syncs-title">
+            <div className="admin-panel-head">
+              <h2 id="syncs-title">Coletas</h2>
+              <p>
+                Cada coleta lê as views de uma conta.
+                {settings
+                  ? ` O ranking se atualiza sozinho a cada ${settings.syncIntervalMinutes} minutos.`
+                  : ''}
               </p>
+            </div>
+            <div className="admin-row">
+              <div className="admin-person">
+                <strong>Recalcular os rankings agora</strong>
+                <span>
+                  Use depois de retirar um vídeo ou aprovar contas, para não esperar a próxima
+                  atualização.
+                </span>
+              </div>
+              <div className="admin-actions">
+                <button
+                  type="button"
+                  disabled={actionLoading === 'recalculate'}
+                  onClick={() => void handleRecalculate()}
+                >
+                  {actionLoading === 'recalculate' ? 'Recalculando...' : 'Recalcular rankings'}
+                </button>
+              </div>
+            </div>
+            <h3 className="admin-subhead">
+              Coletas recentes{syncs.length > 0 ? <span>{syncs.length}</span> : null}
+            </h3>
+            {syncs.length === 0 ? (
+              <div className="admin-empty" role="status">
+                <strong>Nenhuma coleta registrada ainda</strong>
+                <p>
+                  As coletas começam sozinhas quando há contas aprovadas. Para pedir uma agora, vá
+                  em Pessoas e toque em Coletar.
+                </p>
+              </div>
             ) : (
-              syncs.slice(0, visibleSyncs).map((job) => (
+              syncs.slice(syncsList.start, syncsList.end).map((job) => (
                 <article key={job.id} className="admin-row">
                   <div className="admin-person">
                     <strong>
-                      {platformName(job.platform)}
-                      {job.username ? ` @${job.username.replace(/^@/, '')}` : ''}
+                      {job.publicName ?? 'Nome não informado'}
                       <span className="admin-status" data-tone={jobTone(job.status)}>
                         <i />
                         {syncStatusLabel(job.status)}
                       </span>
                     </strong>
                     <span>
-                      {job.publicName ?? 'Embaixador sem nome'}
+                      {platformName(job.platform)}
+                      {job.username ? ` @${job.username.replace(/^@/, '')}` : ''}
                       {job.finishedAt
                         ? ` · Terminou em ${formatWhen(job.finishedAt)}`
                         : job.startedAt
                           ? ` · Começou em ${formatWhen(job.startedAt)}`
                           : ' · Aguardando início'}
                     </span>
-                    {job.errorMessage ? <span>{job.errorMessage}</span> : null}
+                    {job.errorMessage ? (
+                      <span className="admin-note admin-note-bad">
+                        Motivo: {job.errorMessage}
+                      </span>
+                    ) : null}
                   </div>
                 </article>
               ))
             )}
-            <ShowMore
-              total={syncs.length}
-              visible={visibleSyncs}
-              onMore={() => setVisibleSyncs((count) => count + PAGE_SIZE)}
-            />
-            <div className="admin-row">
-              <button
-                type="button"
-                className="admin-primary"
-                disabled={actionLoading === 'recalculate'}
-                onClick={() => void handleRecalculate()}
-              >
-                Recalcular rankings
-              </button>
-            </div>
+            <ListFooter list={syncsList} label="coletas" />
           </section>
         ) : null}
 
         {section === 'regras' ? (
-          <section className="admin-panel" aria-label="Regras">
-            <h2>Programa</h2>
+          <section className="admin-panel" aria-labelledby="rules-title">
+            <div className="admin-panel-head">
+              <h2 id="rules-title">Regras do programa</h2>
+              <p>Valem para todos os embaixadores a partir da próxima atualização do ranking.</p>
+            </div>
             {settings ? (
-              <form className="admin-form" onSubmit={(event) => void handleSettingsSubmit(event)}>
-                <Input
-                  label="Coleta e ranking (minutos)"
-                  name="syncIntervalMinutes"
-                  type="number"
-                  value={String(settings.syncIntervalMinutes)}
-                  disabled
-                  hint={`A cada ${settings.syncIntervalMinutes} minutos o sistema renova o acesso, lê as views e publica o ranking. Esse intervalo é definido no servidor.`}
-                />
-                <Input
-                  label="Tolerância de dados desatualizados (horas)"
-                  name="staleToleranceHours"
-                  type="number"
-                  min={1}
-                  value={String(settings.staleToleranceHours)}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      staleToleranceHours: Number(event.target.value),
-                    })
-                  }
-                />
-                <Input
-                  label="Espera entre coletas manuais (segundos)"
-                  name="manualSyncCooldownSeconds"
-                  type="number"
-                  min={0}
-                  value={String(settings.manualSyncCooldownSeconds)}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      manualSyncCooldownSeconds: Number(event.target.value),
-                    })
-                  }
-                />
-                <Button type="submit" loading={actionLoading === 'settings'}>
-                  Salvar regras
-                </Button>
-              </form>
+              <>
+                <div className="admin-row">
+                  <div className="admin-person">
+                    <strong>Coleta e ranking a cada {settings.syncIntervalMinutes} minutos</strong>
+                    <span>
+                      Nesse intervalo o sistema lê as views e publica o ranking. Ele é definido no
+                      servidor e não muda por aqui.
+                    </span>
+                  </div>
+                </div>
+                <form
+                  className="admin-form"
+                  onSubmit={(event) => void handleSettingsSubmit(event)}
+                >
+                  <Input
+                    label="Tempo máximo sem coleta (horas)"
+                    name="staleToleranceHours"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    required
+                    value={
+                      Number.isFinite(settings.staleToleranceHours)
+                        ? String(settings.staleToleranceHours)
+                        : ''
+                    }
+                    hint="Se a conta passar esse tempo sem uma coleta nova, ela sai do ranking até a próxima coleta dar certo."
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        staleToleranceHours:
+                          event.target.value === '' ? Number.NaN : Number(event.target.value),
+                      })
+                    }
+                  />
+                  <Input
+                    label="Espera entre coletas pedidas à mão (segundos)"
+                    name="manualSyncCooldownSeconds"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    required
+                    value={
+                      Number.isFinite(settings.manualSyncCooldownSeconds)
+                        ? String(settings.manualSyncCooldownSeconds)
+                        : ''
+                    }
+                    hint="Tempo mínimo entre dois pedidos de coleta para a mesma conta. Evita bloqueio pelas redes."
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        manualSyncCooldownSeconds:
+                          event.target.value === '' ? Number.NaN : Number(event.target.value),
+                      })
+                    }
+                  />
+                  <div className="admin-form-actions">
+                    <Button
+                      type="submit"
+                      loading={actionLoading === 'settings'}
+                      disabled={!settingsChanged || !settingsValid}
+                    >
+                      Salvar regras
+                    </Button>
+                    {settingsChanged ? (
+                      <Button
+                        variant="secondary"
+                        disabled={actionLoading === 'settings'}
+                        onClick={() => setSettings(savedSettings)}
+                      >
+                        Desfazer
+                      </Button>
+                    ) : (
+                      <span className="admin-meta">Nenhuma mudança para salvar.</span>
+                    )}
+                  </div>
+                </form>
+              </>
             ) : (
-              <p className="admin-row admin-meta">
-                Não foi possível carregar as regras. Atualize a página para tentar de novo.
-              </p>
+              <div className="admin-empty" role="alert">
+                <strong>Não foi possível carregar as regras</strong>
+                <p>Confira a internet e tente de novo. Se continuar, avise o suporte técnico.</p>
+                <div className="admin-actions">
+                  <button type="button" onClick={() => void loadAll()}>
+                    Tentar de novo
+                  </button>
+                </div>
+              </div>
             )}
           </section>
         ) : null}
 
         {section === 'conteudo' ? (
-          <ExcludeContentSection
-            onExclude={handleExcludeContent}
-            loadingId={actionLoading}
-          />
+          <ExcludeContentSection onExclude={handleExcludeContent} loadingId={actionLoading} />
         ) : null}
 
         {section === 'auditoria' ? (
-          <section className="admin-panel" aria-label="Auditoria">
-            <h2>Trilha</h2>
-            {audit.length === 0 ? (
-              <p className="admin-row admin-meta">
-                Nenhum evento registrado. Aprovações, suspensões e ajustes de regras aparecem aqui.
+          <section className="admin-panel" aria-labelledby="audit-title">
+            <div className="admin-panel-head">
+              <h2 id="audit-title">Histórico de ações</h2>
+              <p>
+                Aprovações, reprovações, suspensões e mudanças de regras ficam registradas aqui,
+                com quem fez e quando.
               </p>
+            </div>
+            {audit.length === 0 ? (
+              <div className="admin-empty" role="status">
+                <strong>Nenhuma ação registrada</strong>
+                <p>A primeira aprovação ou mudança de regra já aparece aqui.</p>
+              </div>
             ) : (
-              audit.slice(0, visibleAudit).map((entry) => (
+              audit.slice(auditList.start, auditList.end).map((entry) => (
                 <article key={entry.id} className="admin-row">
                   <div className="admin-person">
                     <strong>{auditActionLabel(entry.action)}</strong>
                     <span>
-                      {entry.actorName ?? (entry.actorId ? 'Administração' : 'Sistema')} ·{' '}
-                      {auditEntityLabel(entry)}
-                      {entry.reason ? ` · ${entry.reason}` : ''} · {formatWhen(entry.createdAt)}
+                      {entry.actorName ?? (entry.actorId ? 'Equipe' : 'Sistema')} ·{' '}
+                      {auditEntityLabel(entry)} · {formatWhen(entry.createdAt)}
                     </span>
+                    {entry.reason ? (
+                      <span className="admin-note">Motivo: {entry.reason}</span>
+                    ) : null}
                   </div>
                 </article>
               ))
             )}
-            <ShowMore
-              total={audit.length}
-              visible={visibleAudit}
-              onMore={() => setVisibleAudit((count) => count + PAGE_SIZE)}
-            />
+            <ListFooter list={auditList} label="histórico" />
           </section>
         ) : null}
       </div>
@@ -720,7 +868,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
       <ConfirmDialog
         open={pendingSuspend !== null}
         title={`Suspender ${pendingSuspend?.publicName ?? 'este embaixador'}?`}
-        description="A pessoa perde o acesso ao painel e sai dos rankings até ser aprovada de novo."
+        description="A pessoa perde o acesso ao painel e sai dos rankings até ser reativada."
         confirmLabel="Suspender"
         busy={pendingSuspend !== null && actionLoading === pendingSuspend.id}
         onConfirm={() => {
@@ -739,51 +887,88 @@ function ExcludeContentSection({
   onExclude: (contentId: string, reason: string) => Promise<boolean>;
   loadingId: string | null;
 }) {
-  const [contentId, setContentId] = useState('');
+  const [codeInput, setCodeInput] = useState('');
   const [reason, setReason] = useState('');
+  const [touched, setTouched] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const code = findContentCode(codeInput);
+  const codeError =
+    touched && codeInput.trim() !== '' && !code
+      ? 'Não achamos um código de vídeo nesse texto. Ele tem 36 caracteres, letras e números separados por hífens.'
+      : undefined;
+  const busy = code !== null && loadingId === `exclude-${code}`;
+  const ready = code !== null && reason.trim().length >= 3;
 
   return (
-    <section className="admin-panel" aria-label="Conteúdo">
-      <h2>Excluir do ranking</h2>
+    <section className="admin-panel" aria-labelledby="exclude-title">
+      <div className="admin-panel-head">
+        <h2 id="exclude-title">Retirar vídeo do ranking</h2>
+        <p>
+          Use quando um vídeo não segue as regras do programa. As views dele deixam de contar, o
+          vídeo continua guardado e o motivo fica no histórico.
+        </p>
+      </div>
       <form
         className="admin-form"
         onSubmit={(event) => {
           event.preventDefault();
-          void onExclude(contentId, reason).then((done) => {
-            if (done) {
-              setContentId('');
-              setReason('');
-            }
-          });
+          setTouched(true);
+          if (ready) setConfirming(true);
         }}
       >
-        <p className="admin-meta">
-          Remove um conteúdo do cálculo pelo identificador, com o motivo registrado na auditoria.
-        </p>
         <Input
-          label="Identificador do conteúdo"
+          label="Código do vídeo"
           name="contentId"
-          value={contentId}
-          onChange={(event) => setContentId(event.target.value)}
-          placeholder="Identificador"
+          autoComplete="off"
+          spellCheck={false}
+          value={codeInput}
+          onChange={(event) => setCodeInput(event.target.value)}
+          onBlur={() => setTouched(true)}
+          placeholder="Cole o código aqui"
+          error={codeError}
+          hint={
+            code && code !== codeInput.trim().toLowerCase()
+              ? `Código encontrado: ${code}`
+              : 'Peça o código ao suporte técnico. Pode colar a mensagem inteira, o código é reconhecido sozinho.'
+          }
           required
         />
         <Input
-          label="Motivo da exclusão"
+          label="Motivo"
           name="reason"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Descreva o motivo"
+          placeholder="Ex.: o vídeo não é do programa"
+          hint="Fica registrado no histórico de ações."
           required
         />
-        <button
-          type="submit"
-          className="is-stop"
-          disabled={!contentId.trim() || !reason.trim() || loadingId === `exclude-${contentId}`}
-        >
-          Excluir do ranking
-        </button>
+        <div className="admin-form-actions">
+          <button type="submit" className="is-stop" disabled={!ready || busy}>
+            {busy ? 'Retirando...' : 'Retirar do ranking'}
+          </button>
+        </div>
       </form>
+
+      <ConfirmDialog
+        open={confirming}
+        title="Retirar este vídeo do ranking?"
+        description={`As views do vídeo deixam de contar para todos os rankings. Motivo: ${reason.trim()}`}
+        confirmLabel="Retirar do ranking"
+        busy={busy}
+        onConfirm={() => {
+          if (!code) return;
+          void onExclude(code, reason).then((done) => {
+            setConfirming(false);
+            if (done) {
+              setCodeInput('');
+              setReason('');
+              setTouched(false);
+            }
+          });
+        }}
+        onCancel={() => setConfirming(false)}
+      />
     </section>
   );
 }
