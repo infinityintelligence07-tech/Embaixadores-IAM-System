@@ -160,8 +160,8 @@ export function gateHeadline(
 
   if (pending.length === 2) {
     return {
-      title: 'Para entrar na competição',
-      detail: 'Informe o @ do Instagram, do TikTok ou dos dois. Basta o @, sem senha.',
+      title: 'Conecte o Instagram ou o TikTok',
+      detail: 'Escolha a rede onde você posta e digite o @. Não pede senha.',
     };
   }
 

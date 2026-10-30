@@ -23,7 +23,6 @@ import {
   type SocialPlatform,
 } from '@/lib/api';
 import {
-  categoryPhrase,
   firstName,
   formatViews,
   platformLabel,
@@ -436,7 +435,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
             <i />
           </div>
         ) : blocked ? (
-          <h1 className="arena-standing">Entre na competição</h1>
+          <h1 className="arena-standing">Falta só o seu @</h1>
         ) : standing?.eligible && standing.position != null ? (
           <h1 className="arena-standing">
             Você está na{' '}
@@ -857,17 +856,11 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
       {slice && !blocked ? (
         <p className="arena-note">
-          {slice.officialAccountViews == null
-            ? `${slice.officialAccountViewsLabel}.`
-            : `${slice.officialAccountViewsLabel}: ${formatViews(slice.officialAccountViews)}.`}{' '}
-          Última coleta: {formatWhen(slice.lastSyncAt)}. Agora você vê{' '}
-          {categoryPhrase(category)} no {platformLabel(platform)}.
+          {slice.lastSyncAt
+            ? `Views do ${platformLabel(platform)} atualizadas em ${formatWhen(slice.lastSyncAt)}.`
+            : `Primeira coleta do ${platformLabel(platform)} em andamento.`}
         </p>
-      ) : (
-        <p className="arena-note">
-          Agora você vê {categoryPhrase(category)} no {platformLabel(platform)}.
-        </p>
-      )}
+      ) : null}
 
       {criteria ? (
         <details className="arena-criteria">
