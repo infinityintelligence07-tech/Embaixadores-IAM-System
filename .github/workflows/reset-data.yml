@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "report (só conta e faz cópia) ou wipe (apaga embaixadores e rankings)"
+        description: "report (só conta e faz cópia), reset (zera ranking, redes e views, mantém as pessoas) ou wipe (apaga embaixadores)"
         required: true
         default: report
         type: choice
-        options: [report, wipe]
+        options: [report, reset, wipe]
       confirm:
-        description: "Para wipe, digite APAGAR-TUDO"
+        description: "reset pede ZERAR-RANKING; wipe pede APAGAR-TUDO"
         required: false
         default: ""
 
@@ -24,9 +24,9 @@ jobs:
       name: production
     steps:
       - name: Conferir confirmação
-        if: inputs.mode == 'wipe' && inputs.confirm != 'APAGAR-TUDO'
+        if: (inputs.mode == 'wipe' && inputs.confirm != 'APAGAR-TUDO') || (inputs.mode == 'reset' && inputs.confirm != 'ZERAR-RANKING')
         run: |
-          echo "Sem a confirmação APAGAR-TUDO a limpeza não roda."
+          echo "Sem a palavra de confirmação a limpeza não roda."
           exit 1
 
       - name: Configurar SSH
@@ -84,6 +84,35 @@ jobs:
             }
             process.stdout.write(JSON.stringify(backup));
 
+            const countAll = async () => {
+              const after = {};
+              for (const table of TABLES) {
+                after[table] = Number((await pool.query(`SELECT count(*) FROM public.${table}`)).rows[0].count);
+              }
+              return after;
+            };
+
+            if (mode === 'reset') {
+              // Cadastros, aprovações e fotos ficam; somem redes, vídeos, views e rankings publicados.
+              const client = await pool.connect();
+              try {
+                await client.query('BEGIN');
+                await client.query('DELETE FROM ranking_entries');
+                await client.query('DELETE FROM ranking_versions');
+                await client.query('DELETE FROM social_accounts');
+                await client.query('DELETE FROM oauth_states');
+                await client.query('COMMIT');
+              } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
+              } finally {
+                client.release();
+              }
+              console.error('DEPOIS ' + JSON.stringify(await countAll()));
+              await pool.end();
+              return;
+            }
+
             if (mode !== 'wipe') {
               console.error('Modo report: nada foi apagado.');
               await pool.end();
@@ -122,12 +151,8 @@ jobs:
               else removed += 1;
             }
             await pool.query(`DELETE FROM profiles WHERE role <> 'admin'`);
-            const after = {};
-            for (const table of TABLES) {
-              after[table] = Number((await pool.query(`SELECT count(*) FROM public.${table}`)).rows[0].count);
-            }
             console.error(`Usuários apagados: ${removed} de ${targets.length}`);
-            console.error('DEPOIS ' + JSON.stringify(after));
+            console.error('DEPOIS ' + JSON.stringify(await countAll()));
             await pool.end();
           })().catch((error) => {
             console.error('ERRO ' + (error && error.message ? error.message : error));
