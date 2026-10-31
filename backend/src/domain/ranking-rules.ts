@@ -59,6 +59,28 @@ export function compareRankingCandidates(
   }
 }
 
+export interface AccountMetrics {
+  totalViews: number;
+  bestVideoViews: number;
+  bestContentId: string | null;
+}
+
+/** A pessoa soma as views de todas as contas; o melhor vídeo é o maior entre elas. */
+export function combineAccountMetrics(accounts: readonly AccountMetrics[]): AccountMetrics {
+  let combined: AccountMetrics = { totalViews: 0, bestVideoViews: 0, bestContentId: null };
+  for (const account of accounts) {
+    const best =
+      account.bestContentId !== null &&
+      (combined.bestContentId === null || account.bestVideoViews > combined.bestVideoViews);
+    combined = {
+      totalViews: combined.totalViews + account.totalViews,
+      bestVideoViews: best ? account.bestVideoViews : combined.bestVideoViews,
+      bestContentId: best ? account.bestContentId : combined.bestContentId,
+    };
+  }
+  return combined;
+}
+
 /** Assigns sequential positions (1..n) preserving input order. */
 export function assignSequentialPositions(
   sortedCandidates: readonly RankingCandidate[],

@@ -26,38 +26,23 @@ export type ConnectionStatus =
 export type RankingView = 'top3' | 'top10' | 'all';
 export type RankingCategory = 'total_views' | 'best_video';
 
-export interface AmbassadorApplication {
-  id: string;
-  nome_completo: string;
-  email: string;
-  whatsapp: string;
-  nome_conta: string;
-  redes_sociais: string[];
-  instagram_handle: string | null;
-  tiktok_handle: string | null;
-  status: ApplicationStatus;
-  created_at: string;
-  reviewed_at: string | null;
-  reviewed_by_name: string | null;
-  review_note: string | null;
-}
-
-export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
-
 /** Decisão da equipe sobre a conta: só `approved` entra no ranking. */
 export type AccountReviewStatus = 'pending' | 'approved' | 'changes_requested' | 'rejected';
 export type ReviewDecision = Exclude<AccountReviewStatus, 'pending'>;
 
-export interface AccountReviewItem {
+/** Uma conta de rede de um embaixador, como a equipe vê no quadro de aprovações. */
+export interface AdminAccount {
   accountId: string;
   platform: SocialPlatform;
   username: string | null;
   profileUrl: string | null;
-  connectionStatus: ConnectionStatus;
-  verifiedAt: string | null;
   reviewStatus: AccountReviewStatus;
   reviewNote: string | null;
+  reviewedAt: string | null;
+  reviewedByName: string | null;
   connectedAt: string;
+  lastSyncAt: string | null;
+  views: number;
   profileId: string;
   fullName: string;
   publicName: string;
@@ -96,9 +81,6 @@ export interface SignupPayload {
   nome_completo: string;
   email: string;
   whatsapp: string;
-  redes_sociais: string[];
-  instagram_handle: string;
-  tiktok_handle: string;
   password: string;
   ranking_consent: boolean;
 }
@@ -112,42 +94,39 @@ export interface MeResponse {
   role: UserRole;
   status: UserStatus;
   onboardingCompleted: boolean;
-  /** Entrou pelo Google e ainda falta WhatsApp, rede e @. */
+  /** Entrou pelo Google e ainda falta o WhatsApp. */
   needsSignupDetails: boolean;
   createdAt: string;
 }
 
 export interface CompleteSignupPayload {
   whatsapp: string;
-  redes_sociais: SocialPlatform[];
-  instagram_handle: string;
-  tiktok_handle: string;
   ranking_consent: boolean;
 }
 
-export interface PlatformDashboardSlice {
+export interface DashboardAccount {
+  id: string;
   platform: SocialPlatform;
-  positionTotal: number | null;
-  positionBest: number | null;
-  totalParticipants: number | null;
-  ineligibilityReason: string | null;
-  monitoredViewsTotal: number | null;
+  username: string | null;
+  views: number;
+  reviewStatus: AccountReviewStatus;
+  lastSyncAt: string | null;
+}
+
+export interface DashboardResponse {
+  /** Views desde o início, somando todas as contas aprovadas. */
+  totalViews: number;
+  byPlatform: Record<SocialPlatform, number>;
   bestVideo: {
     id: string;
     title: string | null;
     views: number;
     permalink: string | null;
+    platform: SocialPlatform;
+    username: string | null;
   } | null;
-  officialAccountViews: number | null;
-  officialAccountViewsLabel: string;
-  contentCount: number;
   lastSyncAt: string | null;
-  connectionStatus: ConnectionStatus | null;
-  syncCoverageRatio: number | null;
-}
-
-export interface DashboardResponse {
-  slices: PlatformDashboardSlice[];
+  accounts: DashboardAccount[];
   rankingCriteria: string;
 }
 
@@ -159,19 +138,16 @@ export interface SocialAccount {
   transport: 'official_api' | 'public_api' | 'mcp' | 'demo';
   lastSyncAt: string | null;
   syncMessage: string | null;
-  /** Código para a bio, presente só enquanto a conta aguarda confirmação. */
   verificationCode: string | null;
   reviewStatus: AccountReviewStatus;
   reviewNote: string | null;
+  /** Views elegíveis dessa conta desde o início. */
+  views: number;
+  createdAt: string;
 }
 
-/** "oauth" abre o login da rede; "handle" pede o @ e confirma a posse pela bio. */
-export type ConnectStart =
-  | { mode: 'oauth'; url: string }
-  | { mode: 'handle'; suggestedHandle: string | null };
-
 export interface GrowthResponse {
-  platform: SocialPlatform;
+  platform: SocialPlatform | null;
   /** Views somadas no fim de cada dia, da primeira medição até hoje. */
   points: { day: string; views: number }[];
   current: number | null;
@@ -182,6 +158,8 @@ export interface GrowthResponse {
 export interface ContentItem {
   id: string;
   platform: SocialPlatform;
+  accountId: string;
+  username: string | null;
   title: string;
   url: string;
   views: number;
@@ -221,7 +199,7 @@ export interface MyRankingResponse {
   score: number | null;
   gapToAbove: number | null;
   category: RankingCategory;
-  platform: SocialPlatform;
+  platform: SocialPlatform | null;
   entry: RankingEntry | null;
 }
 
@@ -241,8 +219,8 @@ export interface AdminUser {
 
 export interface AdminSyncJob {
   id: string;
-  profileId: string;
-  platform: SocialPlatform;
+  profileId: string | null;
+  platform: SocialPlatform | null;
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   startedAt: string | null;
   finishedAt: string | null;
@@ -358,19 +336,12 @@ export const api = {
 
   socialAccounts: () => fetchJson<SocialAccount[]>('/api/social/accounts'),
 
-  startOAuth: (platform: SocialPlatform) =>
-    fetchJson<ConnectStart>(`/api/social/oauth/${platform}/start`, {
-      method: 'POST',
-    }),
-
-  claimHandle: (platform: SocialPlatform, handle: string) =>
+  /** Sempre adiciona uma conta nova; o mesmo @ já ativo volta como está, sem duplicar. */
+  addAccount: (platform: SocialPlatform, handle: string) =>
     fetchJson<SocialAccount>(`/api/social/${platform}/handle`, {
       method: 'POST',
       body: JSON.stringify({ handle }),
     }),
-
-  verifyHandle: (platform: SocialPlatform) =>
-    fetchJson<SocialAccount>(`/api/social/${platform}/verify`, { method: 'POST' }),
 
   deleteSocialAccount: (id: string) =>
     fetchJson<void>(`/api/social/accounts/${id}`, { method: 'DELETE' }),
@@ -386,6 +357,7 @@ export const api = {
       campaignId ? `/api/contents?campaignId=${encodeURIComponent(campaignId)}` : '/api/contents',
     ),
 
+  /** Sem `platform`, o ranking geral (todas as contas). Com `platform`, só aquela rede. */
   rankings: (params: {
     platform?: SocialPlatform;
     category?: RankingCategory;
@@ -407,6 +379,7 @@ export const api = {
     return fetchJson<RankingsResponse>(`/api/rankings${query ? `?${query}` : ''}`);
   },
 
+  /** Mesma regra de `rankings`: sem `platform`, a posição no geral. */
   myRanking: (params?: {
     platform?: SocialPlatform;
     category?: RankingCategory;
@@ -433,7 +406,7 @@ export const api = {
   requestAccountReview: (id: string) =>
     fetchJson<SocialAccount>(`/api/social/accounts/${id}/request-review`, { method: 'POST' }),
 
-  /** Quem entrou pelo Google completa WhatsApp, rede e @. */
+  /** Quem entrou pelo Google completa o WhatsApp. */
   completeSignup: (payload: CompleteSignupPayload) =>
     fetchJson<{ id: string }>('/api/applications/complete', {
       method: 'POST',
@@ -447,7 +420,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  adminAccountReviews: () => fetchJson<AccountReviewItem[]>('/api/admin/account-reviews'),
+  adminAccounts: () => fetchJson<AdminAccount[]>('/api/admin/accounts'),
 
   adminReviewAccount: (id: string, decision: ReviewDecision, note?: string) =>
     fetchJson<{ id: string; reviewStatus: AccountReviewStatus; reviewNote: string | null }>(
@@ -492,8 +465,7 @@ export const api = {
 
   removeAvatar: () => fetchJson<MeResponse>('/api/me/avatar', { method: 'DELETE' }),
 
-  growth: (platform: SocialPlatform) =>
-    fetchJson<GrowthResponse>(`/api/dashboard/growth?platform=${platform}`),
+  growth: () => fetchJson<GrowthResponse>('/api/dashboard/growth'),
 
   requestAccountDeletion: () =>
     fetchJson<{ ok: boolean }>('/api/me/delete-request', { method: 'POST' }),
@@ -508,10 +480,10 @@ export const api = {
 
   adminSyncs: () => fetchJson<AdminSyncJob[]>('/api/admin/syncs'),
 
-  adminRequestSync: (userId: string, platform: SocialPlatform) =>
+  adminRequestSync: (accountId: string) =>
     fetchJson<AdminSyncJob>('/api/admin/syncs', {
       method: 'POST',
-      body: JSON.stringify({ userId, platform }),
+      body: JSON.stringify({ accountId }),
     }),
 
   adminExcludeContent: (id: string, reason: string) =>
@@ -534,15 +506,4 @@ export const api = {
     }),
 
   adminAudit: () => fetchJson<AdminAuditEntry[]>('/api/admin/audit'),
-
-  applications: () => fetchJson<AmbassadorApplication[]>('/api/admin/applications'),
-
-  updateApplication: (id: string, status: AmbassadorApplication['status'], note?: string) =>
-    fetchJson<AmbassadorApplication>(`/api/admin/applications/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(note ? { status, note } : { status }),
-    }),
-
-  deleteApplication: (id: string) =>
-    fetchJson<{ ok: boolean }>(`/api/admin/applications/${id}`, { method: 'DELETE' }),
 };

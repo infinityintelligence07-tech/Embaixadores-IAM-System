@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSurfaceTheme } from '@/lib/theme';
 
-const updated = '24 de setembro de 2026';
+const updated = '31 de outubro de 2026';
 
 /** Volta para a tela de onde a pessoa veio (cadastro ou login); sem histórico, vai para o início. */
 export function LegalBackLink() {
@@ -95,35 +95,41 @@ export function TermsPage() {
       <LegalSection title="1. Objeto">
         <p>
           A plataforma reúne os embaixadores que publicam os conteúdos e cortes do Acorde Sua Mente.
-          Ela permite o cadastro, a conexão do Instagram e do TikTok pelo @ e a classificação em
-          rankings públicos, com base nas visualizações dos Reels e vídeos publicados.
+          Ela permite o cadastro, a inclusão de contas do Instagram e do TikTok pelo @ e a
+          classificação em rankings públicos, com base nas visualizações dos Reels e vídeos
+          publicados.
         </p>
       </LegalSection>
       <LegalSection title="2. Cadastro e elegibilidade">
         <p>
           O embaixador deve fornecer dados verdadeiros: nome, nome público, e-mail e WhatsApp. A
-          conta pode ser criada com e-mail e senha ou com a conta Google. A
-          participação nos rankings depende da aprovação da equipe. Contas suspensas não
-          participam da classificação.
+          conta pode ser criada com e-mail e senha ou com a conta Google, e o acesso é liberado na
+          hora. As contas de rede social só entram nos rankings depois da aprovação da equipe.
+          Cadastros suspensos não participam da classificação.
         </p>
       </LegalSection>
       <LegalSection title="3. Redes sociais">
         <p>
-          O embaixador informa o @ do Instagram ou do TikTok onde publica e declara que o perfil é
-          dele. O @ informado já conecta a rede. Nunca pedimos a senha da rede social. O perfil
-          precisa estar público, porque as visualizações são lidas do perfil público por um
-          fornecedor de dados públicos.
+          Depois de entrar, o embaixador adiciona em Conexões as contas do Instagram e do TikTok
+          onde publica, informando o @ de cada uma, até 5 contas por rede. Ao adicionar, declara
+          que o perfil é dele ou que tem autorização para usá-lo. Nunca pedimos a senha da rede
+          social. O perfil precisa estar público, porque as visualizações são lidas do perfil
+          público por um fornecedor de dados públicos.
         </p>
         <p>
-          A equipe confere se o @ é do embaixador antes de o perfil entrar no ranking e pode
-          recusar o que não for dele. Cada perfil só pode estar ligado a um embaixador. O
-          embaixador pode desconectar a rede a qualquer momento em Conexões.
+          A equipe confere cada conta antes de ela entrar no ranking e pode pedir um ajuste ou
+          recusar a conta que não for do embaixador ou não publicar conteúdo do programa. Cada
+          perfil só pode estar ligado a um embaixador. O embaixador pode remover uma conta a
+          qualquer momento em Conexões.
         </p>
       </LegalSection>
       <LegalSection title="4. Rankings e visualizações">
         <p>
-          Os rankings somam as visualizações dos Reels e vídeos publicados no próprio perfil e
-          destacam o melhor vídeo, separados por rede. Nos rankings por mês ou campanha, contam as
+          O ranking principal soma as visualizações dos Reels e vídeos publicados em todas as
+          contas aprovadas do embaixador, no Instagram e no TikTok, e também destaca o melhor
+          vídeo entre todas elas. É esse ranking que define a posição e o nível. Como consulta, a
+          plataforma também mostra a classificação só do Instagram ou só do TikTok, somando as
+          contas aprovadas daquela rede. Nos rankings por mês ou campanha, contam as
           visualizações ganhas dentro do período, de qualquer vídeo, mesmo postado antes. Fotos e
           carrosséis do Instagram não contam.
           Quando um número ainda não estiver disponível, a plataforma mostra que ele está

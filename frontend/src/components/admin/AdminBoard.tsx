@@ -1,45 +1,50 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactElement } from 'react';
+import { useMemo, useState, type DragEvent, type ReactElement } from 'react';
 import { useListWindow } from '@/components/admin/ListWindow';
 import { NoteDialog } from '@/components/admin/NoteDialog';
 import { PlatformMark } from '@/components/brand/PlatformMark';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   ApiError,
   api,
-  type AccountReviewItem,
-  type AdminUser,
-  type AmbassadorApplication,
-  type SocialPlatform,
-  type UserStatus,
+  type AccountReviewStatus,
+  type AdminAccount,
+  type ReviewDecision,
 } from '@/lib/api';
+import { formatDateTime, formatDay, formatViews, platformLabel, profileUrl } from '@/lib/format';
 
 type Column = 'waiting' | 'adjust' | 'approved' | 'out';
+
+const COLUMN_OF: Record<AccountReviewStatus, Column> = {
+  pending: 'waiting',
+  changes_requested: 'adjust',
+  approved: 'approved',
+  rejected: 'out',
+};
 
 const COLUMNS: { id: Column; title: string; hint: string; empty: string }[] = [
   {
     id: 'waiting',
     title: 'Aguardando',
-    hint: 'Cadastros e redes esperando a sua decisão.',
-    empty: 'Ninguém esperando. Quem se cadastrar no site aparece aqui.',
+    hint: 'Contas novas esperando a sua decisão.',
+    empty: 'Nenhuma conta esperando. Quando alguém adicionar uma conta no app, ela aparece aqui.',
   },
   {
     id: 'adjust',
     title: 'Ajuste pedido',
-    hint: 'A pessoa recebeu o recado e avisa no app quando ajustar.',
+    hint: 'A pessoa viu o recado e avisa no app quando ajustar.',
     empty: 'Nenhum ajuste em aberto.',
   },
   {
     id: 'approved',
-    title: 'Aprovados',
-    hint: 'Acesso liberado e redes contando no ranking.',
-    empty: 'Ninguém aprovado ainda. Arraste alguém para cá.',
+    title: 'Aprovadas',
+    hint: 'Somando views no ranking.',
+    empty: 'Nenhuma conta aprovada ainda. Arraste uma conta para cá.',
   },
   {
     id: 'out',
-    title: 'Reprovados',
+    title: 'Reprovadas',
     hint: 'Fora do ranking. Dá para aprovar depois.',
-    empty: 'Ninguém reprovado.',
+    empty: 'Nenhuma conta reprovada.',
   },
 ];
 
@@ -53,66 +58,37 @@ const MOVES: Record<Column, Column[]> = {
 
 const ADJUST_SUGGESTIONS = [
   'Deixe o perfil público para as views entrarem.',
-  'Use o mesmo @ que você informou no cadastro.',
   'Publique os cortes como Reels, não como foto ou carrossel.',
+  'Confira se o @ está escrito certo e adicione a conta de novo.',
 ];
 
 const REJECT_SUGGESTIONS = [
   'O perfil não publica conteúdo do programa.',
-  'Esse @ não é da pessoa que fez o cadastro.',
+  'Essa conta não é da pessoa que a adicionou.',
 ];
 
-interface Handle {
-  platform: SocialPlatform;
-  handle: string;
-  href: string;
-}
+type Pending = { kind: 'adjust' | 'reject'; account: AdminAccount };
 
-interface Person {
-  key: string;
-  name: string;
-  email: string;
-  user: AdminUser | null;
-  app: AmbassadorApplication | null;
-  accounts: AccountReviewItem[];
-  handles: Handle[];
-  column: Column;
-  tag: { label: string; tone: 'wait' | 'stop' } | null;
-  since: string;
-  note: string | null;
-  whatsapp: string | null;
-}
+export type BoardStatus = 'loading' | 'ready' | 'failed';
 
-type Pending =
-  | { kind: 'adjust'; person: Person }
-  | { kind: 'reject'; person: Person }
-  | { kind: 'suspend'; person: Person }
-  | { kind: 'delete'; person: Person };
-
-function formatWhen(value: string | null): string {
-  if (!value) return 'Sem data';
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
-    new Date(value),
-  );
-}
-
-/** Aceita "@fulano", "fulano" ou a URL do perfil colada no formulário. */
 function cleanHandle(value: string | null): string | null {
-  if (!value) return null;
-  const clean = value
-    .trim()
-    .replace(/^@+/, '')
-    .replace(/^https?:\/\//i, '')
-    .replace(/^(www\.|m\.)?(instagram|tiktok)\.com\//i, '')
-    .split(/[/?#\s]/)[0]
-    .replace(/^@+/, '');
+  const clean = (value ?? '').trim().replace(/^@+/, '');
   return clean || null;
 }
 
-function profileLink(platform: SocialPlatform, handle: string): string {
-  return platform === 'instagram'
-    ? `https://www.instagram.com/${encodeURIComponent(handle)}/`
-    : `https://www.tiktok.com/@${encodeURIComponent(handle)}`;
+function handleLabel(account: AdminAccount): string {
+  const handle = cleanHandle(account.username);
+  return handle ? `@${handle}` : 'Conta sem @';
+}
+
+/** "@fulano no Instagram", para recados e avisos. */
+function accountPhrase(account: AdminAccount): string {
+  return `${handleLabel(account)} no ${platformLabel(account.platform)}`;
+}
+
+function viewsLine(account: AdminAccount): string {
+  if (account.views === 0 && !account.lastSyncAt) return 'Em coleta';
+  return account.views === 1 ? '1 view' : `${formatViews(account.views)} views`;
 }
 
 function waDigits(raw: string | null): string | null {
@@ -129,371 +105,160 @@ function formatPhone(raw: string): string {
   return raw;
 }
 
-function firstName(person: Person): string {
-  return person.name.split(' ')[0] || person.name;
+function firstName(account: AdminAccount): string {
+  const source = account.fullName || account.publicName;
+  return source.split(' ')[0] || source;
 }
 
-function noticeFor(person: Person, decision: 'approved' | 'adjust' | 'reject', note = ''): string {
-  const name = firstName(person);
+function sentence(text: string): string {
+  const clean = text.trim();
+  return /[.!?]$/.test(clean) ? clean : `${clean}.`;
+}
+
+function noticeFor(account: AdminAccount, decision: ReviewDecision, note = ''): string {
+  const name = firstName(account);
+  const phrase = accountPhrase(account);
   switch (decision) {
     case 'approved':
-      return `Oi, ${name}! Seu cadastro nos Embaixadores foi aprovado e as suas redes já entram no ranking.`;
-    case 'adjust':
-      return `Oi, ${name}! Para entrar no ranking dos Embaixadores, falta um ajuste: ${note} Depois, toque em "Já ajustei" no app.`;
-    case 'reject':
-      return `Oi, ${name}. Seu cadastro nos Embaixadores não foi aprovado: ${note}`;
+      return `Oi, ${name}! Sua conta ${phrase} foi aprovada e as views dela passam a contar no ranking dos Embaixadores.`;
+    case 'changes_requested':
+      return `Oi, ${name}! Para a sua conta ${phrase} entrar no ranking dos Embaixadores, falta um ajuste: ${sentence(note)} Depois, toque em "Já ajustei" no app.`;
+    case 'rejected':
+      return `Oi, ${name}. Sua conta ${phrase} não foi aprovada para o ranking dos Embaixadores: ${sentence(note)}`;
   }
 }
 
-/** Junta cadastro, conta e redes da mesma pessoa num cartão só, e decide a coluna. */
-function buildPeople(
-  users: AdminUser[],
-  applications: AmbassadorApplication[],
-  reviews: AccountReviewItem[],
-): Person[] {
-  const latestApp = new Map<string, AmbassadorApplication>();
-  for (const app of applications) {
-    const key = app.email.trim().toLowerCase();
-    const current = latestApp.get(key);
-    if (!current || current.created_at < app.created_at) latestApp.set(key, app);
-  }
-  const reviewsByKey = new Map<string, AccountReviewItem[]>();
-  for (const item of reviews) {
-    const key = item.email.trim().toLowerCase();
-    reviewsByKey.set(key, [...(reviewsByKey.get(key) ?? []), item]);
-  }
-  const usersByKey = new Map<string, AdminUser>();
-  for (const user of users) usersByKey.set(user.email.trim().toLowerCase(), user);
-
-  const team = new Set(users.filter((user) => user.role === 'admin').map((user) => user.email.trim().toLowerCase()));
-  const keys = new Set([...usersByKey.keys(), ...latestApp.keys(), ...reviewsByKey.keys()]);
-
-  const people: Person[] = [];
-  for (const key of keys) {
-    if (team.has(key)) continue;
-    const user = usersByKey.get(key) ?? null;
-    const app = latestApp.get(key) ?? null;
-    const accounts = reviewsByKey.get(key) ?? [];
-
-    const handles: Handle[] = [];
-    for (const platform of ['instagram', 'tiktok'] as const) {
-      const fromAccount = accounts.find((item) => item.platform === platform)?.username ?? null;
-      const fromApp = app?.redes_sociais.includes(platform)
-        ? platform === 'instagram'
-          ? app.instagram_handle
-          : app.tiktok_handle
-        : null;
-      const handle = cleanHandle(fromAccount) ?? cleanHandle(fromApp);
-      if (handle) handles.push({ platform, handle, href: profileLink(platform, handle) });
-    }
-
-    let column: Column;
-    let tag: Person['tag'] = null;
-    if (user?.status === 'suspended') {
-      column = 'out';
-      tag = { label: 'Suspenso', tone: 'stop' };
-    } else if (app?.status === 'rejected') {
-      column = 'out';
-    } else if (accounts.some((item) => item.reviewStatus === 'pending')) {
-      column = 'waiting';
-    } else if (accounts.some((item) => item.reviewStatus === 'changes_requested')) {
-      column = 'adjust';
-    } else if (app?.status === 'pending' || user?.status === 'pending') {
-      column = 'waiting';
-      if (!app) tag = { label: 'Cadastro incompleto', tone: 'wait' };
-    } else {
-      column = 'approved';
-    }
-
-    const note =
-      column === 'adjust'
-        ? accounts.find((item) => item.reviewStatus === 'changes_requested')?.reviewNote ?? null
-        : column === 'out'
-          ? app?.review_note ?? null
-          : null;
-
-    people.push({
-      key,
-      name: app?.nome_completo || user?.fullName || user?.publicName || accounts[0]?.fullName || key,
-      email: app?.email || user?.email || accounts[0]?.email || key,
-      user,
-      app,
-      accounts,
-      handles,
-      column,
-      tag,
-      since: app?.created_at || user?.createdAt || accounts[0]?.connectedAt || '',
-      note,
-      whatsapp: app?.whatsapp || accounts.find((item) => item.whatsapp)?.whatsapp || null,
-    });
-  }
-  return people;
+/** Mais antigas primeiro onde há decisão a tomar; nas decididas, a decisão mais recente. */
+function sortColumn(column: Column, items: AdminAccount[]): AdminAccount[] {
+  const decided = (item: AdminAccount) => item.reviewedAt ?? item.connectedAt;
+  return [...items].sort((a, b) =>
+    column === 'waiting'
+      ? a.connectedAt.localeCompare(b.connectedAt)
+      : column === 'adjust'
+        ? decided(a).localeCompare(decided(b))
+        : decided(b).localeCompare(decided(a)),
+  );
 }
 
 export function AdminBoard({
-  users,
+  accounts,
+  status,
   preview,
+  onRetry,
+  onUpdate,
   onChanged,
-  onWaitingCount,
   onMessage,
   onError,
 }: {
-  users: AdminUser[];
+  accounts: AdminAccount[];
+  status: BoardStatus;
   preview: boolean;
-  /** Recarrega as pessoas da página depois de uma decisão. */
+  onRetry: () => void;
+  /** Aplica a decisão na lista da página antes da próxima leitura do servidor. */
+  onUpdate: (accountId: string, patch: Partial<AdminAccount>) => void;
+  /** Relê as contas depois de uma decisão. */
   onChanged: () => Promise<void> | void;
-  onWaitingCount: (count: number) => void;
   onMessage: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const [applications, setApplications] = useState<AmbassadorApplication[]>([]);
-  const [reviews, setReviews] = useState<AccountReviewItem[]>([]);
-  const [statusOverride, setStatusOverride] = useState<Record<string, UserStatus>>({});
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [dragging, setDragging] = useState<Person | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<AdminAccount | null>(null);
   const [over, setOver] = useState<Column | null>(null);
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [notice, setNotice] = useState<{ name: string; href: string } | null>(null);
 
-  const load = useCallback(async () => {
-    if (preview) {
-      const demo = await import('@/components/admin/previewData');
-      setApplications(demo.previewApplications);
-      setReviews(demo.previewAccountReviews);
-      setLoading(false);
-      return;
-    }
-    try {
-      const [apps, open] = await Promise.all([api.applications(), api.adminAccountReviews()]);
-      setApplications(apps);
-      setReviews(open);
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [preview]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const people = useMemo(() => {
-    const merged = users.map((user) =>
-      statusOverride[user.id] ? { ...user, status: statusOverride[user.id] } : user,
-    );
-    return buildPeople(merged, applications, reviews);
-  }, [users, applications, reviews, statusOverride]);
-
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase().replace(/^@/, '');
-    if (!term) return people;
-    return people.filter(
-      (person) =>
-        person.name.toLowerCase().includes(term) ||
-        person.email.toLowerCase().includes(term) ||
-        person.handles.some((item) => item.handle.toLowerCase().includes(term)),
+    if (!term) return accounts;
+    return accounts.filter(
+      (item) =>
+        item.fullName.toLowerCase().includes(term) ||
+        item.publicName.toLowerCase().includes(term) ||
+        item.email.toLowerCase().includes(term) ||
+        (cleanHandle(item.username) ?? '').toLowerCase().includes(term),
     );
-  }, [people, query]);
+  }, [accounts, query]);
 
   const byColumn = useMemo(() => {
-    const groups: Record<Column, Person[]> = { waiting: [], adjust: [], approved: [], out: [] };
-    for (const person of visible) groups[person.column].push(person);
-    // Quem espera há mais tempo vem primeiro; nas colunas de decisão tomada, o mais recente.
-    groups.waiting.sort((a, b) => a.since.localeCompare(b.since));
-    groups.adjust.sort((a, b) => a.since.localeCompare(b.since));
-    groups.approved.sort((a, b) => b.since.localeCompare(a.since));
-    groups.out.sort((a, b) => b.since.localeCompare(a.since));
+    const groups: Record<Column, AdminAccount[]> = { waiting: [], adjust: [], approved: [], out: [] };
+    for (const item of visible) groups[COLUMN_OF[item.reviewStatus]].push(item);
+    for (const column of COLUMNS) groups[column.id] = sortColumn(column.id, groups[column.id]);
     return groups;
   }, [visible]);
 
-  const waitingTotal = useMemo(
-    () => people.filter((person) => person.column === 'waiting').length,
-    [people],
-  );
-  useEffect(() => {
-    if (!loading) onWaitingCount(waitingTotal);
-  }, [loading, onWaitingCount, waitingTotal]);
-
-  async function refresh() {
-    if (preview) return;
-    await Promise.all([load(), onChanged()]);
-  }
-
-  function offerWhatsApp(person: Person, text: string) {
-    const digits = waDigits(person.whatsapp);
+  function offerWhatsApp(account: AdminAccount, text: string) {
+    const digits = waDigits(account.whatsapp);
     setNotice(
       digits
-        ? { name: firstName(person), href: `https://wa.me/${digits}?text=${encodeURIComponent(text)}` }
+        ? { name: firstName(account), href: `https://wa.me/${digits}?text=${encodeURIComponent(text)}` }
         : null,
     );
   }
 
-  function failure(err: unknown, fallback: string) {
-    onError(err instanceof ApiError ? err.message : fallback);
-  }
-
-  async function approve(person: Person) {
-    setBusyKey(person.key);
+  async function decide(account: AdminAccount, decision: ReviewDecision, note?: string) {
+    setBusyId(account.accountId);
     try {
+      const reviewedAt = new Date().toISOString();
       if (preview) {
-        setApplications((rows) =>
-          rows.map((row) => (row.id === person.app?.id ? { ...row, status: 'approved', review_note: null } : row)),
-        );
-        setReviews((rows) => rows.filter((row) => !person.accounts.includes(row)));
-        if (person.user) setStatusOverride((map) => ({ ...map, [person.user!.id]: 'approved' }));
+        onUpdate(account.accountId, {
+          reviewStatus: decision,
+          reviewNote: decision === 'approved' ? null : (note ?? null),
+          reviewedAt,
+          reviewedByName: 'Você',
+        });
       } else {
-        let accountsLeft = person.accounts;
-        if (person.app && person.app.status !== 'approved') {
-          await api.updateApplication(person.app.id, 'approved');
-          accountsLeft = person.accounts.filter((item) => item.reviewStatus === 'changes_requested');
-        } else if (person.user && person.user.status !== 'approved') {
-          await api.adminApproveUser(person.user.id);
-          accountsLeft = person.accounts.filter((item) => item.reviewStatus === 'changes_requested');
-        }
-        for (const account of accountsLeft) {
-          await api.adminReviewAccount(account.accountId, 'approved');
-        }
+        const result = await api.adminReviewAccount(account.accountId, decision, note);
+        onUpdate(account.accountId, {
+          reviewStatus: result.reviewStatus,
+          reviewNote: result.reviewNote,
+          reviewedAt,
+        });
       }
+      const handle = handleLabel(account);
+      const name = firstName(account);
       onMessage(
-        `${person.name} aprovado. O acesso foi liberado, as redes entram no ranking na próxima atualização e a pessoa recebeu o aviso no app.`,
+        decision === 'approved'
+          ? `${handle} aprovada. As views dessa conta entram no ranking na próxima atualização e ${name} vê a decisão no app.`
+          : decision === 'changes_requested'
+            ? `Ajuste pedido para ${handle}. ${name} vê o recado no app.`
+            : `${handle} reprovada. A conta fica fora do ranking e ${name} vê o motivo no app.`,
       );
-      offerWhatsApp(person, noticeFor(person, 'approved'));
-      await refresh();
+      offerWhatsApp(account, noticeFor(account, decision, note));
+      setOpenId(null);
+      if (!preview) await onChanged();
     } catch (err) {
-      failure(err, 'Não foi possível aprovar. Confira a internet e tente de novo.');
+      onError(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível salvar a decisão. Confira a internet e tente de novo.',
+      );
     } finally {
-      setBusyKey(null);
-    }
-  }
-
-  async function requestAdjust(person: Person, note: string) {
-    const waiting = person.accounts.filter((item) => item.reviewStatus === 'pending');
-    setBusyKey(person.key);
-    try {
-      if (preview) {
-        setReviews((rows) =>
-          rows.map((row) =>
-            waiting.includes(row) ? { ...row, reviewStatus: 'changes_requested', reviewNote: note } : row,
-          ),
-        );
-      } else {
-        for (const account of waiting) {
-          await api.adminReviewAccount(account.accountId, 'changes_requested', note);
-        }
-      }
-      onMessage(`Ajuste pedido para ${person.name}. O recado aparece no app.`);
-      offerWhatsApp(person, noticeFor(person, 'adjust', note));
-      await refresh();
-    } catch (err) {
-      failure(err, 'Não foi possível pedir o ajuste. Confira a internet e tente de novo.');
-    } finally {
-      setBusyKey(null);
+      setBusyId(null);
       setPending(null);
     }
   }
 
-  async function reject(person: Person, note: string) {
-    setBusyKey(person.key);
-    try {
-      if (preview) {
-        setApplications((rows) =>
-          rows.map((row) => (row.id === person.app?.id ? { ...row, status: 'rejected', review_note: note } : row)),
-        );
-        setReviews((rows) => rows.filter((row) => !person.accounts.includes(row)));
-      } else if (person.app) {
-        await api.updateApplication(person.app.id, 'rejected', note);
-      } else {
-        for (const account of person.accounts) {
-          await api.adminReviewAccount(account.accountId, 'rejected', note);
-        }
-      }
-      onMessage(`${person.name} reprovado. O motivo aparece no app.`);
-      offerWhatsApp(person, noticeFor(person, 'reject', note));
-      await refresh();
-    } catch (err) {
-      failure(err, 'Não foi possível reprovar. Confira a internet e tente de novo.');
-    } finally {
-      setBusyKey(null);
-      setPending(null);
-    }
-  }
-
-  async function suspend(person: Person) {
-    if (!person.user) return;
-    setBusyKey(person.key);
-    try {
-      if (preview) {
-        setStatusOverride((map) => ({ ...map, [person.user!.id]: 'suspended' }));
-      } else {
-        await api.adminSuspendUser(person.user.id);
-      }
-      onMessage(`${person.name} suspenso. Saiu do ranking e perdeu o acesso. Dá para aprovar de novo depois.`);
-      setNotice(null);
-      await refresh();
-    } catch (err) {
-      failure(err, 'Não foi possível suspender. Confira a internet e tente de novo.');
-    } finally {
-      setBusyKey(null);
-      setPending(null);
-    }
-  }
-
-  async function removeApplication(person: Person) {
-    if (!person.app) return;
-    setBusyKey(person.key);
-    try {
-      if (preview) {
-        setApplications((rows) => rows.filter((row) => row.id !== person.app?.id));
-      } else {
-        await api.deleteApplication(person.app.id);
-      }
-      setOpenKey(null);
-      onMessage(`Cadastro de ${person.name} excluído.`);
-      await refresh();
-    } catch (err) {
-      failure(err, 'Não foi possível excluir o cadastro. Confira a internet e tente de novo.');
-    } finally {
-      setBusyKey(null);
-      setPending(null);
-    }
-  }
-
-  /** Reprovar usa o cadastro ou as redes; sem nenhum dos dois, o caminho é suspender o acesso. */
-  function askReject(person: Person) {
-    if (person.app || person.accounts.length > 0) setPending({ kind: 'reject', person });
-    else setPending({ kind: 'suspend', person });
-  }
-
-  function move(person: Person, to: Column) {
-    if (person.column === to) return;
-    if (!MOVES[person.column].includes(to)) {
+  function move(account: AdminAccount, to: Column) {
+    const from = COLUMN_OF[account.reviewStatus];
+    if (from === to) return;
+    if (!MOVES[from].includes(to)) {
       onError(
         to === 'waiting'
-          ? 'Aguardando é só para quem ainda não teve decisão. Escolha aprovar, pedir ajuste ou reprovar.'
+          ? 'Aguardando é só para conta que ainda não teve decisão. Escolha aprovar, pedir ajuste ou reprovar.'
           : 'Essa mudança não existe. Use os botões do cartão.',
       );
       return;
     }
-    if (to === 'approved') void approve(person);
-    else if (to === 'adjust') {
-      if (!person.accounts.some((item) => item.reviewStatus === 'pending')) {
-        onError(`${person.name} ainda não informou um @. Peça pelo WhatsApp ou aprove o cadastro.`);
-        return;
-      }
-      setPending({ kind: 'adjust', person });
-    } else if (to === 'out') askReject(person);
+    if (to === 'approved') void decide(account, 'approved');
+    else setPending({ kind: to === 'adjust' ? 'adjust' : 'reject', account });
   }
 
-  function onDragStart(event: DragEvent<HTMLLIElement>, person: Person) {
+  function onDragStart(event: DragEvent<HTMLLIElement>, account: AdminAccount) {
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', person.key);
-    setDragging(person);
+    event.dataTransfer.setData('text/plain', account.accountId);
+    setDragging(account);
   }
 
   function onDragEnd() {
@@ -503,20 +268,22 @@ export function AdminBoard({
 
   function onDrop(event: DragEvent<HTMLElement>, to: Column) {
     event.preventDefault();
-    const person = dragging;
+    const account = dragging;
     setDragging(null);
     setOver(null);
-    if (person) move(person, to);
+    if (account) move(account, to);
   }
+
+  const draggingFrom = dragging ? COLUMN_OF[dragging.reviewStatus] : null;
 
   return (
     <section className="admin-panel board-panel" aria-labelledby="board-title">
       <div className="admin-panel-head">
         <h2 id="board-title">Aprovações</h2>
         <p>
-          Arraste a pessoa para a coluna da decisão ou use os botões do cartão. Aprovar libera o
-          acesso e coloca as redes dela no ranking. Ajuste e reprovação pedem um recado, que a
-          pessoa vê no app.
+          Cada cartão é uma conta de rede. Arraste a conta para a coluna da decisão ou use os
+          botões do cartão. Só conta aprovada soma no ranking. Ajuste e reprovação pedem um recado,
+          que a pessoa vê no app.
         </p>
       </div>
       <div className="admin-toolbar">
@@ -544,16 +311,16 @@ export function AdminBoard({
         </div>
       ) : null}
 
-      {loading ? (
+      {status === 'loading' ? (
         <div className="admin-row">
-          <Spinner label="Carregando aprovações..." />
+          <Spinner label="Carregando contas..." />
         </div>
-      ) : failed ? (
+      ) : status === 'failed' ? (
         <div className="admin-empty" role="alert">
-          <strong>Não foi possível carregar as aprovações</strong>
+          <strong>Não foi possível carregar as contas</strong>
           <p>Confira a internet e tente de novo. Se continuar, avise o suporte técnico.</p>
           <div className="admin-actions">
-            <button type="button" onClick={() => void load()}>
+            <button type="button" onClick={onRetry}>
               Tentar de novo
             </button>
           </div>
@@ -561,15 +328,15 @@ export function AdminBoard({
       ) : (
         <div className="board" data-dragging={dragging ? 'true' : undefined}>
           {COLUMNS.map((column) => {
-            const allowed = dragging ? MOVES[dragging.column].includes(column.id) : false;
+            const allowed = draggingFrom ? MOVES[draggingFrom].includes(column.id) : false;
             return (
               <BoardColumn
                 key={column.id}
                 column={column}
-                people={byColumn[column.id]}
+                accounts={byColumn[column.id]}
                 searching={query.trim() !== ''}
                 dropState={
-                  !dragging || dragging.column === column.id
+                  !draggingFrom || draggingFrom === column.id
                     ? undefined
                     : allowed
                       ? over === column.id
@@ -589,21 +356,21 @@ export function AdminBoard({
                   }
                 }}
                 onDrop={(event) => onDrop(event, column.id)}
-                renderCard={(person) => (
-                  <PersonCard
-                    key={person.key}
-                    person={person}
-                    busy={busyKey === person.key}
-                    disabled={busyKey !== null}
-                    open={openKey === person.key}
-                    onToggle={() => setOpenKey(openKey === person.key ? null : person.key)}
-                    onDragStart={(event) => onDragStart(event, person)}
+                renderCard={(account) => (
+                  <AccountCard
+                    key={account.accountId}
+                    account={account}
+                    busy={busyId === account.accountId}
+                    disabled={busyId !== null}
+                    open={openId === account.accountId}
+                    onToggle={() =>
+                      setOpenId(openId === account.accountId ? null : account.accountId)
+                    }
+                    onDragStart={(event) => onDragStart(event, account)}
                     onDragEnd={onDragEnd}
-                    onApprove={() => void approve(person)}
-                    onAdjust={() => setPending({ kind: 'adjust', person })}
-                    onReject={() => askReject(person)}
-                    onSuspend={() => setPending({ kind: 'suspend', person })}
-                    onDelete={() => setPending({ kind: 'delete', person })}
+                    onApprove={() => void decide(account, 'approved')}
+                    onAdjust={() => setPending({ kind: 'adjust', account })}
+                    onReject={() => setPending({ kind: 'reject', account })}
                   />
                 )}
               />
@@ -613,45 +380,28 @@ export function AdminBoard({
       )}
 
       <NoteDialog
-        open={pending?.kind === 'adjust' || pending?.kind === 'reject'}
+        open={pending !== null}
         title={
           pending?.kind === 'adjust'
-            ? `Pedir ajuste para ${pending.person.name}`
-            : `Reprovar ${pending?.person.name ?? ''}?`
+            ? `Pedir ajuste em ${pending ? handleLabel(pending.account) : ''}`
+            : `Reprovar ${pending ? handleLabel(pending.account) : ''}?`
         }
         description={
           pending?.kind === 'adjust'
-            ? 'As redes ficam fora do ranking até o ajuste. A pessoa vê o recado no app e avisa quando terminar.'
-            : 'As redes dessa pessoa ficam fora do ranking e ela vê o motivo no app. Dá para aprovar depois.'
+            ? `A conta fica fora do ranking até o ajuste. ${pending ? firstName(pending.account) : 'A pessoa'} vê o recado no app e avisa quando terminar.`
+            : `A conta fica fora do ranking e ${pending ? firstName(pending.account) : 'a pessoa'} vê o motivo no app. As outras contas dela não mudam. Dá para aprovar depois.`
         }
-        confirmLabel={pending?.kind === 'adjust' ? 'Enviar pedido de ajuste' : 'Reprovar'}
+        confirmLabel={pending?.kind === 'adjust' ? 'Enviar pedido de ajuste' : 'Reprovar conta'}
         tone={pending?.kind === 'adjust' ? 'primary' : 'danger'}
         suggestions={pending?.kind === 'adjust' ? ADJUST_SUGGESTIONS : REJECT_SUGGESTIONS}
-        busy={pending !== null && busyKey === pending.person.key}
+        busy={pending !== null && busyId === pending.account.accountId}
         onConfirm={(note) => {
-          if (pending?.kind === 'adjust') void requestAdjust(pending.person, note);
-          else if (pending?.kind === 'reject') void reject(pending.person, note);
-        }}
-        onCancel={() => setPending(null)}
-      />
-
-      <ConfirmDialog
-        open={pending?.kind === 'suspend' || pending?.kind === 'delete'}
-        title={
-          pending?.kind === 'delete'
-            ? `Excluir o cadastro de ${pending.person.name}?`
-            : `Suspender ${pending?.person.name ?? ''}?`
-        }
-        description={
-          pending?.kind === 'delete'
-            ? 'Os dados do formulário são apagados e não podem ser recuperados. O acesso de quem já foi aprovado continua.'
-            : 'A pessoa sai do ranking e perde o acesso ao app. Dá para aprovar de novo depois.'
-        }
-        confirmLabel={pending?.kind === 'delete' ? 'Excluir cadastro' : 'Suspender'}
-        busy={pending !== null && busyKey === pending.person.key}
-        onConfirm={() => {
-          if (pending?.kind === 'delete') void removeApplication(pending.person);
-          else if (pending?.kind === 'suspend') void suspend(pending.person);
+          if (!pending) return;
+          void decide(
+            pending.account,
+            pending.kind === 'adjust' ? 'changes_requested' : 'rejected',
+            note,
+          );
         }}
         onCancel={() => setPending(null)}
       />
@@ -661,7 +411,7 @@ export function AdminBoard({
 
 function BoardColumn({
   column,
-  people,
+  accounts,
   searching,
   dropState,
   onDragOver,
@@ -670,17 +420,17 @@ function BoardColumn({
   renderCard,
 }: {
   column: (typeof COLUMNS)[number];
-  people: Person[];
+  accounts: AdminAccount[];
   searching: boolean;
   dropState: 'open' | 'over' | 'closed' | undefined;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDragLeave: (event: DragEvent<HTMLElement>) => void;
   onDrop: (event: DragEvent<HTMLElement>) => void;
-  renderCard: (person: Person) => ReactElement;
+  renderCard: (account: AdminAccount) => ReactElement;
 }) {
-  const list = useListWindow(people.length);
+  const list = useListWindow(accounts.length);
   const titleId = `board-col-${column.id}`;
-  const remaining = people.length - list.visible;
+  const remaining = accounts.length - list.visible;
   return (
     <section
       className="board-col"
@@ -694,7 +444,7 @@ function BoardColumn({
       <header className="board-col-head">
         <h3 id={titleId}>
           {column.title}
-          <span className="board-count">{people.length}</span>
+          <span className="board-count">{accounts.length}</span>
         </h3>
         <p>{column.hint}</p>
       </header>
@@ -703,10 +453,12 @@ function BoardColumn({
           Solte aqui
         </p>
       ) : null}
-      {people.length === 0 ? (
-        <p className="board-empty">{searching ? 'Ninguém com essa busca nesta coluna.' : column.empty}</p>
+      {accounts.length === 0 ? (
+        <p className="board-empty">
+          {searching ? 'Nenhuma conta com essa busca nesta coluna.' : column.empty}
+        </p>
       ) : (
-        <ol className="board-list">{people.slice(list.start, list.end).map(renderCard)}</ol>
+        <ol className="board-list">{accounts.slice(list.start, list.end).map(renderCard)}</ol>
       )}
       {list.paged ? (
         <nav className="board-pager" aria-label={`Páginas de ${column.title}`}>
@@ -733,8 +485,8 @@ function BoardColumn({
   );
 }
 
-function PersonCard({
-  person,
+function AccountCard({
+  account,
   busy,
   disabled,
   open,
@@ -744,10 +496,8 @@ function PersonCard({
   onApprove,
   onAdjust,
   onReject,
-  onSuspend,
-  onDelete,
 }: {
-  person: Person;
+  account: AdminAccount;
   busy: boolean;
   disabled: boolean;
   open: boolean;
@@ -757,13 +507,15 @@ function PersonCard({
   onApprove: () => void;
   onAdjust: () => void;
   onReject: () => void;
-  onSuspend: () => void;
-  onDelete: () => void;
 }) {
-  const canAdjust = person.accounts.some((item) => item.reviewStatus === 'pending');
-  const detailsId = `board-card-${person.key.replace(/[^a-z0-9]/gi, '-')}`;
-  const digits = waDigits(person.whatsapp);
-  const decidedAt = person.app?.reviewed_at ?? null;
+  const column = COLUMN_OF[account.reviewStatus];
+  const detailsId = `board-card-${account.accountId.replace(/[^a-z0-9]/gi, '-')}`;
+  const digits = waDigits(account.whatsapp);
+  const href = account.profileUrl ?? profileUrl(account.platform, account.username);
+  const added = formatDay(account.connectedAt);
+  const decidedAt = formatDateTime(account.reviewedAt);
+  const lastSync = formatDateTime(account.lastSyncAt);
+  const showNote = (column === 'adjust' || column === 'out') && account.reviewNote;
 
   return (
     <li
@@ -782,41 +534,45 @@ function PersonCard({
             </g>
           ))}
         </svg>
-        <strong>{person.name}</strong>
-        {person.tag ? (
-          <span className="admin-status" data-tone={person.tag.tone}>
+        <PlatformMark platform={account.platform} size={18} />
+        <strong className="board-handle">
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${handleLabel(account)} no ${platformLabel(account.platform)}, abre o perfil`}
+            >
+              {handleLabel(account)}
+            </a>
+          ) : (
+            handleLabel(account)
+          )}
+        </strong>
+        {account.membershipStatus === 'suspended' ? (
+          <span className="admin-status" data-tone="stop">
             <i />
-            {person.tag.label}
+            Pessoa suspensa
           </span>
         ) : null}
       </div>
 
-      {person.handles.length > 0 ? (
-        <ul className="board-handles">
-          {person.handles.map((item) => (
-            <li key={item.platform}>
-              <PlatformMark platform={item.platform} size={18} />
-              <a href={item.href} target="_blank" rel="noreferrer">
-                @{item.handle}
-              </a>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="board-meta">Ainda sem @ informado</p>
-      )}
-      <p className="board-meta">Cadastro em {formatWhen(person.since)}</p>
-      {person.note ? <p className="admin-note">Recado: {person.note}</p> : null}
+      <p className="board-person">{account.fullName || account.publicName}</p>
+      <p className="board-meta">
+        {viewsLine(account)}
+        {added ? ` · Adicionada em ${added}` : ''}
+      </p>
+      {showNote ? <p className="admin-note">Recado: {account.reviewNote}</p> : null}
 
       <div className="board-actions">
         {busy ? (
           <span className="board-meta">Salvando...</span>
-        ) : person.column === 'waiting' || person.column === 'adjust' ? (
+        ) : column === 'waiting' || column === 'adjust' ? (
           <>
             <button type="button" className="admin-primary" disabled={disabled} onClick={onApprove}>
               Aprovar
             </button>
-            {person.column === 'waiting' && canAdjust ? (
+            {column === 'waiting' ? (
               <button type="button" disabled={disabled} onClick={onAdjust}>
                 Pedir ajuste
               </button>
@@ -825,7 +581,7 @@ function PersonCard({
               Reprovar
             </button>
           </>
-        ) : person.column === 'out' ? (
+        ) : column === 'out' ? (
           <button type="button" className="admin-primary" disabled={disabled} onClick={onApprove}>
             Aprovar mesmo assim
           </button>
@@ -846,47 +602,37 @@ function PersonCard({
           <div>
             <dt>E-mail</dt>
             <dd>
-              <a href={`mailto:${person.email}`}>{person.email}</a>
+              <a href={`mailto:${account.email}`}>{account.email}</a>
             </dd>
           </div>
           <div>
             <dt>WhatsApp</dt>
             <dd>
-              {digits && person.whatsapp ? (
+              {digits && account.whatsapp ? (
                 <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer">
-                  {formatPhone(person.whatsapp)}
+                  {formatPhone(account.whatsapp)}
                 </a>
               ) : (
                 'Não informado'
               )}
             </dd>
           </div>
-          {decidedAt ? (
-            <div>
-              <dt>Decisão em</dt>
-              <dd>
-                {formatWhen(decidedAt)}
-                {person.app?.reviewed_by_name ? ` por ${person.app.reviewed_by_name}` : ''}
-              </dd>
-            </div>
-          ) : null}
-          {person.tag?.label === 'Cadastro incompleto' ? (
-            <p className="board-meta">
-              Criou a conta, mas ainda não informou WhatsApp e @. Ao aprovar, ela ganha acesso e
-              informa o @ pelo app.
-            </p>
-          ) : null}
-          {person.column === 'approved' && person.user ? (
+          <div>
+            <dt>Decisão</dt>
+            <dd>
+              {decidedAt
+                ? `${decidedAt}${account.reviewedByName ? ` por ${account.reviewedByName}` : ''}`
+                : 'Ainda sem decisão'}
+            </dd>
+          </div>
+          <div>
+            <dt>Última coleta</dt>
+            <dd>{lastSync ?? 'Em coleta'}</dd>
+          </div>
+          {column === 'approved' ? (
             <div className="board-details-foot">
-              <button type="button" className="is-stop" disabled={disabled} onClick={onSuspend}>
-                Suspender acesso
-              </button>
-            </div>
-          ) : null}
-          {person.app ? (
-            <div className="board-details-foot">
-              <button type="button" className="is-stop" disabled={disabled} onClick={onDelete}>
-                Excluir cadastro
+              <button type="button" className="is-stop" disabled={disabled} onClick={onReject}>
+                Reprovar conta
               </button>
             </div>
           ) : null}

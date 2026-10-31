@@ -366,6 +366,16 @@ html {
   cursor: progress;
 }
 
+/* Desabilitado por regra (limite atingido), não por espera. */
+.cta[data-blocked]:disabled {
+  cursor: not-allowed;
+}
+
+.cta-touch {
+  gap: 8px;
+  min-height: 44px;
+}
+
 /* No palco escuro o verde é claro, então o texto fica escuro para manter o contraste. */
 [data-theme='arena'] .cta {
   color: #062014;

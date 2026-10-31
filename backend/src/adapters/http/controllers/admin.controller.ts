@@ -32,9 +32,9 @@ import {
 import { ClockPort } from '../../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { ComputeAndPublishRankingUseCase } from '../../../application/rankings/compute-and-publish.use-case';
-import { AccountReviewService } from '../../../application/social/account-review.service';
 import { daysWithoutPosting } from '../../../domain/view-metrics';
 import { thumbnailPath } from './media.controller';
+import { SocialAccount } from '../../../domain/entities';
 import {
   ConnectionStatus,
   ProfileId,
@@ -64,7 +64,6 @@ export class AdminController {
     @Inject(INJECTION_TOKENS.SOCIAL_ACCOUNT_REPOSITORY)
     private readonly socialAccountRepo: SocialAccountRepository,
     private readonly computeRankingUseCase: ComputeAndPublishRankingUseCase,
-    private readonly accountReview: AccountReviewService,
   ) {}
 
   @Get('users')
@@ -115,7 +114,6 @@ export class AdminController {
       req.user.id as never,
       this.clock.now(),
     );
-    await this.accountReview.approveAllFor(userId as never, req.user.id as never);
 
     await this.auditRepo.append({
       actorId: req.user.id as never,
@@ -202,6 +200,7 @@ export class AdminController {
       }
       result.push({
         id: job.id,
+        accountId: job.socialAccountId,
         profileId: account?.profileId ?? null,
         publicName,
         username: account?.username ?? null,
@@ -221,38 +220,51 @@ export class AdminController {
     @Req() req: { user: { id: string } },
     @Body() body: RequestSyncDto,
   ) {
-    const account = await this.socialAccountRepo.findByProfileAndPlatform(
-      body.userId as never,
-      body.platform as SocialPlatform,
-    );
-
-    if (!account) {
-      throw new NotFoundException('Essa pessoa não tem conta conectada nessa rede.');
+    let accounts: SocialAccount[];
+    if (body.accountId) {
+      const account = await this.socialAccountRepo.findById(body.accountId as never);
+      if (!account) throw new NotFoundException('Conta não encontrada.');
+      accounts = [account];
+    } else if (body.userId && body.platform) {
+      accounts = (await this.socialAccountRepo.findActiveByProfile(body.userId as never)).filter(
+        (account) => account.platform === body.platform,
+      );
+      if (accounts.length === 0) {
+        throw new NotFoundException('Essa pessoa não tem conta conectada nessa rede.');
+      }
+    } else {
+      throw new BadRequestException('Escolha a conta que deve ser coletada.');
     }
 
-    const job = await this.syncJobRepo.enqueue({
-      socialAccountId: account.id,
-      priority: 300,
-      scheduledAt: this.clock.now(),
-    });
+    const jobs = [];
+    for (const account of accounts) {
+      const job = await this.syncJobRepo.enqueue({
+        socialAccountId: account.id,
+        priority: 300,
+        scheduledAt: this.clock.now(),
+      });
+      jobs.push(job);
 
-    await this.socialAccountRepo.update(account.id, {
-      status: ConnectionStatus.Syncing,
-    });
+      await this.socialAccountRepo.update(account.id, {
+        status: ConnectionStatus.Syncing,
+      });
 
-    await this.auditRepo.append({
-      actorId: req.user.id as never,
-      action: 'request_sync',
-      entityType: 'social_account',
-      entityId: account.id,
-      metadata: { platform: body.platform, profileId: body.userId },
-    });
+      await this.auditRepo.append({
+        actorId: req.user.id as never,
+        action: 'request_sync',
+        entityType: 'social_account',
+        entityId: account.id,
+        metadata: { platform: account.platform, profileId: account.profileId },
+      });
+    }
 
     return {
-      id: job.id,
-      profileId: account.profileId,
-      platform: account.platform,
-      status: job.status,
+      id: jobs[0].id,
+      accountId: accounts[0].id,
+      profileId: accounts[0].profileId,
+      platform: accounts[0].platform,
+      username: accounts[0].username,
+      status: jobs[0].status,
       startedAt: null,
       finishedAt: null,
       errorMessage: null,

@@ -12,6 +12,7 @@ import { TokenEncryptionPort } from '../../ports/tokens.port';
 import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 import { loadConfig } from '../../infrastructure/config/env';
+import { MAX_ACTIVE_ACCOUNTS_PER_PLATFORM, accountLimitMessage } from '../../domain/social-handle';
 
 /** The OAuth state was not found, already used, expired or belongs to another platform. */
 export class OAuthStateExpiredException extends BadRequestException {}
@@ -82,42 +83,34 @@ export class OAuthCallbackUseCase {
       );
     }
     
-    // Reaproveita a linha do perfil nesta rede, mesmo se foi desconectada antes
-    const existingByProfile = await this.socialAccountRepo.findAnyByProfileAndPlatform(
-      oauthState.profileId,
-      platform,
-    );
-    
+    // A mesma conta da pessoa (ativa ou removida antes) é reaproveitada; outra conta vira
+    // mais uma linha, dentro do limite por rede.
+    if (!existingByPlatformUser || existingByPlatformUser.disconnectedAt !== null) {
+      const active = await this.socialAccountRepo.countActiveByProfileAndPlatform(
+        oauthState.profileId,
+        platform,
+      );
+      if (active >= MAX_ACTIVE_ACCOUNTS_PER_PLATFORM) {
+        throw new ConflictException(accountLimitMessage(platform));
+      }
+    }
+
     let accountId: string;
     
-    if (existingByProfile) {
-      // Update existing (também cobre reconexão e troca de conta na mesma rede)
-      const switchedAccount =
-        existingByProfile.platformUserId !== authorizedProfile.platformUserId ||
-        existingByProfile.transport !== SocialTransport.OfficialApi;
-      if (switchedAccount) {
-        // Os vídeos da conta anterior não podem somar com os da nova enquanto a coleta não termina.
-        await this.syncJobRepo.cancelActiveForAccount(existingByProfile.id);
-        const previous = await this.contentRepo.findEligibleByAccount(existingByProfile.id);
+    if (existingByPlatformUser) {
+      if (existingByPlatformUser.transport !== SocialTransport.OfficialApi) {
+        // Os ids de conteúdo da leitura pelo @ não batem com os da API oficial.
+        await this.syncJobRepo.cancelActiveForAccount(existingByPlatformUser.id);
+        const previous = await this.contentRepo.findEligibleByAccount(existingByPlatformUser.id);
         for (const content of previous) {
           await this.contentRepo.markRemoved(content.id);
         }
       }
-      await this.socialAccountRepo.update(existingByProfile.id, {
-        platformUserId: authorizedProfile.platformUserId,
+      await this.socialAccountRepo.update(existingByPlatformUser.id, {
         username: authorizedProfile.username,
         displayName: authorizedProfile.displayName,
         avatarUrl: authorizedProfile.avatarUrl,
         profileUrl: authorizedProfile.profileUrl,
-        status: ConnectionStatus.Connected,
-        transport: SocialTransport.OfficialApi,
-        verificationCode: null,
-        disconnectedAt: null,
-      });
-      accountId = existingByProfile.id;
-    } else if (existingByPlatformUser) {
-      // Reconnect
-      await this.socialAccountRepo.update(existingByPlatformUser.id, {
         status: ConnectionStatus.Connected,
         transport: SocialTransport.OfficialApi,
         verificationCode: null,

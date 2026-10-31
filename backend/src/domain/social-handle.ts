@@ -6,6 +6,26 @@ const CODE_LENGTH = 5;
 const TIKTOK_HANDLE = /^[A-Za-z0-9._]{2,24}$/;
 const INSTAGRAM_HANDLE = /^[A-Za-z0-9._]{1,30}$/;
 
+/** Contas ativas (não removidas) que uma pessoa pode ter em cada rede. */
+export const MAX_ACTIVE_ACCOUNTS_PER_PLATFORM = 5;
+
+export function networkName(platform: SocialPlatform): string {
+  switch (platform) {
+    case SocialPlatform.Instagram:
+      return 'Instagram';
+    case SocialPlatform.TikTok:
+      return 'TikTok';
+    default: {
+      const exhaustive: never = platform;
+      return exhaustive;
+    }
+  }
+}
+
+export function accountLimitMessage(platform: SocialPlatform): string {
+  return `Você já tem ${MAX_ACTIVE_ACCOUNTS_PER_PLATFORM} contas no ${networkName(platform)}. Remova uma para adicionar outra.`;
+}
+
 export function generateVerificationCode(randomIndex: (max: number) => number): string {
   let suffix = '';
   for (let i = 0; i < CODE_LENGTH; i += 1) {

@@ -6,23 +6,25 @@ import type {
 } from '@/lib/api';
 import { platformLabel } from '@/lib/format';
 
-/** Situação da conta na análise da equipe, para quem já conectou a rede. */
+/** Limite de contas ativas por rede, igual ao do servidor. */
+export const MAX_ACCOUNTS_PER_PLATFORM = 5;
+
+export const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
+
+/** Situação da conta na análise da equipe, numa frase. */
 export function reviewLine(
-  status: AccountReviewStatus | undefined,
+  status: AccountReviewStatus,
   note: string | null | undefined,
-): string | null {
+): string {
   switch (status) {
-    case undefined:
-    case 'approved':
-      return null;
     case 'pending':
-      return 'Em análise pela equipe. Quando for aprovada, entra no ranking.';
+      return 'Aguardando aprovação da equipe.';
+    case 'approved':
+      return 'Aprovada, somando no ranking.';
     case 'changes_requested':
-      return note ? `A equipe pediu um ajuste: ${note}` : 'A equipe pediu um ajuste nesta conta.';
+      return note ? `Ajuste pedido: ${note}` : 'A equipe pediu um ajuste nesta conta.';
     case 'rejected':
-      return note
-        ? `Não aprovada para a competição: ${note}`
-        : 'Não aprovada para a competição.';
+      return note ? `Reprovada: ${note}` : 'Reprovada pela equipe.';
     default: {
       const exhaustive: never = status;
       return exhaustive;
@@ -32,16 +34,16 @@ export function reviewLine(
 
 export function reviewBadge(
   status: AccountReviewStatus,
-): { label: string; tone: 'success' | 'warning' | 'danger' } {
+): { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' } {
   switch (status) {
     case 'approved':
-      return { label: 'Aprovada', tone: 'success' };
+      return { label: 'Aprovada, somando no ranking', tone: 'success' };
     case 'pending':
-      return { label: 'Em análise', tone: 'warning' };
+      return { label: 'Aguardando aprovação da equipe', tone: 'neutral' };
     case 'changes_requested':
       return { label: 'Ajuste pedido', tone: 'warning' };
     case 'rejected':
-      return { label: 'Não aprovada', tone: 'danger' };
+      return { label: 'Reprovada', tone: 'danger' };
     default: {
       const exhaustive: never = status;
       return exhaustive;
@@ -103,25 +105,9 @@ export function handleError(platform: SocialPlatform, handle: string): string | 
   return null;
 }
 
-/** Com as redes conectadas, avisa o que ainda falta na análise da equipe. */
-export function reviewHeadline(
-  accounts: Pick<SocialAccount, 'platform' | 'status' | 'reviewStatus'>[],
-): { title: string; detail: string } | null {
-  const connected = accounts.filter((item) => connectionDuty(item.status) === 'ready');
-  if (connected.some((item) => item.reviewStatus === 'changes_requested')) {
-    return {
-      title: 'A equipe pediu um ajuste',
-      detail: 'Veja o recado na rede abaixo. Depois de ajustar, toque em "Já ajustei".',
-    };
-  }
-  if (connected.some((item) => item.reviewStatus === 'pending')) {
-    return {
-      title: 'Sua conta está em análise',
-      detail:
-        'A equipe confere o perfil antes de liberar o ranking. Você recebe um aviso aqui quando for aprovado.',
-    };
-  }
-  return null;
+export function handleOf(username: string | null | undefined): string | null {
+  const handle = username?.replace(/^@/, '').trim();
+  return handle ? `@${handle}` : null;
 }
 
 export type DutyKind =
@@ -132,8 +118,6 @@ export type DutyKind =
   | 'incompatible'
   | 'unavailable'
   | 'verify';
-
-const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
 
 export function connectionDuty(status: ConnectionStatus | null | undefined): DutyKind {
   switch (status) {
@@ -155,72 +139,32 @@ export function connectionDuty(status: ConnectionStatus | null | undefined): Dut
   }
 }
 
-export function dutyLine(platform: SocialPlatform, duty: DutyKind): string {
-  const name = platformLabel(platform);
-  switch (duty) {
-    case 'ready':
-      return 'Conectado';
-    case 'reconnect':
-      return `A conexão com o ${name} expirou. Conecte de novo para continuar no ranking.`;
-    case 'permission':
-      return `Falta permissão para ler as views do ${name}. Conecte de novo e aceite o acesso.`;
-    case 'incompatible':
-      return 'A conta do Instagram precisa ser profissional (criador ou empresa) para as views entrarem.';
-    case 'unavailable':
-      return `A conexão com o ${name} está fora do ar no momento. Tente mais tarde ou avise a equipe.`;
-    case 'connect':
-      return `Digite o seu @ do ${name} para entrar neste ranking.`;
-    case 'verify':
-      return `Falta confirmar o seu @ do ${name}.`;
-    default: {
-      const exhaustive: never = duty;
-      return exhaustive;
-    }
-  }
+type GateAccount = Pick<SocialAccount, 'id' | 'platform' | 'username' | 'status' | 'reviewStatus' | 'reviewNote'>;
+
+export function activeAccounts<T extends Pick<SocialAccount, 'status'>>(accounts: T[]): T[] {
+  return accounts.filter((account) => account.status !== 'disconnected');
 }
 
-export function actionLabel(platform: SocialPlatform, duty: DutyKind): string | null {
-  const name = platformLabel(platform);
-  switch (duty) {
-    case 'ready':
-    case 'unavailable':
-      return null;
-    case 'reconnect':
-    case 'permission':
-      return `Conectar ${name} de novo`;
-    case 'incompatible':
-      return 'Conectar outra conta';
-    case 'connect':
-      return `Conectar ${name}`;
-    case 'verify':
-      return 'Confirmar @';
-    default: {
-      const exhaustive: never = duty;
-      return exhaustive;
-    }
-  }
+/** Conta que soma no ranking: aprovada pela equipe e com a leitura funcionando. */
+export function countsInRanking(account: Pick<SocialAccount, 'status' | 'reviewStatus'>): boolean {
+  return account.reviewStatus === 'approved' && connectionDuty(account.status) === 'ready';
 }
 
-export function gateHeadline(
-  accounts: Pick<SocialAccount, 'platform' | 'status'>[],
-): { title: string; detail: string } | null {
-  const pending = PLATFORMS.filter((platform) => {
-    const account = accounts.find((item) => item.platform === platform);
-    return connectionDuty(account?.status) !== 'ready';
-  });
+export type GateState<T extends GateAccount = GateAccount> =
+  | { kind: 'empty' }
+  | { kind: 'adjust'; accounts: T[] }
+  | { kind: 'waiting'; accounts: T[]; anyApproved: boolean }
+  | { kind: 'rejected'; accounts: T[] };
 
-  if (pending.length === 0) return null;
-
-  if (pending.length === 2) {
-    return {
-      title: 'Conecte o Instagram ou o TikTok',
-      detail: 'Escolha a rede onde você posta e digite o seu @. Não pedimos senha.',
-    };
-  }
-
-  const name = platformLabel(pending[0]);
-  return {
-    title: `Quer disputar também no ${name}?`,
-    detail: `Digite o seu @ do ${name}. Cada rede tem o seu ranking.`,
-  };
+/** O que falta para a pessoa entrar no ranking. Nulo quando nada depende dela nem da equipe. */
+export function gateState<T extends GateAccount>(accounts: T[]): GateState<T> | null {
+  const active = activeAccounts(accounts);
+  if (active.length === 0) return { kind: 'empty' };
+  const adjust = active.filter((item) => item.reviewStatus === 'changes_requested');
+  if (adjust.length > 0) return { kind: 'adjust', accounts: adjust };
+  const waiting = active.filter((item) => item.reviewStatus === 'pending');
+  const anyApproved = active.some((item) => item.reviewStatus === 'approved');
+  if (waiting.length > 0) return { kind: 'waiting', accounts: waiting, anyApproved };
+  if (!anyApproved) return { kind: 'rejected', accounts: active };
+  return null;
 }

@@ -152,7 +152,29 @@ export class PgMetricsRepository implements MetricsRepository {
     return result.rows[0] ? this.mapAccountRow(result.rows[0]) : null;
   }
   
-  async dailyViewsByAccount(socialAccountId: SocialAccountId, days: number): Promise<DailyViews[]> {
+  async totalViewsByAccounts(
+    socialAccountIds: SocialAccountId[],
+  ): Promise<Map<SocialAccountId, number>> {
+    const totals = new Map<SocialAccountId, number>(socialAccountIds.map((id) => [id, 0]));
+    if (socialAccountIds.length === 0) return totals;
+    const result = await this.pool.query(
+      `SELECT c.social_account_id, COALESCE(SUM(c.latest_views), 0)::bigint AS views
+       FROM contents c
+       WHERE c.social_account_id = ANY($1::uuid[])
+         AND c.eligible = true
+         AND c.excluded_at IS NULL
+         AND c.removed_on_platform = false
+         AND ${rankedMediaSql('c')}
+       GROUP BY c.social_account_id`,
+      [socialAccountIds],
+    );
+    for (const row of result.rows) {
+      totals.set(asSocialAccountId(row.social_account_id), Number(row.views) || 0);
+    }
+    return totals;
+  }
+
+  async dailyViewsByAccounts(socialAccountIds: SocialAccountId[], days: number): Promise<DailyViews[]> {
     const result = await this.pool.query(
       `WITH days AS (
          SELECT generate_series(
@@ -169,7 +191,7 @@ export class PgMetricsRepository implements MetricsRepository {
          SELECT DISTINCT ON (cs.content_id) cs.views
          FROM content_metric_snapshots cs
          JOIN contents c ON c.id = cs.content_id
-         WHERE c.social_account_id = $1
+         WHERE c.social_account_id = ANY($1::uuid[])
            AND c.eligible = true
            AND c.excluded_at IS NULL
            AND c.removed_on_platform = false
@@ -180,7 +202,7 @@ export class PgMetricsRepository implements MetricsRepository {
        ) s ON true
        GROUP BY d.day
        ORDER BY d.day`,
-      [socialAccountId, days],
+      [socialAccountIds, days],
     );
     return result.rows.map((row) => ({
       day: String(row.day),

@@ -1,90 +1,148 @@
-import type { AccountReviewItem, AmbassadorApplication, Campaign } from '@/lib/api';
+import type { AdminAccount, Campaign } from '@/lib/api';
 
 /** Exemplos da tela de prévia. Carregado sob demanda, nunca no app publicado. */
 
-export const previewAccountReviews: AccountReviewItem[] = [
-  {
+type Person = Pick<
+  AdminAccount,
+  'profileId' | 'fullName' | 'publicName' | 'email' | 'whatsapp' | 'membershipStatus'
+>;
+
+const helena: Person = {
+  profileId: 'u1',
+  fullName: 'Helena Prado',
+  publicName: 'Helena',
+  email: 'helena@exemplo.com',
+  whatsapp: '11987654321',
+  membershipStatus: 'approved',
+};
+
+const mateus: Person = {
+  profileId: 'u2',
+  fullName: 'Mateus Cardoso',
+  publicName: 'Mateus',
+  email: 'mateus@exemplo.com',
+  whatsapp: '21991234567',
+  membershipStatus: 'approved',
+};
+
+const igor: Person = {
+  profileId: 'u3',
+  fullName: 'Igor Nunes',
+  publicName: 'Igor',
+  email: 'igor@exemplo.com',
+  whatsapp: null,
+  membershipStatus: 'suspended',
+};
+
+const livia: Person = {
+  profileId: 'u4',
+  fullName: 'Lívia Moraes',
+  publicName: 'Lívia',
+  email: 'livia@exemplo.com',
+  whatsapp: '31988887777',
+  membershipStatus: 'approved',
+};
+
+function account(
+  person: Person,
+  fields: Omit<AdminAccount, keyof Person | 'profileUrl' | 'lastSyncAt'> &
+    Partial<Pick<AdminAccount, 'lastSyncAt'>>,
+): AdminAccount {
+  return { ...person, profileUrl: null, lastSyncAt: null, ...fields };
+}
+
+export const previewAccounts: AdminAccount[] = [
+  account(helena, {
     accountId: 'demo-acc-1',
     platform: 'instagram',
-    username: 'livia.mente',
-    profileUrl: null,
-    connectionStatus: 'connected',
-    verifiedAt: '2026-10-01T14:20:00.000Z',
+    username: 'helena.prado',
     reviewStatus: 'pending',
     reviewNote: null,
-    connectedAt: '2026-10-01T14:20:00.000Z',
-    profileId: 'demo-p1',
-    fullName: 'Lívia Moraes',
-    publicName: 'Lívia',
-    email: 'livia@exemplo.com',
-    whatsapp: '11987654321',
-    membershipStatus: 'pending',
-  },
-  {
+    reviewedAt: null,
+    reviewedByName: null,
+    connectedAt: '2026-10-29T14:20:00.000Z',
+    views: 0,
+  }),
+  account(helena, {
     accountId: 'demo-acc-2',
     platform: 'tiktok',
-    username: 'caio.acorde',
-    profileUrl: null,
-    connectionStatus: 'connected',
-    verifiedAt: '2026-09-29T10:05:00.000Z',
+    username: 'helena.prado',
+    reviewStatus: 'pending',
+    reviewNote: null,
+    reviewedAt: null,
+    reviewedByName: null,
+    connectedAt: '2026-10-29T14:24:00.000Z',
+    views: 0,
+  }),
+  account(livia, {
+    accountId: 'demo-acc-3',
+    platform: 'instagram',
+    username: 'livia.mente',
+    reviewStatus: 'pending',
+    reviewNote: null,
+    reviewedAt: null,
+    reviewedByName: null,
+    connectedAt: '2026-10-30T09:10:00.000Z',
+    views: 0,
+  }),
+  account(livia, {
+    accountId: 'demo-acc-4',
+    platform: 'instagram',
+    username: 'livia.cortes',
     reviewStatus: 'changes_requested',
     reviewNote: 'Deixe o perfil público para as views entrarem.',
-    connectedAt: '2026-09-29T10:05:00.000Z',
-    profileId: 'demo-p2',
-    fullName: 'Caio Ribeiro',
-    publicName: 'Caio',
-    email: 'caio@exemplo.com',
-    whatsapp: null,
-    membershipStatus: 'approved',
-  },
-];
-
-export const previewApplications: AmbassadorApplication[] = [
-  {
-    id: 'demo-app-1',
-    nome_completo: 'Lívia Moraes',
-    email: 'livia@exemplo.com',
-    whatsapp: '11987654321',
-    nome_conta: 'livia.mente',
-    redes_sociais: ['instagram'],
-    instagram_handle: '@livia.mente',
-    tiktok_handle: null,
-    status: 'pending',
-    created_at: '2026-10-01T14:18:00.000Z',
-    reviewed_at: null,
-    reviewed_by_name: null,
-    review_note: null,
-  },
-  {
-    id: 'demo-app-2',
-    nome_completo: 'Davi Albuquerque',
-    email: 'davi@exemplo.com',
-    whatsapp: '21991234567',
-    nome_conta: 'davi.alb',
-    redes_sociais: ['instagram', 'tiktok'],
-    instagram_handle: 'davi.alb',
-    tiktok_handle: 'davi.alb',
-    status: 'approved',
-    created_at: '2026-09-12T09:30:00.000Z',
-    reviewed_at: '2026-09-12T15:00:00.000Z',
-    reviewed_by_name: 'Equipe IAM',
-    review_note: null,
-  },
-  {
-    id: 'demo-app-3',
-    nome_completo: 'Otto Siqueira',
-    email: 'otto@exemplo.com',
-    whatsapp: '31988887777',
-    nome_conta: 'otto.s',
-    redes_sociais: ['tiktok'],
-    instagram_handle: null,
-    tiktok_handle: 'otto.s',
-    status: 'rejected',
-    created_at: '2026-09-05T18:40:00.000Z',
-    reviewed_at: '2026-09-06T11:00:00.000Z',
-    reviewed_by_name: 'Equipe IAM',
-    review_note: 'O perfil não publica conteúdo do programa.',
-  },
+    reviewedAt: '2026-10-30T16:00:00.000Z',
+    reviewedByName: 'Equipe IAM',
+    connectedAt: '2026-10-28T11:00:00.000Z',
+    views: 0,
+  }),
+  account(mateus, {
+    accountId: 'demo-acc-5',
+    platform: 'instagram',
+    username: 'mateus.cardoso',
+    reviewStatus: 'approved',
+    reviewNote: null,
+    reviewedAt: '2026-09-03T15:00:00.000Z',
+    reviewedByName: 'Equipe IAM',
+    connectedAt: '2026-09-02T12:30:00.000Z',
+    lastSyncAt: '2026-10-31T14:00:00.000Z',
+    views: 184_320,
+  }),
+  account(mateus, {
+    accountId: 'demo-acc-6',
+    platform: 'tiktok',
+    username: 'mateus.cortes',
+    reviewStatus: 'approved',
+    reviewNote: null,
+    reviewedAt: '2026-09-10T10:00:00.000Z',
+    reviewedByName: 'Equipe IAM',
+    connectedAt: '2026-09-09T20:15:00.000Z',
+    lastSyncAt: '2026-10-31T14:05:00.000Z',
+    views: 97_450,
+  }),
+  account(mateus, {
+    accountId: 'demo-acc-7',
+    platform: 'tiktok',
+    username: 'mateus.iam',
+    reviewStatus: 'rejected',
+    reviewNote: 'O perfil não publica conteúdo do programa.',
+    reviewedAt: '2026-10-12T18:30:00.000Z',
+    reviewedByName: 'Equipe IAM',
+    connectedAt: '2026-10-11T08:00:00.000Z',
+    views: 0,
+  }),
+  account(igor, {
+    accountId: 'demo-acc-8',
+    platform: 'instagram',
+    username: 'igor.nunes',
+    reviewStatus: 'approved',
+    reviewNote: null,
+    reviewedAt: '2026-08-12T09:00:00.000Z',
+    reviewedByName: 'Equipe IAM',
+    connectedAt: '2026-08-11T12:20:00.000Z',
+    lastSyncAt: '2026-08-20T12:00:00.000Z',
+    views: 3_210,
+  }),
 ];
 
 export const previewCampaigns: Campaign[] = [

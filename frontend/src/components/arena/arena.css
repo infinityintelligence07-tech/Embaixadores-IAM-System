@@ -303,7 +303,6 @@
   gap: 10px;
 }
 
-.arena-network,
 .arena-videos-btn {
   display: inline-flex;
   align-items: center;
@@ -312,51 +311,6 @@
   border-radius: 999px;
   background: rgba(16, 24, 43, 0.7);
   color: var(--ink);
-}
-
-/* Contorno desenhado por dentro para os botões internos terem os 44 px inteiros. */
-.arena-network {
-  overflow: hidden;
-  border: 0;
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-
-.arena-network.is-on {
-  box-shadow:
-    inset 0 0 0 1px rgba(122, 162, 255, 0.7),
-    0 0 0 3px rgba(0, 52, 184, 0.24);
-}
-
-.arena-network button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 16px 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.arena-network a {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 44px;
-  padding: 0 16px 0 14px;
-  background: linear-gradient(var(--line), var(--line)) left center / 1px 20px no-repeat;
-  color: #b9ccff;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.arena-videos-btn {
   gap: 8px;
   padding: 0 14px 0 16px;
   font-size: 14px;
@@ -371,6 +325,107 @@
 
 .arena-videos-btn[aria-expanded='true'] .arena-chevron {
   transform: rotate(180deg);
+}
+
+/* Filtro de rede: consulta secundária, mais discreta que categoria e período. */
+.arena-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.arena-scope-label {
+  margin-right: 2px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.arena-scope button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.arena-scope button:has(.platform-mark) {
+  padding-left: 10px;
+}
+
+.arena-scope .platform-mark {
+  border-radius: 6px;
+}
+
+.arena-scope button:hover {
+  color: var(--ink);
+}
+
+.arena-scope button[aria-pressed='true'] {
+  border-color: rgba(122, 162, 255, 0.7);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.arena-scope-note {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(122, 162, 255, 0.45);
+  border-radius: 14px;
+  background: var(--accent-soft);
+}
+
+.arena-scope-note .platform-mark {
+  border-radius: 7px;
+}
+
+.arena-scope-note p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.arena-scope-note strong {
+  color: var(--ink);
+}
+
+.arena-scope-note button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(7, 11, 20, 0.5);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .arena-scope-label {
+    flex-basis: 100%;
+  }
+
+  .arena-scope-note {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .arena-scope-note button {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (min-width: 900px) {
@@ -452,7 +507,11 @@
   line-height: 1.4;
 }
 
-.gate-card .gate-review {
+.gate-card strong {
+  overflow-wrap: anywhere;
+}
+
+.gate-card[data-review='changes_requested'] .gate-review {
   color: var(--warn);
   font-weight: 600;
 }
@@ -461,31 +520,22 @@
   color: var(--bad);
 }
 
-.gate-card .cta,
-.arena-network .cta {
+.gate-card .cta {
   min-height: 44px;
   margin: 10px 0 0;
   background: var(--good);
   color: #062014;
 }
 
-[data-theme='apple'] .gate {
-  border-color: var(--line);
-  background: var(--bg-card);
-  box-shadow: var(--shadow);
+.gate-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-[data-theme='apple'] .gate-card {
-  background: var(--bg);
-}
-
-[data-theme='apple'] .gate-card .cta,
-[data-theme='apple'] .arena-network .cta {
-  color: #fff;
-}
-
-.arena-network .cta {
-  margin: 6px;
+.gate-more {
+  justify-self: start;
+  margin-left: -12px;
 }
 
 .arena-videos {
@@ -1307,12 +1357,8 @@ body:has(.tier-layer[open]) {
   .arena-standing-lead { flex-basis: 100%; }
   .arena-detail { font-size: 16px; }
   .featured { padding: 12px; }
-  /* Duas redes lado a lado e o botão de vídeos na linha de baixo, sem quebra torta. */
-  .arena-actions { display: grid; grid-template-columns: 1fr 1fr; }
-  .arena-network button { flex: 1; justify-content: flex-start; min-width: 0; padding-right: 10px; }
-  .arena-network a { padding: 0 14px 0 12px; }
-  .arena-network-text { display: none; }
-  .arena-videos-btn { grid-column: 1 / -1; justify-content: center; }
+  .arena-actions { display: grid; }
+  .arena-videos-btn { justify-content: center; }
 
   .gate-grid { grid-template-columns: 1fr; }
   .gate-card { min-height: 0; }
@@ -1428,44 +1474,6 @@ body:has(.tier-layer[open]) {
 .complete-form {
   display: grid;
   gap: 14px;
-}
-
-.complete-networks {
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.complete-networks legend {
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.complete-networks > div {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.complete-network {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 56px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.complete-network[aria-pressed='true'] {
-  border-color: var(--accent-2);
-  background: var(--accent-soft);
 }
 
 /* A linha inteira marca a caixa; flex: none impede a caixa de encolher ao lado do texto longo. */

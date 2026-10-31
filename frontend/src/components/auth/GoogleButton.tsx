@@ -46,7 +46,7 @@ function GoogleMark() {
   );
 }
 
-/** Entrada com a conta Google. Na primeira vez, a conta é criada e a pessoa completa o @ no app. */
+/** Entrada com a conta Google. Na primeira vez, a conta é criada e a pessoa completa o WhatsApp no app. */
 export function GoogleButton({ label = 'Continuar com Google' }: { label?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

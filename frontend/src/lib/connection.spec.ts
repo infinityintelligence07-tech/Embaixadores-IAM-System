@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   connectionDuty,
-  gateHeadline,
+  gateState,
   handleError,
   normalizeHandle,
   statusBadge,
@@ -78,29 +78,42 @@ describe('connectionDuty', () => {
   });
 });
 
-describe('gateHeadline', () => {
-  it('pede as duas redes quando nenhuma está pronta', () => {
-    expect(gateHeadline([])).toEqual({
-      title: 'Conecte o Instagram ou o TikTok',
-      detail: 'Escolha a rede onde você posta e digite o seu @. Não pedimos senha.',
+describe('gateState', () => {
+  const account = (
+    id: string,
+    reviewStatus: 'pending' | 'approved' | 'changes_requested' | 'rejected',
+    status: 'connected' | 'disconnected' = 'connected',
+  ) => ({
+    id,
+    platform: 'instagram' as const,
+    username: id,
+    status,
+    reviewStatus,
+    reviewNote: null,
+  });
+
+  it('chama para a primeira conta quando não há nenhuma ativa', () => {
+    expect(gateState([])).toEqual({ kind: 'empty' });
+    expect(gateState([account('a', 'approved', 'disconnected')])).toEqual({ kind: 'empty' });
+  });
+
+  it('mostra o ajuste pedido antes de tudo', () => {
+    const state = gateState([account('a', 'pending'), account('b', 'changes_requested')]);
+    expect(state?.kind).toBe('adjust');
+  });
+
+  it('avisa que a equipe está conferindo e se alguma conta já soma', () => {
+    expect(gateState([account('a', 'pending'), account('b', 'approved')])).toMatchObject({
+      kind: 'waiting',
+      anyApproved: true,
     });
   });
 
-  it('nomeia só a rede que falta', () => {
-    expect(
-      gateHeadline([
-        { platform: 'instagram', status: 'connected' },
-        { platform: 'tiktok', status: 'disconnected' },
-      ])?.title,
-    ).toBe('Quer disputar também no TikTok?');
+  it('explica quando todas as contas foram reprovadas', () => {
+    expect(gateState([account('a', 'rejected')])?.kind).toBe('rejected');
   });
 
-  it('some quando as duas redes estão autorizadas', () => {
-    expect(
-      gateHeadline([
-        { platform: 'instagram', status: 'connected' },
-        { platform: 'tiktok', status: 'syncing' },
-      ]),
-    ).toBeNull();
+  it('some quando as contas estão aprovadas', () => {
+    expect(gateState([account('a', 'approved'), account('b', 'rejected')])).toBeNull();
   });
 });

@@ -40,6 +40,12 @@ export class AdminCompetitionController {
     return this.accountReview.listOpen();
   }
 
+  /** Todas as contas ativas dos embaixadores, com a análise da equipe e as views de cada uma. */
+  @Get('accounts')
+  listAccounts() {
+    return this.accountReview.listAll();
+  }
+
   @Post('accounts/:id/review')
   async reviewAccount(
     @Req() req: { user: { id: string } },

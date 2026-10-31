@@ -1,5 +1,7 @@
-import { Camera, LogOut, Trash2 } from 'lucide-react';
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { Camera, LogOut, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -7,10 +9,209 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import {
+  ApiError,
+  api,
+  type AccountReviewStatus,
+  type DashboardAccount,
+  type DashboardResponse,
+  type SocialPlatform,
+} from '@/lib/api';
 import { AvatarImageError, prepareAvatar } from '@/lib/avatar-image';
+import { formatDateTime, formatViews, platformLabel } from '@/lib/format';
 
 type Notice = { tone: 'success' | 'error'; text: string } | null;
+
+const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
+
+const REVIEW_BADGE: Record<
+  AccountReviewStatus,
+  { tone: 'success' | 'warning' | 'danger'; label: string }
+> = {
+  pending: { tone: 'warning', label: 'Aguardando aprovação' },
+  approved: { tone: 'success', label: 'Aprovada' },
+  changes_requested: { tone: 'warning', label: 'Ajuste pedido' },
+  rejected: { tone: 'danger', label: 'Reprovada' },
+};
+
+function reviewBadge(status: string) {
+  return REVIEW_BADGE[status as AccountReviewStatus] ?? REVIEW_BADGE.pending;
+}
+
+function accountViews(account: DashboardAccount): string {
+  if (account.views === 0 && !account.lastSyncAt) return 'Em coleta';
+  return account.views === 1 ? '1 view' : `${formatViews(account.views)} views`;
+}
+
+const secondaryLink =
+  'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-field-line bg-surface-card px-4 text-sm font-semibold text-text transition-colors hover:border-[var(--field-line-hover)] hover:bg-[var(--accent-soft)]';
+
+function ViewsCard() {
+  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await api.dashboard());
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Não foi possível carregar as suas views. Verifique a internet e tente de novo.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const shell = 'space-y-4 rounded-[14px] border border-border bg-surface-card p-5';
+
+  if (loading && !data) {
+    return (
+      <section aria-labelledby="views-title" className={shell}>
+        <h2 id="views-title" className="text-lg font-semibold text-text">
+          Suas views
+        </h2>
+        <div className="flex justify-center py-6">
+          <Spinner label="Carregando suas views..." />
+        </div>
+      </section>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <section aria-labelledby="views-title" className={shell}>
+        <h2 id="views-title" className="text-lg font-semibold text-text">
+          Suas views
+        </h2>
+        <Alert variant="error" role="alert" title="Não foi possível carregar">
+          {error ?? 'Tente de novo em instantes.'}
+        </Alert>
+        <Button
+          variant="secondary"
+          className="min-h-[44px]"
+          loading={loading}
+          onClick={() => void load()}
+        >
+          {loading ? null : <RefreshCw className="size-4" aria-hidden />}
+          Tentar de novo
+        </Button>
+      </section>
+    );
+  }
+
+  if (data.accounts.length === 0) {
+    return (
+      <section aria-labelledby="views-title" className={shell}>
+        <div>
+          <h2 id="views-title" className="text-lg font-semibold text-text">
+            Suas views
+          </h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Você ainda não adicionou nenhuma conta. Adicione o seu Instagram ou TikTok e, depois
+            que a equipe aprovar, as views passam a contar aqui e no ranking.
+          </p>
+        </div>
+        <Link to="/conexoes" className={secondaryLink}>
+          <Plus className="size-4" aria-hidden />
+          Adicionar a primeira conta
+        </Link>
+      </section>
+    );
+  }
+
+  const hasApproved = data.accounts.some((item) => item.reviewStatus === 'approved');
+  const updated = formatDateTime(data.lastSyncAt);
+
+  return (
+    <section aria-labelledby="views-title" className={shell}>
+      <div>
+        <h2 id="views-title" className="text-lg font-semibold text-text">
+          Suas views
+        </h2>
+        <p className="mt-1 text-sm text-text-muted">
+          Desde o início, somando as contas aprovadas.
+        </p>
+      </div>
+
+      {!hasApproved ? (
+        <p className="text-sm text-text">
+          Nenhuma conta aprovada ainda. Quando a equipe aprovar uma conta, as views dela somam
+          aqui.
+        </p>
+      ) : !data.lastSyncAt ? (
+        <p className="text-sm text-text">Em coleta. O total aparece depois da primeira leitura.</p>
+      ) : (
+        <>
+          <p className="text-[32px] font-semibold leading-none tabular-nums text-text max-sm:text-[28px]">
+            {formatViews(data.totalViews)}
+            <span className="ml-2 text-sm font-normal text-text-muted">
+              {data.totalViews === 1 ? 'view' : 'views'}
+            </span>
+          </p>
+          <ul className="grid grid-cols-2 gap-2.5" aria-label="Views por rede">
+            {PLATFORMS.map((platform) => (
+              <li
+                key={platform}
+                className="flex items-center gap-3 rounded-xl border border-border px-3 py-3"
+              >
+                <PlatformMark platform={platform} size={24} />
+                <span className="min-w-0">
+                  <span className="block text-xs text-text-muted">{platformLabel(platform)}</span>
+                  <span className="block truncate text-base font-semibold tabular-nums text-text">
+                    {formatViews(data.byPlatform[platform] ?? 0)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {updated ? (
+            <p className="text-xs text-text-muted">Última coleta em {updated}.</p>
+          ) : null}
+        </>
+      )}
+
+      <div className="space-y-2.5 border-t border-border pt-4">
+        <h3 className="text-sm font-semibold text-text">Suas contas</h3>
+        <ul className="space-y-2.5">
+          {data.accounts.map((account) => {
+            const badge = reviewBadge(account.reviewStatus);
+            const handle = account.username ? `@${account.username.replace(/^@/, '')}` : 'Conta sem @';
+            return (
+              <li
+                key={account.id}
+                className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5"
+              >
+                <PlatformMark platform={account.platform} size={24} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-text">{handle}</span>
+                  <span className="block text-xs text-text-muted">
+                    {platformLabel(account.platform)} · {accountViews(account)}
+                  </span>
+                </span>
+                <Badge tone={badge.tone}>{badge.label}</Badge>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-xs text-text-muted">
+          Só as contas aprovadas somam no total e no ranking.{' '}
+          <Link to="/conexoes" className="font-semibold text-text underline underline-offset-2">
+            Gerenciar contas
+          </Link>
+        </p>
+      </div>
+    </section>
+  );
+}
 
 function NoticeLine({ notice }: { notice: Notice }) {
   if (!notice) return null;
@@ -185,7 +386,9 @@ export function ProfilePage() {
     <div className="mx-auto max-w-xl space-y-6">
       <header>
         <h1 className="page-title">Perfil</h1>
-        <p className="mt-2 text-text-muted">Sua foto e o nome que aparecem no ranking.</p>
+        <p className="mt-2 text-text-muted">
+          Sua foto, o nome que aparece no ranking e as views das suas contas.
+        </p>
       </header>
 
       <div className="space-y-2.5">
@@ -269,6 +472,8 @@ export function ProfilePage() {
             </div>
           ) : null}
         </section>
+
+        <ViewsCard />
 
         <form
           onSubmit={handleSubmit}

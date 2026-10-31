@@ -14,7 +14,7 @@ export interface GetMeResult {
   role: 'ambassador' | 'admin';
   status: 'pending' | 'approved' | 'suspended';
   onboardingCompleted: boolean;
-  /** Entrou pelo Google e ainda não informou WhatsApp, rede e @. */
+  /** Entrou pelo Google e ainda não informou WhatsApp e consentimento. */
   needsSignupDetails: boolean;
   createdAt: Date;
 }

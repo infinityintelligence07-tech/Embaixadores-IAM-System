@@ -52,7 +52,7 @@ export class PgMembershipRepository implements MembershipRepository {
   
   async approve(
     profileId: ProfileId,
-    approvedBy: ProfileId,
+    approvedBy: ProfileId | null,
     approvedAt: Date,
   ): Promise<AmbassadorMembership> {
     const result = await this.pool.query(

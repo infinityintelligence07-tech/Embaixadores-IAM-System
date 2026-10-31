@@ -20,6 +20,7 @@ import { Response } from 'express';
 import { AuthGuard } from '../guards/auth.guard';
 import { ConnectionStatus, SocialPlatform, SocialTransport } from '../../../domain/types';
 import {
+  MetricsRepository,
   SettingsRepository,
   SocialAccountRepository,
   SyncJobRepository,
@@ -40,7 +41,7 @@ import { SocialMetricsProvider } from '../../../ports/social-metrics.port';
 
 const PUBLIC_MANUAL_SYNC_COOLDOWN_SECONDS = 6 * 60 * 60;
 
-function toAccountView(account: SocialAccount) {
+function toAccountView(account: SocialAccount, views: number) {
   return {
     id: account.id,
     platform: account.platform,
@@ -53,6 +54,8 @@ function toAccountView(account: SocialAccount) {
       account.status === ConnectionStatus.PendingVerification ? account.verificationCode : null,
     reviewStatus: account.reviewStatus,
     reviewNote: account.reviewNote,
+    views,
+    createdAt: account.createdAt.toISOString(),
   };
 }
 
@@ -81,6 +84,8 @@ export class SocialController {
     private readonly syncJobRepo: SyncJobRepository,
     @Inject(INJECTION_TOKENS.SETTINGS_REPOSITORY)
     private readonly settingsRepo: SettingsRepository,
+    @Inject(INJECTION_TOKENS.METRICS_REPOSITORY)
+    private readonly metricsRepo: MetricsRepository,
     @Inject(INJECTION_TOKENS.SOCIAL_PROVIDER_FACTORY)
     private readonly providerFactory: {
       getProvider: (platform: SocialPlatform, transport: string) => SocialMetricsProvider;
@@ -99,26 +104,21 @@ export class SocialController {
     @Param('id', uuidPipe('Conta inválida.')) id: string,
   ) {
     const account = await this.accountReview.requestNewReview(req.user.id as never, id);
-    return toAccountView(account);
+    return this.withViews(account);
   }
 
+  /** Todas as contas ativas da pessoa, várias por rede, ordenadas por rede e data. */
   @Get('accounts')
   @UseGuards(AuthGuard)
   async listAccounts(@Req() req: { user: { id: string } }) {
-    const accounts = await Promise.all([
-      this.socialAccountRepo.findByProfileAndPlatform(
-        req.user.id as never,
-        SocialPlatform.Instagram,
-      ),
-      this.socialAccountRepo.findByProfileAndPlatform(
-        req.user.id as never,
-        SocialPlatform.TikTok,
-      ),
-    ]);
+    const accounts = await this.socialAccountRepo.findActiveByProfile(req.user.id as never);
+    const views = await this.metricsRepo.totalViewsByAccounts(accounts.map((item) => item.id));
+    return accounts.map((account) => toAccountView(account, views.get(account.id) ?? 0));
+  }
 
-    return accounts
-      .filter((account): account is SocialAccount => account !== null)
-      .map(toAccountView);
+  private async withViews(account: SocialAccount) {
+    const views = await this.metricsRepo.totalViewsByAccounts([account.id]);
+    return toAccountView(account, views.get(account.id) ?? 0);
   }
 
   /**
@@ -157,7 +157,7 @@ export class SocialController {
       throw new BadRequestException('Informe o seu @.');
     }
     const account = await this.socialHandle.claim(req.user.id as never, network, body.handle);
-    return toAccountView(account);
+    return this.withViews(account);
   }
 
   @Post(':platform/verify')
@@ -167,7 +167,7 @@ export class SocialController {
     @Param('platform') platform: string,
   ) {
     const account = await this.socialHandle.verify(req.user.id as never, parsePlatform(platform));
-    return toAccountView(account);
+    return this.withViews(account);
   }
 
   /** Callback sem AuthGuard — a plataforma redireciona sem Bearer JWT. */

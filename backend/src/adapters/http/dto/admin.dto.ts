@@ -9,12 +9,19 @@ import {
   Min,
 } from 'class-validator';
 
+/** `accountId` coleta uma conta; `userId` com `platform` coleta todas as contas da pessoa na rede. */
 export class RequestSyncDto {
-  @IsUUID('4', { message: 'Pessoa inválida.' })
-  userId!: string;
+  @IsOptional()
+  @IsUUID('all', { message: 'Conta inválida.' })
+  accountId?: string;
 
+  @IsOptional()
+  @IsUUID('all', { message: 'Pessoa inválida.' })
+  userId?: string;
+
+  @IsOptional()
   @IsIn(['instagram', 'tiktok'], { message: 'Plataforma inválida.' })
-  platform!: 'instagram' | 'tiktok';
+  platform?: 'instagram' | 'tiktok';
 }
 
 export class ReasonDto {

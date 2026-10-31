@@ -1,58 +1,76 @@
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AmbassadorArena, type ArenaSnapshot } from '@/components/arena/AmbassadorArena';
 import { BrandMark } from '@/components/brand/BrandMark';
-import type { RankingCategory, RankingEntry, SocialPlatform } from '@/lib/api';
+import type {
+  MyRankingResponse,
+  RankingCategory,
+  RankingEntry,
+  RankingsResponse,
+  SocialAccount,
+  SocialPlatform,
+} from '@/lib/api';
 import { AdminPage, type AdminPreview } from '@/pages/AdminPage';
+import { ConnectionsPage } from '@/pages/ConnectionsPage';
 
 interface Person {
   name: string;
   total: number;
   best: number;
+  /** Parte das views que veio do Instagram; o resto é do TikTok. */
+  instagram: number;
 }
 
 const people: Person[] = [
-  { name: 'Helena', total: 980000, best: 420000 },
-  { name: 'Caio', total: 870000, best: 180000 },
-  { name: 'Lívia', total: 760000, best: 510000 },
-  { name: 'Davi', total: 640000, best: 90000 },
-  { name: 'Marina', total: 520000, best: 240000 },
-  { name: 'Pedro', total: 410000, best: 70000 },
-  { name: 'Alice', total: 330000, best: 150000 },
-  { name: 'Bruno', total: 250000, best: 60000 },
-  { name: 'Clara', total: 190000, best: 80000 },
-  { name: 'Mateus', total: 156000, best: 210000 },
-  { name: 'Igor', total: 120000, best: 40000 },
-  { name: 'Nina', total: 98000, best: 35000 },
-  { name: 'Rafael', total: 76000, best: 22000 },
-  { name: 'Sofia', total: 54000, best: 18000 },
-  { name: 'Theo', total: 31000, best: 12000 },
-  { name: 'Lara', total: 18000, best: 9000 },
-  { name: 'Otto', total: 7000, best: 4000 },
-  { name: 'Bia', total: 2500, best: 1100 },
+  { name: 'Helena', total: 980000, best: 420000, instagram: 0.7 },
+  { name: 'Caio', total: 870000, best: 180000, instagram: 0.2 },
+  { name: 'Lívia', total: 760000, best: 510000, instagram: 0.9 },
+  { name: 'Davi', total: 640000, best: 90000, instagram: 0.5 },
+  { name: 'Marina', total: 520000, best: 240000, instagram: 0.35 },
+  { name: 'Pedro', total: 410000, best: 70000, instagram: 1 },
+  { name: 'Alice', total: 330000, best: 150000, instagram: 0.6 },
+  { name: 'Bruno', total: 250000, best: 60000, instagram: 0 },
+  { name: 'Clara', total: 190000, best: 80000, instagram: 0.45 },
+  { name: 'Mateus', total: 156000, best: 210000, instagram: 0.63 },
+  { name: 'Igor', total: 120000, best: 40000, instagram: 0.8 },
+  { name: 'Nina', total: 98000, best: 35000, instagram: 0.3 },
+  { name: 'Rafael', total: 76000, best: 22000, instagram: 0.55 },
+  { name: 'Sofia', total: 54000, best: 18000, instagram: 0.1 },
+  { name: 'Theo', total: 31000, best: 12000, instagram: 0.75 },
+  { name: 'Lara', total: 18000, best: 9000, instagram: 0.5 },
+  { name: 'Otto', total: 7000, best: 4000, instagram: 0.4 },
+  { name: 'Bia', total: 2500, best: 1100, instagram: 0.65 },
 ];
 
-function rank(category: RankingCategory): Person[] {
-  return [...people].sort((a, b) =>
-    category === 'total_views' ? b.total - a.total : b.best - a.best,
-  );
+type Scope = 'all' | SocialPlatform;
+
+/** Recorte de uma pessoa no ranking geral ou numa rede só. */
+function slice(person: Person, scope: Scope): { total: number; best: number } {
+  if (scope === 'all') return { total: person.total, best: person.best };
+  const share = scope === 'instagram' ? person.instagram : 1 - person.instagram;
+  return { total: Math.round(person.total * share), best: Math.round(person.best * share) };
 }
 
-function toEntries(category: RankingCategory, ordered: Person[]): RankingEntry[] {
-  return ordered.map((person, index) => ({
-    position: index + 1,
-    profileId: person.name.toLowerCase(),
-    publicName: person.name,
-    avatarUrl: null,
-    score: category === 'total_views' ? person.total : person.best,
-    totalViews: person.total,
-    bestVideoViews: person.best,
-    isStale: person.name === 'Otto',
-    isCurrentUser: person.name === 'Mateus',
-  }));
+function toEntries(scope: Scope, category: RankingCategory): RankingEntry[] {
+  return people
+    .map((person) => ({ person, ...slice(person, scope) }))
+    .filter((row) => row.total > 0)
+    .sort((a, b) => (category === 'total_views' ? b.total - a.total : b.best - a.best))
+    .map((row, index) => ({
+      position: index + 1,
+      profileId: row.person.name.toLowerCase(),
+      publicName: row.person.name,
+      avatarUrl: null,
+      score: category === 'total_views' ? row.total : row.best,
+      totalViews: row.total,
+      bestVideoViews: row.best,
+      isStale: row.person.name === 'Otto',
+      isCurrentUser: row.person.name === 'Mateus',
+    }));
 }
 
-function board(platform: SocialPlatform, category: RankingCategory): ArenaSnapshot['boards'][`${SocialPlatform}:${RankingCategory}`] {
-  const items = toEntries(category, rank(category));
+function board(scope: Scope, category: RankingCategory): RankingsResponse {
+  const items = toEntries(scope, category);
   return {
     items,
     page: 1,
@@ -60,15 +78,12 @@ function board(platform: SocialPlatform, category: RankingCategory): ArenaSnapsh
     total: items.length,
     view: 'all',
     category,
-    platform,
+    platform: scope === 'all' ? null : scope,
   };
 }
 
-function standing(
-  platform: SocialPlatform,
-  category: RankingCategory,
-): NonNullable<ArenaSnapshot['standings'][`${SocialPlatform}:${RankingCategory}`]> {
-  const items = toEntries(category, rank(category));
+function standing(scope: Scope, category: RankingCategory): MyRankingResponse {
+  const items = toEntries(scope, category);
   const mine = items.find((item) => item.isCurrentUser);
   const above = mine ? items.find((item) => item.position === mine.position - 1) : undefined;
   return {
@@ -79,45 +94,55 @@ function standing(
     score: mine?.score ?? null,
     gapToAbove: mine && above ? above.score - mine.score : null,
     category,
-    platform,
+    platform: scope === 'all' ? null : scope,
     entry: mine ?? null,
   };
 }
 
-const platforms: SocialPlatform[] = ['instagram', 'tiktok'];
+const scopes: Scope[] = ['all', 'instagram', 'tiktok'];
+const categories: RankingCategory[] = ['total_views', 'best_video'];
+
+function account(
+  id: string,
+  platform: SocialPlatform,
+  username: string,
+  reviewStatus: SocialAccount['reviewStatus'],
+  views: number,
+  reviewNote: string | null = null,
+): SocialAccount {
+  const synced = reviewStatus === 'approved';
+  return {
+    id,
+    platform,
+    username,
+    status: 'connected',
+    transport: 'demo',
+    lastSyncAt: synced ? '2026-10-31T14:10:00.000Z' : null,
+    syncMessage: null,
+    verificationCode: null,
+    reviewStatus,
+    reviewNote,
+    views,
+    createdAt: '2026-10-02T18:10:00.000Z',
+  };
+}
+
+const approvedAccounts: SocialAccount[] = [
+  account('ig-1', 'instagram', 'mateus.asm', 'approved', 74000),
+  account('ig-2', 'instagram', 'cortes.do.mateus', 'approved', 24000),
+  account('tt-1', 'tiktok', 'mateus.asm', 'approved', 58000),
+  account('tt-2', 'tiktok', 'mateus.cortes', 'pending', 0),
+];
 
 const arenaSnapshot: ArenaSnapshot = {
   firstName: 'Mateus',
-  accounts: [
-    {
-      id: 'ig',
-      platform: 'instagram',
-      username: 'mateus.asm',
-      status: 'connected',
-      transport: 'demo',
-      lastSyncAt: '2026-10-02T18:10:00.000Z',
-      syncMessage: null,
-      verificationCode: null,
-      reviewStatus: 'approved',
-      reviewNote: null,
-    },
-    {
-      id: 'tt',
-      platform: 'tiktok',
-      username: 'mateus.asm',
-      status: 'connected',
-      transport: 'demo',
-      lastSyncAt: '2026-10-02T18:12:00.000Z',
-      syncMessage: null,
-      verificationCode: null,
-      reviewStatus: 'approved',
-      reviewNote: null,
-    },
-  ],
+  accounts: approvedAccounts,
   contents: [
     {
       id: 'v1',
       platform: 'instagram',
+      accountId: 'ig-1',
+      username: 'mateus.asm',
       title: 'O corte que atravessou a semana',
       url: 'https://instagram.com/p/preview',
       views: 210000,
@@ -128,6 +153,8 @@ const arenaSnapshot: ArenaSnapshot = {
     {
       id: 'v2',
       platform: 'instagram',
+      accountId: 'ig-2',
+      username: 'cortes.do.mateus',
       title: 'Três frases para acordar a mente',
       url: 'https://instagram.com/p/preview-2',
       views: 86000,
@@ -138,6 +165,8 @@ const arenaSnapshot: ArenaSnapshot = {
     {
       id: 'v3',
       platform: 'tiktok',
+      accountId: 'tt-1',
+      username: 'mateus.asm',
       title: 'Bastidor do palco',
       url: 'https://www.tiktok.com/@mateus.asm/video/1',
       views: 140000,
@@ -146,41 +175,138 @@ const arenaSnapshot: ArenaSnapshot = {
       excluded: false,
     },
   ],
-  boards: {
-    'instagram:total_views': board('instagram', 'total_views'),
-    'instagram:best_video': board('instagram', 'best_video'),
-    'tiktok:total_views': board('tiktok', 'total_views'),
-    'tiktok:best_video': board('tiktok', 'best_video'),
-  },
-  standings: {
-    'instagram:total_views': standing('instagram', 'total_views'),
-    'instagram:best_video': standing('instagram', 'best_video'),
-    'tiktok:total_views': standing('tiktok', 'total_views'),
-    'tiktok:best_video': standing('tiktok', 'best_video'),
-  },
-  criteria:
-    'A ordem usa as views monitoradas. Empate nas views totais desempata pelo melhor vídeo, depois por quem entrou antes.',
-  slices: platforms.map((platform) => ({
-    platform,
-    positionTotal: standing(platform, 'total_views').position,
-    positionBest: standing(platform, 'best_video').position,
-    totalParticipants: people.length,
-    ineligibilityReason: null,
-    monitoredViewsTotal: 156000,
+  boards: Object.fromEntries(
+    scopes.flatMap((scope) => categories.map((category) => [`${scope}:${category}`, board(scope, category)])),
+  ),
+  standings: Object.fromEntries(
+    scopes.flatMap((scope) =>
+      categories.map((category) => [`${scope}:${category}`, standing(scope, category)]),
+    ),
+  ),
+  dashboard: {
+    totalViews: 156000,
+    byPlatform: { instagram: 98000, tiktok: 58000 },
     bestVideo: {
       id: 'v1',
       title: 'O corte que atravessou a semana',
       views: 210000,
       permalink: 'https://instagram.com/p/preview',
+      platform: 'instagram',
+      username: 'mateus.asm',
     },
-    officialAccountViews: 2400000,
-    officialAccountViewsLabel: 'Views da conta oficial',
-    contentCount: 12,
-    lastSyncAt: '2026-10-02T18:12:00.000Z',
-    connectionStatus: 'connected',
-    syncCoverageRatio: 1,
-  })),
+    lastSyncAt: '2026-10-31T14:10:00.000Z',
+    accounts: approvedAccounts.map(({ id, platform, username, views, reviewStatus, lastSyncAt }) => ({
+      id,
+      platform,
+      username,
+      views,
+      reviewStatus,
+      lastSyncAt,
+    })),
+    rankingCriteria:
+      'A ordem usa as views monitoradas de todas as contas aprovadas. Empate nas views totais desempata pelo melhor vídeo, depois por quem entrou antes.',
+  },
 };
+
+type ArenaState = 'aprovado' | 'sem-conta' | 'aguardando' | 'ajuste';
+
+/** A mesma pessoa antes de ter uma conta aprovada: fora do ranking, que segue visível para ela. */
+function outOfRanking(accounts: SocialAccount[]): ArenaSnapshot {
+  const standings = Object.fromEntries(
+    Object.entries(arenaSnapshot.standings).map(([key, value]) => [
+      key,
+      value
+        ? {
+            ...value,
+            eligible: false,
+            reason: 'Nenhuma conta aprovada ainda',
+            position: null,
+            score: null,
+            gapToAbove: null,
+            entry: null,
+          }
+        : value,
+    ]),
+  ) as ArenaSnapshot['standings'];
+  const boards = Object.fromEntries(
+    Object.entries(arenaSnapshot.boards).map(([key, value]) => [
+      key,
+      value
+        ? {
+            ...value,
+            items: value.items
+              .filter((item) => !item.isCurrentUser)
+              .map((item, index) => ({ ...item, position: index + 1 })),
+            total: value.total - 1,
+          }
+        : value,
+    ]),
+  ) as ArenaSnapshot['boards'];
+  return {
+    ...arenaSnapshot,
+    accounts,
+    contents: [],
+    boards,
+    standings,
+    dashboard: {
+      ...arenaSnapshot.dashboard!,
+      totalViews: 0,
+      byPlatform: { instagram: 0, tiktok: 0 },
+      bestVideo: null,
+      lastSyncAt: null,
+      accounts: [],
+    },
+  };
+}
+
+function arenaFor(state: ArenaState): ArenaSnapshot {
+  switch (state) {
+    case 'sem-conta':
+      return outOfRanking([]);
+    case 'aguardando':
+      return outOfRanking([
+        account('ig-9', 'instagram', 'mateus.asm', 'pending', 0),
+        account('tt-9', 'tiktok', 'mateus.asm', 'pending', 0),
+      ]);
+    case 'ajuste':
+      return outOfRanking([
+        account(
+          'ig-9',
+          'instagram',
+          'mateus.asm',
+          'changes_requested',
+          0,
+          'Deixe o perfil público para as views entrarem.',
+        ),
+        account('tt-9', 'tiktok', 'mateus.asm', 'pending', 0),
+      ]);
+    default:
+      return arenaSnapshot;
+  }
+}
+
+const connectionsPreview: SocialAccount[] = [
+  ...approvedAccounts.slice(0, 2),
+  account('ig-3', 'instagram', 'mente.acordada', 'changes_requested', 3100, 'Deixe o perfil público para as views entrarem.'),
+  account('ig-4', 'instagram', 'mateus.palestras', 'rejected', 0, 'O perfil não publica conteúdo do programa.'),
+  account('ig-5', 'instagram', 'mateus.bastidores', 'pending', 0),
+  ...approvedAccounts.slice(2),
+];
+
+const ARENA_STATES: { id: ArenaState; label: string }[] = [
+  { id: 'aprovado', label: 'No ranking' },
+  { id: 'sem-conta', label: 'Sem conta' },
+  { id: 'aguardando', label: 'Aguardando' },
+  { id: 'ajuste', label: 'Ajuste pedido' },
+];
+
+type Screen = 'ranking' | 'conexoes' | 'admin';
+
+const SCREENS: { id: Screen; label: string }[] = [
+  { id: 'ranking', label: 'Ranking' },
+  { id: 'conexoes', label: 'Conexões' },
+  { id: 'admin', label: 'Administração' },
+];
 
 const adminPreview: AdminPreview = {
   users: [
@@ -262,47 +388,13 @@ const adminPreview: AdminPreview = {
   },
 };
 
-function withoutConnections(source: ArenaSnapshot): ArenaSnapshot {
-  const standings = Object.fromEntries(
-    Object.entries(source.standings).map(([key, value]) => [
-      key,
-      value
-        ? {
-            ...value,
-            eligible: false,
-            reason: 'Conta não conectada',
-            position: null,
-            score: null,
-            gapToAbove: null,
-            entry: null,
-          }
-        : value,
-    ]),
-  ) as ArenaSnapshot['standings'];
-
-  return {
-    ...source,
-    accounts: [],
-    contents: [],
-    standings,
-    slices: source.slices.map((item) => ({
-      ...item,
-      connectionStatus: 'disconnected',
-      officialAccountViews: null,
-      officialAccountViewsLabel: 'Views da conta indisponíveis',
-      bestVideo: null,
-      lastSyncAt: null,
-      monitoredViewsTotal: null,
-      positionTotal: null,
-      positionBest: null,
-    })),
-  };
-}
-
+/** Telas com dados de exemplo, só em desenvolvimento. Use ?tela= e ?estado= para abrir direto. */
 export default function PreviewPage() {
-  const [tela, setTela] = useState<'arena' | 'admin'>('arena');
-  const [semConexao, setSemConexao] = useState(false);
-  const apple = tela === 'admin';
+  const [params, setParams] = useSearchParams();
+  const screen = (SCREENS.find((item) => item.id === params.get('tela'))?.id ?? 'ranking') as Screen;
+  const state = (ARENA_STATES.find((item) => item.id === params.get('estado'))?.id ??
+    'aprovado') as ArenaState;
+  const apple = screen === 'admin';
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = apple ? 'apple' : 'arena';
@@ -310,6 +402,13 @@ export default function PreviewPage() {
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', apple ? '#f5f5f7' : '#070b14');
   }, [apple]);
+
+  function go(next: { tela?: Screen; estado?: ArenaState }) {
+    const search = new URLSearchParams(params);
+    if (next.tela) search.set('tela', next.tela);
+    if (next.estado) search.set('estado', next.estado);
+    setParams(search, { replace: true });
+  }
 
   return (
     <div className={apple ? 'shell shell-apple' : 'shell shell-arena'}>
@@ -322,28 +421,38 @@ export default function PreviewPage() {
           )}
         </div>
         <div className="arena-actions">
-          {apple ? null : (
-            <button type="button" className="arena-videos-btn" onClick={() => setSemConexao((value) => !value)}>
-              {semConexao ? 'Ver conectado' : 'Ver sem conexão'}
+          {SCREENS.filter((item) => item.id !== screen).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="arena-videos-btn"
+              onClick={() => go({ tela: item.id })}
+            >
+              Ver {item.label.toLocaleLowerCase('pt-BR')}
             </button>
-          )}
-          <button
-            type="button"
-            className="arena-videos-btn"
-            onClick={() => setTela(apple ? 'arena' : 'admin')}
-          >
-            {apple ? 'Ver ranking' : 'Ver administração'}
-          </button>
+          ))}
+          {screen === 'ranking' ? (
+            <select
+              aria-label="Situação do embaixador"
+              value={state}
+              onChange={(event) => go({ estado: event.target.value as ArenaState })}
+            >
+              {ARENA_STATES.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
       </header>
       <main className="shell-main">
-        {apple ? (
+        {screen === 'admin' ? (
           <AdminPage preview={adminPreview} />
+        ) : screen === 'conexoes' ? (
+          <ConnectionsPage preview={connectionsPreview} />
         ) : (
-          <AmbassadorArena
-            key={semConexao ? 'sem-conexao' : 'conectado'}
-            snapshot={semConexao ? withoutConnections(arenaSnapshot) : arenaSnapshot}
-          />
+          <AmbassadorArena key={state} snapshot={arenaFor(state)} />
         )}
       </main>
     </div>

@@ -26,13 +26,14 @@ export class PgRankingRepository implements RankingRepository {
   }
   
   async findPublished(
-    platform: SocialPlatform,
+    platform: SocialPlatform | null,
     category: RankingCategory,
     campaignId: string | null = null,
   ): Promise<{ version: RankingVersion; entries: RankingEntry[] } | null> {
     const versionResult = await this.pool.query(
       `SELECT * FROM ranking_versions 
-       WHERE platform = $1 AND category = $2 AND status = 'published'
+       WHERE platform IS NOT DISTINCT FROM $1::public.social_platform AND category = $2
+         AND status = 'published'
          AND campaign_id IS NOT DISTINCT FROM $3::uuid
        ORDER BY published_at DESC 
        LIMIT 1`,
@@ -77,14 +78,15 @@ export class PgRankingRepository implements RankingRepository {
       // Duas publicações do mesmo quadro ao mesmo tempo (agendador e "recalcular", ou duas
       // instâncias) deixariam duas versões publicadas. A trava serializa por quadro.
       await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-        `ranking:${input.platform}:${input.category}:${input.campaignId ?? 'geral'}`,
+        `ranking:${input.platform ?? 'todas'}:${input.category}:${input.campaignId ?? 'geral'}`,
       ]);
       
       // Supersede current published version
       await client.query(
         `UPDATE ranking_versions 
          SET status = 'superseded' 
-         WHERE platform = $1 AND category = $2 AND status = 'published'
+         WHERE platform IS NOT DISTINCT FROM $1::public.social_platform AND category = $2
+           AND status = 'published'
            AND campaign_id IS NOT DISTINCT FROM $3::uuid`,
         [input.platform, input.category, input.campaignId],
       );
@@ -95,7 +97,7 @@ export class PgRankingRepository implements RankingRepository {
           platform, category, status, computed_at, published_at,
           participant_count, stale_tolerance_hours, notes, campaign_id
         )
-        VALUES ($1, $2, 'published', $3, NOW(), $4, $5, $6, $7)
+        VALUES ($1::public.social_platform, $2, 'published', $3, NOW(), $4, $5, $6, $7)
         RETURNING *`,
         [
           input.platform,
@@ -153,7 +155,7 @@ export class PgRankingRepository implements RankingRepository {
   private mapVersionRow(row: any): RankingVersion {
     return {
       id: asRankingVersionId(row.id),
-      platform: row.platform as SocialPlatform,
+      platform: (row.platform ?? null) as SocialPlatform | null,
       category: row.category as RankingCategory,
       status: row.status as RankingVersionStatus,
       computedAt: row.computed_at ? new Date(row.computed_at) : null,

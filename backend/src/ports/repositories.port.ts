@@ -67,9 +67,10 @@ export interface MembershipRepository {
   findById(id: MembershipId): Promise<AmbassadorMembership | null>;
   findApproved(): Promise<AmbassadorMembership[]>;
   findAll(): Promise<AmbassadorMembership[]>;
+  /** `approvedBy` null quando a própria pessoa entra pelo cadastro. */
   approve(
     profileId: ProfileId,
-    approvedBy: ProfileId,
+    approvedBy: ProfileId | null,
     approvedAt: Date,
   ): Promise<AmbassadorMembership>;
   suspend(
@@ -130,17 +131,14 @@ export interface StoredSocialCredentials {
 
 export interface SocialAccountRepository {
   findById(id: SocialAccountId): Promise<SocialAccount | null>;
-  findByProfileAndPlatform(
-    profileId: ProfileId,
-    platform: SocialPlatform,
-  ): Promise<SocialAccount | null>;
+  /** Contas ativas da pessoa, ordenadas por rede e data de entrada. */
+  findActiveByProfile(profileId: ProfileId): Promise<SocialAccount[]>;
+  /** Todas as contas ativas, de todas as pessoas. */
+  findAllActive(): Promise<SocialAccount[]>;
+  countActiveByProfileAndPlatform(profileId: ProfileId, platform: SocialPlatform): Promise<number>;
   findByPlatformUserId(
     platform: SocialPlatform,
     platformUserId: string,
-  ): Promise<SocialAccount | null>;
-  findAnyByProfileAndPlatform(
-    profileId: ProfileId,
-    platform: SocialPlatform,
   ): Promise<SocialAccount | null>;
   findAnyByPlatformUserId(
     platform: SocialPlatform,
@@ -257,11 +255,13 @@ export interface MetricsRepository {
     socialAccountId: SocialAccountId,
     window: { from: Date; to: Date },
   ): Promise<Map<ContentId, number>>;
+  /** Views elegíveis desde o início (Reels e vídeos não excluídos), por conta. */
+  totalViewsByAccounts(socialAccountIds: SocialAccountId[]): Promise<Map<SocialAccountId, number>>;
   /**
-   * Views somadas no fim de cada dia (horário de Brasília), a partir das medições guardadas.
-   * Dias antes da primeira medição vêm com `measured = false`.
+   * Views somadas no fim de cada dia (horário de Brasília), a partir das medições guardadas,
+   * juntando as contas informadas. Dias antes da primeira medição vêm com `measured = false`.
    */
-  dailyViewsByAccount(socialAccountId: SocialAccountId, days: number): Promise<DailyViews[]>;
+  dailyViewsByAccounts(socialAccountIds: SocialAccountId[], days: number): Promise<DailyViews[]>;
 }
 
 export interface DailyViews {
@@ -339,7 +339,8 @@ export interface PublishRankingEntryInput {
 }
 
 export interface PublishRankingInput {
-  platform: SocialPlatform;
+  /** Null publica o ranking geral, que soma todas as redes. */
+  platform: SocialPlatform | null;
   category: RankingCategory;
   /** Null publica o ranking geral; um id publica o ranking daquela campanha ou mês. */
   campaignId: string | null;
@@ -351,7 +352,7 @@ export interface PublishRankingInput {
 
 export interface RankingRepository {
   findPublished(
-    platform: SocialPlatform,
+    platform: SocialPlatform | null,
     category: RankingCategory,
     campaignId?: string | null,
   ): Promise<{ version: RankingVersion; entries: RankingEntry[] } | null>;

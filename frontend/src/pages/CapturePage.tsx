@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { GoogleEntry } from "@/components/auth/GoogleButton";
@@ -8,18 +8,10 @@ import { supabase } from "@/lib/supabase";
 import { useSurfaceTheme } from "@/lib/theme";
 import "./CapturePage.css";
 
-const NETWORKS = [
-  { id: "instagram", label: "Instagram" },
-  { id: "tiktok", label: "TikTok" },
-] as const;
-
 type FormState = {
   nome_completo: string;
   email: string;
   whatsapp: string;
-  instagram_handle: string;
-  tiktok_handle: string;
-  redes_sociais: string[];
   password: string;
   ranking_consent: boolean;
 };
@@ -31,9 +23,6 @@ const INITIAL: FormState = {
   nome_completo: "",
   email: "",
   whatsapp: "",
-  instagram_handle: "",
-  tiktok_handle: "",
-  redes_sociais: [],
   password: "",
   ranking_consent: false,
 };
@@ -44,30 +33,10 @@ const FIELD_ORDER: FieldName[] = [
   "email",
   "whatsapp",
   "password",
-  "redes_sociais",
-  "instagram_handle",
-  "tiktok_handle",
   "ranking_consent",
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const HANDLE_RE = /^[A-Za-z0-9._]+$/;
-
-/** Aceita "@perfil", "perfil" ou o link do perfil colado do app. */
-function cleanHandle(value: string) {
-  return value
-    .trim()
-    .replace(/^@+/, "")
-    .replace(/^https?:\/\//i, "")
-    .replace(/^(www\.|m\.)?(instagram|tiktok)\.com\//i, "")
-    .replace(/^@+/, "")
-    .replace(/[/?#].*$/, "");
-}
-
-function normalizeHandle(value: string) {
-  const clean = cleanHandle(value);
-  return clean ? `@${clean}` : "";
-}
 
 /** Só os dígitos do número, sem o 55 do Brasil quando a pessoa digita com ele. */
 function phoneDigits(value: string) {
@@ -80,14 +49,6 @@ function formatPhone(value: string) {
   if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   return value;
-}
-
-function handleError(value: string, network: string): string | undefined {
-  const clean = cleanHandle(value);
-  if (!clean) return `Informe o @ do ${network}.`;
-  if (/\s/.test(clean)) return "O @ não tem espaços. Copie como aparece no perfil.";
-  if (!HANDLE_RE.test(clean)) return "Use só letras, números, ponto e sublinhado.";
-  return undefined;
 }
 
 function validate(form: FormState): FieldErrors {
@@ -107,35 +68,11 @@ function validate(form: FormState): FieldErrors {
   if (form.password.length < 8) errors.password = "A senha precisa ter pelo menos 8 caracteres.";
   else if (form.password.length > 72) errors.password = "A senha pode ter no máximo 72 caracteres.";
 
-  const hasInstagram = form.redes_sociais.includes("instagram");
-  const hasTiktok = form.redes_sociais.includes("tiktok");
-  if (!hasInstagram && !hasTiktok) errors.redes_sociais = "Escolha Instagram, TikTok ou os dois.";
-  if (hasInstagram) errors.instagram_handle = handleError(form.instagram_handle, "Instagram");
-  if (hasTiktok) errors.tiktok_handle = handleError(form.tiktok_handle, "TikTok");
-
   if (!form.ranking_consent) {
     errors.ranking_consent = "Para participar, autorize a divulgação do seu nome no ranking.";
   }
 
-  for (const key of Object.keys(errors) as FieldName[]) {
-    if (!errors[key]) delete errors[key];
-  }
   return errors;
-}
-
-function IconCheck() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M3.5 8.4l2.9 2.9 6.1-6.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
 
 function FieldError({ id, message }: { id: string; message?: string }) {
@@ -152,23 +89,17 @@ type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "id" | "name">
   label: string;
   error?: string;
   hint?: string;
-  prefix?: string;
   trailing?: ReactNode;
 };
 
-function TextField({ id, label, error, hint, prefix, trailing, ...input }: TextFieldProps) {
+function TextField({ id, label, error, hint, trailing, ...input }: TextFieldProps) {
   const describedBy = [error ? `${id}-error` : null, hint ? `${id}-hint` : null]
     .filter(Boolean)
     .join(" ");
   return (
     <div className={`field${error ? " has-error" : ""}`}>
       <label htmlFor={id}>{label}</label>
-      <div className={`field__control${prefix ? " has-prefix" : ""}${trailing ? " has-trailing" : ""}`}>
-        {prefix ? (
-          <span className="field__prefix" aria-hidden="true">
-            {prefix}
-          </span>
-        ) : null}
+      <div className={`field__control${trailing ? " has-trailing" : ""}`}>
         <input
           id={id}
           name={id}
@@ -192,7 +123,6 @@ export function CapturePage() {
   useSurfaceTheme("arena");
   const navigate = useNavigate();
   const location = useLocation();
-  const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState<FormState>(INITIAL);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState("");
@@ -215,29 +145,10 @@ export function CapturePage() {
     });
   }
 
-  function toggleNetwork(id: string) {
-    const exists = form.redes_sociais.includes(id);
-    update(
-      "redes_sociais",
-      exists ? form.redes_sociais.filter((item) => item !== id) : [...form.redes_sociais, id],
-    );
-    if (exists) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[id === "instagram" ? "instagram_handle" : "tiktok_handle"];
-        return next;
-      });
-    }
-  }
-
   function focusFirstError(found: FieldErrors) {
     const first = FIELD_ORDER.find((key) => found[key]);
     if (!first) return;
-    const target =
-      first === "redes_sociais"
-        ? formRef.current?.querySelector<HTMLElement>(".net-tile")
-        : document.getElementById(first);
-    target?.focus();
+    document.getElementById(first)?.focus();
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -252,8 +163,6 @@ export function CapturePage() {
       return;
     }
 
-    const hasInstagram = form.redes_sociais.includes("instagram");
-    const hasTiktok = form.redes_sociais.includes("tiktok");
     const email = form.email.trim().toLowerCase();
     setLoading(true);
     try {
@@ -261,9 +170,6 @@ export function CapturePage() {
         nome_completo: form.nome_completo.trim(),
         email,
         whatsapp: formatPhone(form.whatsapp),
-        redes_sociais: form.redes_sociais,
-        instagram_handle: hasInstagram ? normalizeHandle(form.instagram_handle) : "",
-        tiktok_handle: hasTiktok ? normalizeHandle(form.tiktok_handle) : "",
         password: form.password,
         ranking_consent: true,
       });
@@ -293,9 +199,6 @@ export function CapturePage() {
     }
     navigate("/rankings", { replace: true });
   }
-
-  const hasInstagram = form.redes_sociais.includes("instagram");
-  const hasTiktok = form.redes_sociais.includes("tiktok");
 
   return (
     <div className="lp">
@@ -352,14 +255,23 @@ export function CapturePage() {
               Crie sua conta
             </h2>
             <p className="lp-form__sub">
-              Em menos de 1 minuto você já está na área dos embaixadores. A
-              equipe aprova o perfil para o ranking.
+              Em menos de 1 minuto você já está na área dos embaixadores.
+            </p>
+            <p className="lp-later">
+              <span className="lp-later__marks" aria-hidden="true">
+                <PlatformMark platform="instagram" size={26} />
+                <PlatformMark platform="tiktok" size={26} />
+              </span>
+              <span>
+                As contas do Instagram e do TikTok você adiciona depois, dentro
+                do app, em Conexões. A equipe aprova cada conta para o ranking.
+              </span>
             </p>
           </header>
 
           <GoogleEntry className="lp-google" divider="ou crie com e-mail e senha" />
 
-          <form ref={formRef} className="lp-fields" onSubmit={onSubmit} noValidate>
+          <form className="lp-fields" onSubmit={onSubmit} noValidate>
             <fieldset className="lp-fields__set" disabled={loading}>
               <div className="lp-fields__grid">
                 <TextField
@@ -424,68 +336,6 @@ export function CapturePage() {
                   }
                 />
               </div>
-
-              <fieldset
-                className={`lp-networks${errors.redes_sociais ? " has-error" : ""}`}
-                aria-describedby={errors.redes_sociais ? "redes_sociais-error" : undefined}
-              >
-                <legend>Em qual rede você vai publicar?</legend>
-                <p className="lp-networks__hint">Pode escolher as duas.</p>
-                <div className="net-grid">
-                  {NETWORKS.map((network) => {
-                    const selected = form.redes_sociais.includes(network.id);
-                    return (
-                      <button
-                        key={network.id}
-                        type="button"
-                        className={`net-tile${selected ? " is-on" : ""}`}
-                        aria-pressed={selected}
-                        onClick={() => toggleNetwork(network.id)}
-                      >
-                        <PlatformMark platform={network.id} size={30} />
-                        <span className="net-tile__label">{network.label}</span>
-                        <span className="net-tile__check" aria-hidden="true">
-                          {selected ? <IconCheck /> : null}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <FieldError id="redes_sociais" message={errors.redes_sociais} />
-              </fieldset>
-
-              {hasInstagram || hasTiktok ? (
-                <div className="lp-handles">
-                  {hasInstagram ? (
-                    <TextField
-                      id="instagram_handle"
-                      label="@ do Instagram"
-                      prefix="@"
-                      placeholder="seuinstagram"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      value={form.instagram_handle}
-                      error={errors.instagram_handle}
-                      onChange={(e) => update("instagram_handle", e.target.value.replace(/^@+/, ""))}
-                    />
-                  ) : null}
-                  {hasTiktok ? (
-                    <TextField
-                      id="tiktok_handle"
-                      label="@ do TikTok"
-                      prefix="@"
-                      placeholder="seutiktok"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      value={form.tiktok_handle}
-                      error={errors.tiktok_handle}
-                      onChange={(e) => update("tiktok_handle", e.target.value.replace(/^@+/, ""))}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
 
               <div className={`lp-consent-wrap${errors.ranking_consent ? " has-error" : ""}`}>
                 <label className="lp-consent">

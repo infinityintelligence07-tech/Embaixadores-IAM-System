@@ -82,11 +82,17 @@ export function humanizeReason(reason: string | null | undefined): string {
     case '':
       return 'Sua posição ainda não está disponível.';
     case 'Ranking ainda não publicado':
-      return 'O ranking desta rede ainda não foi publicado.';
+      return 'O ranking ainda não foi publicado.';
     case 'Social account not connected':
     case 'Account not connected':
     case 'Conta não conectada':
-      return 'Para entrar na competição, conecte esta rede com a sua conta.';
+      return 'Para entrar na competição, adicione uma conta do Instagram ou do TikTok em Conexões.';
+    case 'Nenhuma conta aprovada ainda':
+    case 'Nenhuma conta aprovada ainda.':
+      return 'Nenhuma conta aprovada ainda. Quando a equipe aprovar uma conta, ela passa a somar aqui.';
+    case 'Suas contas ainda estão em coleta':
+    case 'Suas contas ainda estão em coleta.':
+      return 'Suas contas ainda estão em coleta. Sua posição aparece depois da próxima leitura.';
     case 'Membership not approved':
     case 'Cadastro ainda não aprovado':
     case 'Aguardando aprovação da equipe.':

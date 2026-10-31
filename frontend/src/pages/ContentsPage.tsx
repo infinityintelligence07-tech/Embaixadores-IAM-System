@@ -51,7 +51,10 @@ function ContentRow({ item }: { item: ContentItem }) {
           {item.views === 1 ? 'view' : 'views'}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
-          <Badge tone="neutral">{platformLabel(item.platform)}</Badge>
+          <Badge tone="neutral">
+            {platformLabel(item.platform)}
+            {item.username ? ` @${item.username.replace(/^@/, '')}` : ''}
+          </Badge>
           <span>{day}</span>
         </div>
       </div>
@@ -146,7 +149,7 @@ export function ContentsPage() {
         <header className="mt-2">
           <h1 className="page-title">Conteúdos</h1>
           <p className="mt-2 text-text-muted">
-            Suas publicações nas redes conectadas e as views de cada uma.
+            As publicações de todas as suas contas e as views de cada uma.
           </p>
         </header>
       </div>
@@ -169,11 +172,11 @@ export function ContentsPage() {
         hasReadyAccount === false ? (
           <EmptyState
             icon={<Video className="size-8" />}
-            title="Conecte uma rede para ver seus vídeos"
-            description="Depois da conexão, cada publicação aparece aqui com as views dela."
+            title="Adicione uma conta para ver seus vídeos"
+            description="Depois de adicionar uma conta do Instagram ou do TikTok, cada publicação aparece aqui com as views dela."
             action={
               <Link to="/conexoes" className={linkButton}>
-                Conectar uma rede
+                Adicionar conta
               </Link>
             }
           />

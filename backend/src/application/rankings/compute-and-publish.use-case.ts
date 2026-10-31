@@ -1,6 +1,8 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { SocialPlatform, RankingCategory, ProfileId, AppRole } from '../../domain/types';
+import { RankingCategory, ProfileId, AppRole, SocialPlatform } from '../../domain/types';
+import { AmbassadorMembership, Profile, SocialAccount } from '../../domain/entities';
 import {
+  AmbassadorMetricAggregate,
   RankingRepository,
   MembershipRepository,
   SocialAccountRepository,
@@ -11,12 +13,40 @@ import {
 } from '../../ports/repositories.port';
 import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
-import { isEligibleForRanking } from '../../domain/eligibility';
-import { compareRankingCandidates, assignSequentialPositions, RankingCandidate } from '../../domain/ranking-rules';
+import {
+  AccountEligibilityInput,
+  ProfileEligibilityResult,
+  isProfileEligibleForRanking,
+} from '../../domain/eligibility';
+import {
+  compareRankingCandidates,
+  assignSequentialPositions,
+  combineAccountMetrics,
+  RankingCandidate,
+} from '../../domain/ranking-rules';
+import { networkName } from '../../domain/social-handle';
 import { Campaign, CampaignsService } from './campaigns.service';
 
-const PLATFORMS = [SocialPlatform.Instagram, SocialPlatform.TikTok];
 const CATEGORIES = [RankingCategory.TotalViews, RankingCategory.BestVideo];
+/** Null é o quadro geral (todas as redes); os outros somam só as contas daquela rede. */
+const BOARDS: (SocialPlatform | null)[] = [null, SocialPlatform.Instagram, SocialPlatform.TikTok];
+
+export interface CountedAccount {
+  account: SocialAccount;
+  isStale: boolean;
+}
+
+export interface PersonEligibility extends ProfileEligibilityResult {
+  /** Contas que somam no ranking. */
+  counted: CountedAccount[];
+}
+
+/** Pessoa elegível com as métricas de cada conta que soma, no período pedido. */
+interface RankedPerson {
+  profile: Profile;
+  membership: AmbassadorMembership;
+  accounts: (CountedAccount & { metrics: AmbassadorMetricAggregate })[];
+}
 
 @Injectable()
 export class ComputeAndPublishRankingUseCase {
@@ -67,16 +97,26 @@ export class ComputeAndPublishRankingUseCase {
     if (firstError) throw firstError;
   }
 
-  /** Um quadro com erro não impede os outros de publicar; o primeiro erro sobe no fim. */
+  /**
+   * Publica os quadros de um período: geral e um por rede, em cada categoria. As métricas são
+   * lidas uma vez; um quadro com erro não impede os outros, e o primeiro erro sobe no fim.
+   */
   async publishBoards(campaign: Campaign | null): Promise<void> {
+    const now = this.clock.now();
+    const staleToleranceHours = await this.settingsRepo.getNumber('stale_tolerance_hours', 24);
+    const people = await this.collectPeople(campaign, staleToleranceHours, now);
+    this.logger.log(
+      `${people.length} pessoa(s) elegível(is)${campaign ? ` em ${campaign.name}` : ''}`,
+    );
+
     let firstError: unknown = null;
-    for (const platform of PLATFORMS) {
+    for (const platform of BOARDS) {
       for (const category of CATEGORIES) {
         try {
-          await this.execute(platform, category, campaign);
+          await this.publishBoard(people, platform, category, campaign, staleToleranceHours, now);
         } catch (error) {
           this.logger.error(
-            `Falha ao publicar ${platform}/${category}${campaign ? ` (${campaign.name})` : ''}: ${error}`,
+            `Falha ao publicar ${platform ?? 'geral'}/${category}${campaign ? ` (${campaign.name})` : ''}: ${error}`,
           );
           firstError ??= error;
         }
@@ -84,119 +124,130 @@ export class ComputeAndPublishRankingUseCase {
     }
     if (firstError) throw firstError;
   }
-  
-  async execute(
-    platform: SocialPlatform,
-    category: RankingCategory,
-    campaign: Campaign | null = null,
-  ): Promise<void> {
-    const now = this.clock.now();
-    
-    // Get stale tolerance from settings
-    const staleToleranceHours = await this.settingsRepo.getNumber(
-      'stale_tolerance_hours',
-      24,
+
+  /**
+   * Mesma regra do cálculo, para explicar à pessoa por que ela está fora do ranking.
+   * Com `platform`, olha só as contas daquela rede.
+   */
+  async eligibilityFor(
+    profileId: ProfileId,
+    staleToleranceHours?: number,
+    platform: SocialPlatform | null = null,
+  ): Promise<PersonEligibility> {
+    const [profile, membership, accounts] = await Promise.all([
+      this.profileRepo.findById(profileId),
+      this.membershipRepo.findByProfileId(profileId),
+      this.socialAccountRepo.findActiveByProfile(profileId),
+    ]);
+    const tolerance =
+      staleToleranceHours ?? (await this.settingsRepo.getNumber('stale_tolerance_hours', 24));
+    return this.evaluate(
+      profile,
+      membership,
+      platform ? accounts.filter((account) => account.platform === platform) : accounts,
+      tolerance,
+      this.clock.now(),
+      platform,
     );
-    
-    this.logger.log(
-      `Computing ${category} ranking for ${platform}${campaign ? ` (${campaign.name})` : ''} (stale tolerance: ${staleToleranceHours}h)`,
-    );
-    
-    // Get all approved memberships
-    const memberships = await this.membershipRepo.findApproved();
-    
-    const candidates: RankingCandidate[] = [];
-    
+  }
+
+  private async collectPeople(
+    campaign: Campaign | null,
+    staleToleranceHours: number,
+    now: Date,
+  ): Promise<RankedPerson[]> {
+    const [memberships, accounts] = await Promise.all([
+      this.membershipRepo.findApproved(),
+      this.socialAccountRepo.findAllActive(),
+    ]);
+    const accountsByProfile = new Map<string, SocialAccount[]>();
+    for (const account of accounts) {
+      const list = accountsByProfile.get(account.profileId) ?? [];
+      list.push(account);
+      accountsByProfile.set(account.profileId, list);
+    }
+
+    const window = campaign ? { from: campaign.startsAt, to: campaign.endsAt } : null;
+    const people: RankedPerson[] = [];
+
     for (const membership of memberships) {
+      const mine = accountsByProfile.get(membership.profileId);
+      if (!mine?.length) continue;
       const profile = await this.profileRepo.findById(membership.profileId);
-      // A equipe acompanha a competição, mas não disputa posição com os embaixadores.
-      if (!profile || profile.deletedAt || profile.role === AppRole.Admin) {
+      if (!profile || profile.deletedAt) continue;
+
+      const eligibility = await this.evaluate(profile, membership, mine, staleToleranceHours, now);
+      if (!eligibility.eligible) {
+        this.logger.debug(`Profile ${membership.profileId} ineligible: ${eligibility.reason}`);
         continue;
       }
 
-      const account = await this.socialAccountRepo.findByProfileAndPlatform(
-        membership.profileId,
-        platform,
-      );
-      
-      if (!account) {
-        continue;
-      }
-      
-      // Check if first sync is incomplete
-      const latestRun = await this.metricsRepo.getLatestAccountSnapshot(account.id);
-      const firstSyncIncomplete = !latestRun && !account.lastSuccessfulSyncAt;
-      
-      // Check eligibility
-      const eligibility = isEligibleForRanking({
-        membershipStatus: membership.status,
-        connectionStatus: account.status,
-        reviewStatus: account.reviewStatus,
-        reviewNote: account.reviewNote,
-        lastSyncedAt: account.lastSyncedAt,
-        staleToleranceHours,
-        now,
-        syncCoverageRatio: account.syncCoverageRatio,
-        firstSyncIncomplete,
-      });
-      
-      if (!eligibility.eligible) {
-        this.logger.debug(
-          `Profile ${membership.profileId} ineligible: ${eligibility.reason}`,
+      const counted: RankedPerson['accounts'] = [];
+      for (const item of eligibility.counted) {
+        const metrics = await this.metricsRepo.aggregateEligibleMetricsByAccount(
+          item.account.id,
+          window,
         );
-        continue;
+        if (metrics) counted.push({ ...item, metrics });
       }
-      
-      // Get metrics
-      const aggregate = await this.metricsRepo.aggregateEligibleMetricsByAccount(
-        account.id,
-        campaign ? { from: campaign.startsAt, to: campaign.endsAt } : null,
-      );
-      
-      if (!aggregate) {
-        continue;
-      }
-      
+      if (counted.length > 0) people.push({ profile, membership, accounts: counted });
+    }
+    return people;
+  }
+
+  private async publishBoard(
+    people: RankedPerson[],
+    platform: SocialPlatform | null,
+    category: RankingCategory,
+    campaign: Campaign | null,
+    staleToleranceHours: number,
+    now: Date,
+  ): Promise<void> {
+    const candidates: RankingCandidate[] = [];
+    for (const person of people) {
+      // No quadro de uma rede, a pessoa entra só com conta aprovada naquela rede.
+      const accounts = platform
+        ? person.accounts.filter((item) => item.account.platform === platform)
+        : person.accounts;
+      if (accounts.length === 0) continue;
+      const metrics = combineAccountMetrics(accounts.map((item) => item.metrics));
+
+      // A data mais antiga entre as contas que somam: o dado da pessoa vale até ali.
+      const syncedAt = accounts
+        .map((item) => item.account.lastSyncedAt)
+        .filter((value): value is Date => value !== null)
+        .sort((a, b) => a.getTime() - b.getTime());
+
       candidates.push({
-        profileId: membership.profileId,
-        publicName: profile.publicName,
-        avatarUrl: profile.avatarUrl,
-        totalViews: aggregate.totalViews,
-        bestVideoViews: aggregate.bestVideoViews,
-        bestContentId: aggregate.bestContentId,
-        approvedAt: membership.approvedAt ?? membership.createdAt,
-        lastSyncedAt: account.lastSyncedAt,
-        isStale: eligibility.isStale || false,
+        profileId: person.profile.id,
+        publicName: person.profile.publicName,
+        avatarUrl: person.profile.avatarUrl,
+        totalViews: metrics.totalViews,
+        bestVideoViews: metrics.bestVideoViews,
+        bestContentId: metrics.bestContentId,
+        approvedAt: person.membership.approvedAt ?? person.membership.createdAt,
+        lastSyncedAt: syncedAt[0] ?? null,
+        isStale: accounts.some((item) => item.isStale),
       });
     }
-    
-    this.logger.log(`Found ${candidates.length} eligible candidates`);
-    
-    // Sort candidates
-    const sorted = [...candidates].sort((a, b) =>
-      compareRankingCandidates(a, b, category),
+
+    const sorted = [...candidates].sort((a, b) => compareRankingCandidates(a, b, category));
+    const entries: PublishRankingEntryInput[] = assignSequentialPositions(sorted).map(
+      (candidate) => ({
+        position: candidate.position,
+        profileId: candidate.profileId as ProfileId,
+        publicName: candidate.publicName,
+        avatarUrl: candidate.avatarUrl,
+        totalViews: candidate.totalViews,
+        bestVideoViews: candidate.bestVideoViews,
+        bestContentId: candidate.bestContentId as PublishRankingEntryInput['bestContentId'],
+        score:
+          category === RankingCategory.TotalViews ? candidate.totalViews : candidate.bestVideoViews,
+        lastSyncedAt: candidate.lastSyncedAt,
+        isStale: candidate.isStale,
+      }),
     );
-    
-    // Assign positions
-    const ranked = assignSequentialPositions(sorted);
-    
-    // Calculate scores (based on position for simplicity)
-    const entries: PublishRankingEntryInput[] = ranked.map(candidate => ({
-      position: candidate.position,
-      profileId: candidate.profileId as any,
-      publicName: candidate.publicName,
-      avatarUrl: candidate.avatarUrl,
-      totalViews: candidate.totalViews,
-      bestVideoViews: candidate.bestVideoViews,
-      bestContentId: candidate.bestContentId as any,
-      score: category === RankingCategory.TotalViews 
-        ? candidate.totalViews 
-        : candidate.bestVideoViews,
-      lastSyncedAt: candidate.lastSyncedAt,
-      isStale: candidate.isStale,
-    }));
-    
-    // Publish atomically
+
     const result = await this.rankingRepo.publishAtomic({
       platform,
       category,
@@ -205,9 +256,51 @@ export class ComputeAndPublishRankingUseCase {
       computedAt: now,
       entries,
     });
-    
+
     this.logger.log(
-      `Published ranking ${result.version.id} with ${entries.length} entries`,
+      `Published ${platform ?? 'geral'}/${category} ranking ${result.version.id} with ${entries.length} entries`,
     );
+  }
+
+  private async evaluate(
+    profile: Profile | null,
+    membership: AmbassadorMembership | null,
+    accounts: SocialAccount[],
+    staleToleranceHours: number,
+    now: Date,
+    platform: SocialPlatform | null = null,
+  ): Promise<PersonEligibility> {
+    const inputs: AccountEligibilityInput[] = [];
+    for (const account of accounts) {
+      inputs.push({
+        connectionStatus: account.status,
+        reviewStatus: account.reviewStatus,
+        reviewNote: account.reviewNote,
+        lastSyncedAt: account.lastSyncedAt,
+        syncCoverageRatio: account.syncCoverageRatio,
+        firstSyncIncomplete: await this.firstSyncIncomplete(account),
+      });
+    }
+    // A equipe acompanha a competição, mas não disputa posição com os embaixadores.
+    const result = isProfileEligibleForRanking({
+      isAdmin: profile?.role === AppRole.Admin,
+      membershipStatus: membership?.status ?? null,
+      accounts: inputs,
+      staleToleranceHours,
+      now,
+      networkName: platform ? networkName(platform) : undefined,
+    });
+    return {
+      ...result,
+      counted: result.countedAccounts.map((index) => ({
+        account: accounts[index],
+        isStale: result.staleAccounts.includes(index),
+      })),
+    };
+  }
+
+  private async firstSyncIncomplete(account: SocialAccount): Promise<boolean> {
+    if (account.lastSuccessfulSyncAt) return false;
+    return !(await this.metricsRepo.getLatestAccountSnapshot(account.id));
   }
 }

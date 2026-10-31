@@ -1,6 +1,5 @@
 import { Controller, Get, UseGuards, Req, Inject, Query } from '@nestjs/common';
 import { AuthGuard } from '../guards/auth.guard';
-import { SocialPlatform } from '../../../domain/types';
 import {
   SocialAccountRepository,
   ContentRepository,
@@ -34,27 +33,21 @@ export class ContentsController {
     const window = campaign ? { from: campaign.startsAt, to: campaign.endsAt } : null;
     const allContents: any[] = [];
 
-    for (const platform of [SocialPlatform.Instagram, SocialPlatform.TikTok]) {
-      const account = await this.socialAccountRepo.findByProfileAndPlatform(
-        req.user.id,
-        platform,
-      );
-
-      if (!account) {
-        continue;
-      }
-
+    for (const account of await this.socialAccountRepo.findActiveByProfile(req.user.id)) {
       const gained = window
         ? await this.metricsRepo.gainedViewsByContent(account.id, window)
         : null;
       const contents = (await this.contentRepo.findEligibleByAccount(account.id)).filter(
         (content) =>
-          countsTowardRanking(platform, content.mediaType) && (!gained || gained.has(content.id)),
+          countsTowardRanking(account.platform, content.mediaType) &&
+          (!gained || gained.has(content.id)),
       );
 
       for (const content of contents) {
         allContents.push({
           id: content.id,
+          accountId: account.id,
+          username: account.username,
           platform: content.platform,
           title: content.title || 'Sem título',
           url: content.permalink || '',

@@ -1,11 +1,5 @@
-import type { RankingCategory, SocialPlatform } from '@/lib/api';
-import {
-  categoryPhrase,
-  formatViews,
-  humanizeReason,
-  ordinal,
-  platformLabel,
-} from '@/lib/format';
+import type { RankingCategory } from '@/lib/api';
+import { categoryPhrase, formatViews, humanizeReason, ordinal } from '@/lib/format';
 
 export interface ChaseInput {
   eligible: boolean;
@@ -16,7 +10,6 @@ export interface ChaseInput {
   myScore: number | null;
   belowGap: number | null;
   category: RankingCategory;
-  platform: SocialPlatform;
 }
 
 export interface ChaseCopy {
@@ -26,7 +19,7 @@ export interface ChaseCopy {
 }
 
 export function describeChase(input: ChaseInput): ChaseCopy {
-  const context = `${sentence(categoryPhrase(input.category))} no ${platformLabel(input.platform)}.`;
+  const context = `${sentence(categoryPhrase(input.category))}, somando todas as suas contas.`;
 
   if (!input.eligible || input.position == null) {
     return {
@@ -39,8 +32,8 @@ export function describeChase(input: ChaseInput): ChaseCopy {
   // A posição já está em destaque no título; aqui entra só o tamanho do grupo.
   const field =
     input.total > 1
-      ? `${sentence(categoryPhrase(input.category))} no ${platformLabel(input.platform)}, entre ${new Intl.NumberFormat('pt-BR').format(input.total)} embaixadores.`
-      : `${context} Só você no ranking por enquanto.`;
+      ? `${sentence(categoryPhrase(input.category))}, entre ${new Intl.NumberFormat('pt-BR').format(input.total)} embaixadores.`
+      : `${sentence(categoryPhrase(input.category))}. Só você no ranking por enquanto.`;
 
   if (input.position === 1) {
     const lead =

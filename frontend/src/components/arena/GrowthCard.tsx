@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
-import { api, type GrowthResponse, type SocialPlatform } from '@/lib/api';
-import { formatViews, platformLabel } from '@/lib/format';
+import { api, type GrowthResponse } from '@/lib/api';
+import { formatViews } from '@/lib/format';
 
 const WIDTH = 320;
 const HEIGHT = 96;
@@ -26,41 +26,40 @@ function chartPath(values: number[]): { line: string; area: string } {
   return { line, area };
 }
 
-/** Quanto as views do embaixador cresceram por dia, numa rede. */
-export function GrowthCard({ platform, connected }: { platform: SocialPlatform; connected: boolean }) {
+/** Quanto as views do embaixador cresceram por dia, somando todas as contas aprovadas. */
+export function GrowthCard({ active }: { active: boolean }) {
   const gradientId = useId();
   const [data, setData] = useState<GrowthResponse | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!connected) return;
-    let active = true;
+    if (!active) return;
+    let current = true;
     setState('loading');
     api
-      .growth(platform)
+      .growth()
       .then((result) => {
-        if (!active) return;
+        if (!current) return;
         setData(result);
         setState('ready');
       })
       .catch(() => {
-        if (active) setState('error');
+        if (current) setState('error');
       });
     return () => {
-      active = false;
+      current = false;
     };
-  }, [platform, connected, attempt]);
+  }, [active, attempt]);
 
-  if (!connected) return null;
+  if (!active) return null;
 
-  const name = platformLabel(platform);
   const points = data?.points ?? [];
 
   return (
     <section className="growth" aria-labelledby={`${gradientId}-title`}>
       <header>
-        <h2 id={`${gradientId}-title`}>Seu crescimento no {name}</h2>
+        <h2 id={`${gradientId}-title`}>Seu crescimento</h2>
         {state === 'ready' && data?.lastWeek != null ? (
           <p className="growth-delta">
             {data.lastWeek > 0 ? `+${formatViews(data.lastWeek)} views em 7 dias` : 'Sem views novas em 7 dias'}
@@ -84,7 +83,7 @@ export function GrowthCard({ platform, connected }: { platform: SocialPlatform; 
       ) : (
         <>
           <p className="growth-total">
-            <strong>{formatViews(data?.current ?? 0)}</strong> views acumuladas até hoje
+            <strong>{formatViews(data?.current ?? 0)}</strong> views acumuladas até hoje, somando suas contas aprovadas
           </p>
           <svg
             className="growth-chart"

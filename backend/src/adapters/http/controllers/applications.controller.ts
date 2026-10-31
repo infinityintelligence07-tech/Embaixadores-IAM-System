@@ -35,17 +35,12 @@ export class ApplicationsController {
       nome_completo: stringField(body.nome_completo),
       email: stringField(body.email),
       whatsapp: stringField(body.whatsapp),
-      redes_sociais: Array.isArray(body.redes_sociais)
-        ? body.redes_sociais.filter((item): item is string => typeof item === 'string')
-        : [],
-      instagram_handle: stringField(body.instagram_handle),
-      tiktok_handle: stringField(body.tiktok_handle),
       password: stringField(body.password),
       ranking_consent: body.ranking_consent === true,
     });
   }
 
-  /** Quem entrou pelo Google completa aqui o WhatsApp, a rede e o @. */
+  /** Quem entrou pelo Google completa aqui o WhatsApp e o consentimento. */
   @Post('complete')
   @UseGuards(AuthGuard)
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
@@ -56,11 +51,6 @@ export class ApplicationsController {
       { id: profile.id, email: profile.email, fullName: profile.fullName },
       {
         whatsapp: stringField(body.whatsapp),
-        redes_sociais: Array.isArray(body.redes_sociais)
-          ? body.redes_sociais.filter((item): item is string => typeof item === 'string')
-          : [],
-        instagram_handle: stringField(body.instagram_handle),
-        tiktok_handle: stringField(body.tiktok_handle),
         ranking_consent: body.ranking_consent === true,
       },
     );

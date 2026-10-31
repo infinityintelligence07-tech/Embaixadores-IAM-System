@@ -6,24 +6,23 @@ import { handleError, normalizeHandle } from '@/lib/connection';
 import { platformLabel } from '@/lib/format';
 
 interface SocialHandleDialogProps {
-  /** Rede em conexão. Sem rede, o diálogo fica fechado. */
+  /** Rede da conta nova. Sem rede, o diálogo fica fechado. */
   platform: SocialPlatform | null;
-  /** Conta atual nessa rede, se houver. O @ dela vem preenchido. */
-  account: SocialAccount | null;
-  suggestedHandle: string | null;
   /** Quem abriu o diálogo. Recebe o foco de volta ao fechar. */
   returnFocusTo?: HTMLElement | null;
+  /** Troca o envio ao servidor, usado na prévia local. */
+  submitAccount?: (platform: SocialPlatform, handle: string) => Promise<SocialAccount>;
   onClose: () => void;
-  onChanged: (account: SocialAccount) => void;
+  onAdded: (account: SocialAccount) => void;
 }
 
+/** Adiciona mais uma conta da rede pelo @. O servidor confere o perfil e o limite por rede. */
 export function SocialHandleDialog({
   platform,
-  account,
-  suggestedHandle,
   returnFocusTo,
+  submitAccount = api.addAccount,
   onClose,
-  onChanged,
+  onAdded,
 }: SocialHandleDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -31,7 +30,6 @@ export function SocialHandleDialog({
   const descriptionId = useId();
   const open = platform !== null;
   const name = platform ? platformLabel(platform) : '';
-  const confirming = account?.status === 'pending_verification';
   const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +42,7 @@ export function SocialHandleDialog({
       openerRef.current =
         returnFocusTo ??
         (active instanceof HTMLElement && active !== document.body ? active : null);
-      setHandle(normalizeHandle(account?.username) || normalizeHandle(suggestedHandle));
+      setHandle('');
       setError(null);
       dialog.showModal();
     } else if (!open && dialog.open) {
@@ -70,8 +68,8 @@ export function SocialHandleDialog({
     if (!clean) {
       setError(
         handle.trim()
-          ? 'Esse link é de uma publicação. Digite só o seu @, por exemplo seuperfil.'
-          : `Digite o seu @ do ${name}.`,
+          ? 'Esse link é de uma publicação. Digite só o @ do perfil, por exemplo seuperfil.'
+          : `Digite o @ da conta do ${name}.`,
       );
       return;
     }
@@ -84,8 +82,8 @@ export function SocialHandleDialog({
     setBusy(true);
     setError(null);
     try {
-      const next = await api.claimHandle(platform, clean);
-      onChanged(next);
+      const next = await submitAccount(platform, clean);
+      onAdded(next);
       onClose();
     } catch (err) {
       setError(
@@ -116,7 +114,7 @@ export function SocialHandleDialog({
     >
       <form className="p-6" onSubmit={submit} noValidate>
         <h2 id={titleId} className="text-lg font-semibold text-text">
-          {confirming ? `Confirmar o seu @ do ${name}` : `Conectar o ${name}`}
+          Adicionar conta do {name}
         </h2>
         <p id={descriptionId} className="mt-2.5 text-sm leading-normal text-text-muted">
           Digite o @ do perfil onde você posta, ou cole o link do perfil. Não pedimos senha.
@@ -125,7 +123,7 @@ export function SocialHandleDialog({
           <Input
             id={inputId}
             name={inputId}
-            label={`Seu @ no ${name}`}
+            label={`@ da conta no ${name}`}
             leading="@"
             value={handle}
             onChange={(event) => {
@@ -140,7 +138,7 @@ export function SocialHandleDialog({
             enterKeyHint="go"
             className="min-h-[44px] text-base sm:text-sm"
             error={error ?? undefined}
-            hint="O perfil precisa estar público. A equipe confere antes de ele entrar no ranking."
+            hint="O perfil precisa estar público. A equipe confere antes de a conta somar no ranking."
             disabled={busy}
           />
         </div>
@@ -149,7 +147,7 @@ export function SocialHandleDialog({
             Cancelar
           </Button>
           <Button type="submit" loading={busy}>
-            {busy ? 'Conferindo...' : confirming ? 'Confirmar' : 'Conectar'}
+            {busy ? 'Conferindo...' : 'Adicionar conta'}
           </Button>
         </div>
       </form>

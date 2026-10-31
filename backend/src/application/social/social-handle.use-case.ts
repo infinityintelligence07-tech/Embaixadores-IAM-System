@@ -10,7 +10,13 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { SocialAccount } from '../../domain/entities';
-import { bioHasCode, parseHandle } from '../../domain/social-handle';
+import {
+  MAX_ACTIVE_ACCOUNTS_PER_PLATFORM,
+  accountLimitMessage,
+  bioHasCode,
+  networkName,
+  parseHandle,
+} from '../../domain/social-handle';
 import {
   AccountReviewStatus,
   ConnectionStatus,
@@ -39,22 +45,10 @@ function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
 }
 
-function networkName(platform: SocialPlatform): string {
-  switch (platform) {
-    case SocialPlatform.Instagram:
-      return 'Instagram';
-    case SocialPlatform.TikTok:
-      return 'TikTok';
-    default: {
-      const exhaustive: never = platform;
-      return exhaustive;
-    }
-  }
-}
-
 /**
  * Conexão sem login na rede: o embaixador informa o @ e a coleta começa na hora.
- * Quem garante que o @ é da pessoa é a equipe, na análise que libera o ranking.
+ * Cada @ novo vira mais uma conta da pessoa (até 5 ativas por rede). Quem garante que o @
+ * é da pessoa é a equipe, na análise que libera a conta para o ranking.
  */
 @Injectable()
 export class SocialHandleUseCase {
@@ -103,9 +97,17 @@ export class SocialHandleUseCase {
     const now = this.clock.now();
     // A mesma conta pode estar gravada com o id da API oficial ou com o da leitura pelo @.
     const accountIds = [profile.platformUserId, ...profile.aliasUserIds];
+    let mine: SocialAccount | null = null;
     for (const accountId of accountIds) {
       const holder = await this.socialAccountRepo.findAnyByPlatformUserId(platform, accountId);
-      if (!holder || holder.profileId === profileId) continue;
+      if (!holder) continue;
+      if (holder.profileId === profileId) {
+        // Prefere a linha ativa; uma removida antes é reaproveitada se for a única.
+        if (!mine || (mine.disconnectedAt !== null && holder.disconnectedAt === null)) {
+          mine = holder;
+        }
+        continue;
+      }
       const holderKeeps =
         holder.disconnectedAt === null &&
         holder.status !== ConnectionStatus.PendingVerification &&
@@ -126,8 +128,6 @@ export class SocialHandleUseCase {
       });
     }
 
-    const mine = await this.socialAccountRepo.findAnyByProfileAndPlatform(profileId, platform);
-    const sameAccount = mine ? accountIds.includes(mine.platformUserId) : false;
     const identity = {
       platformUserId: profile.platformUserId,
       username: profile.username,
@@ -159,21 +159,29 @@ export class SocialHandleUseCase {
       syncMessage: 'Conta recebida. A primeira coleta começa agora.',
     };
 
+    // Só uma conta que ainda não está ativa ocupa uma vaga nova na rede.
+    if (!mine || mine.disconnectedAt !== null) {
+      const active = await this.socialAccountRepo.countActiveByProfileAndPlatform(
+        profileId,
+        platform,
+      );
+      if (active >= MAX_ACTIVE_ACCOUNTS_PER_PLATFORM) {
+        throw new ConflictException(accountLimitMessage(platform));
+      }
+    }
+
     let account: SocialAccount;
     try {
       if (mine) {
+        // A mesma conta (ativa com a coleta parada, ou removida antes) volta a coletar e
+        // mantém a decisão da equipe.
         await this.syncJobRepo.cancelActiveForAccount(mine.id);
         await this.socialAccountRepo.deleteCredentials(mine.id);
-        // Os ids de conteúdo da leitura pelo @ não batem com os da API oficial nem com outra conta.
-        if (!sameAccount || mine.transport !== SocialTransport.PublicApi) {
+        // Os ids de conteúdo da leitura pelo @ não batem com os da API oficial.
+        if (mine.transport !== SocialTransport.PublicApi) {
           await this.retireContents(mine.id);
         }
-        account = await this.socialAccountRepo.update(mine.id, {
-          ...identity,
-          ...connected,
-          // Outra conta precisa de nova análise; a mesma conta mantém a decisão da equipe.
-          ...(sameAccount ? {} : { reviewStatus: AccountReviewStatus.Pending, reviewNote: null }),
-        });
+        account = await this.socialAccountRepo.update(mine.id, { ...identity, ...connected });
       } else {
         const created = await this.socialAccountRepo.create({
           profileId,
@@ -186,8 +194,8 @@ export class SocialHandleUseCase {
       }
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
-      // Dois pedidos ao mesmo tempo (clique duplo, cadastro e Conexões) ou outra pessoa
-      // conectou o mesmo @ entre a conferência e a gravação.
+      // Dois pedidos do mesmo @ ao mesmo tempo (clique duplo) ou outra pessoa conectou o
+      // mesmo @ entre a conferência e a gravação.
       return this.resolveConcurrentClaim(profileId, platform, accountIds);
     }
     await this.syncJobRepo.enqueue({ socialAccountId: account.id, priority: 200 });
@@ -204,8 +212,14 @@ export class SocialHandleUseCase {
 
   async verify(profileId: ProfileId, platform: SocialPlatform): Promise<SocialAccount> {
     const name = networkName(platform);
-    const account = await this.socialAccountRepo.findByProfileAndPlatform(profileId, platform);
-    if (!account || account.transport !== SocialTransport.PublicApi || !account.username) {
+    const candidates = (await this.socialAccountRepo.findActiveByProfile(profileId)).filter(
+      (item) =>
+        item.platform === platform && item.transport === SocialTransport.PublicApi && item.username,
+    );
+    const account =
+      candidates.find((item) => item.status === ConnectionStatus.PendingVerification) ??
+      candidates[0];
+    if (!account || !account.username) {
       throw new NotFoundException(`Informe o seu @ do ${name} primeiro.`);
     }
     if (account.status !== ConnectionStatus.PendingVerification && account.verifiedAt) {
@@ -265,9 +279,11 @@ export class SocialHandleUseCase {
     platform: SocialPlatform,
     accountIds: string[],
   ): Promise<SocialAccount> {
-    const mine = await this.socialAccountRepo.findAnyByProfileAndPlatform(profileId, platform);
-    if (mine && mine.disconnectedAt === null && accountIds.includes(mine.platformUserId)) {
-      return mine;
+    for (const accountId of accountIds) {
+      const holder = await this.socialAccountRepo.findAnyByPlatformUserId(platform, accountId);
+      if (holder && holder.profileId === profileId && holder.disconnectedAt === null) {
+        return holder;
+      }
     }
     for (const accountId of accountIds) {
       const holder = await this.socialAccountRepo.findAnyByPlatformUserId(platform, accountId);

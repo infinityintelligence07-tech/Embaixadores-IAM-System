@@ -12,13 +12,10 @@ import { loadConfig } from '../../infrastructure/config/env';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 import { ClockPort } from '../../ports/clock.port';
 import { MembershipRepository } from '../../ports/repositories.port';
-import { ProfileId, SocialPlatform } from '../../domain/types';
+import { MembershipStatus, ProfileId } from '../../domain/types';
 import { AccountReviewService } from '../social/account-review.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { SocialHandleUseCase } from '../social/social-handle.use-case';
-import { parseHandle } from '../../domain/social-handle';
 
-const NETWORKS = new Set(['instagram', 'tiktok']);
 // Domínio público das páginas; areaembaixadores.* só serve a API e redireciona as telas para cá.
 const LOGIN_REDIRECT = 'https://embaixadores.iamcontrol.com.br/auth/callback';
 
@@ -49,9 +46,6 @@ export interface SubmitApplicationInput {
   nome_completo?: string;
   email?: string;
   whatsapp?: string;
-  redes_sociais?: string[];
-  instagram_handle?: string;
-  tiktok_handle?: string;
   password?: string;
   ranking_consent?: boolean;
 }
@@ -78,58 +72,26 @@ const MAX_PHONE_DIGITS = 15;
 
 export interface SignupDetails {
   whatsapp: string;
-  redes: string[];
-  instagramHandle: string;
-  tiktokHandle: string;
 }
 
-/** Mesmas regras no cadastro por e-mail e no complemento de quem entrou pelo Google. */
+/**
+ * Mesmas regras no cadastro por e-mail e no complemento de quem entrou pelo Google.
+ * As redes não entram no cadastro: as contas são adicionadas depois, em Conexões.
+ */
 export function validateSignupDetails(
-  input: Pick<
-    SubmitApplicationInput,
-    'whatsapp' | 'redes_sociais' | 'instagram_handle' | 'tiktok_handle' | 'ranking_consent'
-  >,
+  input: Pick<SubmitApplicationInput, 'whatsapp' | 'ranking_consent'>,
 ): SignupDetails {
   const whatsapp = normalizePhone(input.whatsapp ?? '');
-  const redes = [
-    ...new Set(
-      (input.redes_sociais ?? [])
-        .map((item) => item.trim().toLowerCase())
-        .filter((item) => NETWORKS.has(item)),
-    ),
-  ];
-  const instagramHandle = normalizeHandle(input.instagram_handle ?? '');
-  const tiktokHandle = normalizeHandle(input.tiktok_handle ?? '');
-
   if (whatsapp.length < 10) throw new BadRequestException('Informe um WhatsApp válido, com DDD.');
   if (whatsapp.length > MAX_PHONE_DIGITS) {
     throw new BadRequestException('Esse WhatsApp tem dígitos demais. Confira o número com DDD.');
-  }
-  if (redes.length === 0) {
-    throw new BadRequestException('Selecione Instagram, TikTok ou os dois.');
-  }
-  if (redes.includes('instagram')) {
-    if (!instagramHandle) throw new BadRequestException('Informe o @ do Instagram.');
-    if (!parseHandle(SocialPlatform.Instagram, instagramHandle)) {
-      throw new BadRequestException(
-        'Esse @ do Instagram não é válido. Use só letras, números, ponto e sublinhado, até 30 caracteres.',
-      );
-    }
-  }
-  if (redes.includes('tiktok')) {
-    if (!tiktokHandle) throw new BadRequestException('Informe o @ do TikTok.');
-    if (!parseHandle(SocialPlatform.TikTok, tiktokHandle)) {
-      throw new BadRequestException(
-        'Esse @ do TikTok não é válido. Use só letras, números, ponto e sublinhado, de 2 a 24 caracteres.',
-      );
-    }
   }
   if (input.ranking_consent !== true) {
     throw new BadRequestException(
       'Para participar, autorize a divulgação do seu nome público no ranking.',
     );
   }
-  return { whatsapp, redes, instagramHandle, tiktokHandle };
+  return { whatsapp };
 }
 
 @Injectable()
@@ -143,7 +105,6 @@ export class ApplicationsService {
     private readonly membershipRepo: MembershipRepository,
     private readonly accountReview: AccountReviewService,
     private readonly notifications: NotificationsService,
-    private readonly socialHandles: SocialHandleUseCase,
   ) {}
 
   private authClient(): SupabaseClient {
@@ -156,7 +117,7 @@ export class ApplicationsService {
     return this.areaAuth;
   }
 
-  /** Quem entrou pelo Google ainda não tem candidatura: falta WhatsApp, rede e @. */
+  /** Quem entrou pelo Google ainda não tem candidatura: falta WhatsApp e consentimento. */
   async needsSignupDetails(profileId: string, email: string): Promise<boolean> {
     const found = await getPool().query(
       `SELECT 1 FROM applications WHERE profile_id = $1 OR lower(email) = lower($2) LIMIT 1`,
@@ -166,46 +127,26 @@ export class ApplicationsService {
   }
 
   /**
-   * Fecha o cadastro de quem entrou pelo Google: grava a candidatura com o nome e o e-mail
-   * da conta e já conecta os @ informados. A equipe aprova como qualquer outro cadastro.
+   * Fecha o cadastro de quem entrou pelo Google: grava o WhatsApp com o nome e o e-mail da
+   * conta e libera a participação na hora. As redes são adicionadas depois, em Conexões.
    */
   async completeSignup(
     profile: { id: string; email: string; fullName: string },
-    input: Omit<SubmitApplicationInput, 'nome_completo' | 'email' | 'password'>,
+    input: Pick<SubmitApplicationInput, 'whatsapp' | 'ranking_consent'>,
   ): Promise<{ id: string }> {
-    const { whatsapp, redes, instagramHandle, tiktokHandle } = validateSignupDetails(input);
+    const { whatsapp } = validateSignupDetails(input);
     if (!(await this.needsSignupDetails(profile.id, profile.email))) {
       throw new ConflictException('Seu cadastro já está completo.');
     }
 
-    const nomeConta = [
-      redes.includes('instagram') ? `Instagram ${instagramHandle}` : '',
-      redes.includes('tiktok') ? `TikTok ${tiktokHandle}` : '',
-    ]
-      .filter(Boolean)
-      .join(' · ');
-
     let applicationId: string;
     try {
-      const result = await getPool().query<{ id: string }>(
-        `INSERT INTO applications (
-           nome_completo, email, whatsapp, nome_conta, redes_sociais, instagram_handle,
-           tiktok_handle, profile_id
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id`,
-        [
-          profile.fullName || profile.email.split('@')[0],
-          profile.email.toLowerCase(),
-          whatsapp,
-          nomeConta,
-          redes,
-          redes.includes('instagram') ? instagramHandle : null,
-          redes.includes('tiktok') ? tiktokHandle : null,
-          profile.id,
-        ],
+      applicationId = await this.insertApplication(
+        profile.fullName || profile.email.split('@')[0],
+        profile.email.toLowerCase(),
+        whatsapp,
+        profile.id,
       );
-      applicationId = result.rows[0].id;
     } catch (error) {
       if (isUniqueViolation(error)) throw new ConflictException('Seu cadastro já está completo.');
       throw error;
@@ -214,16 +155,13 @@ export class ApplicationsService {
       `UPDATE profiles SET onboarding_completed = true, updated_at = now() WHERE id = $1`,
       [profile.id],
     );
-    await this.connectHandles(profile.id as ProfileId, [
-      redes.includes('instagram') ? [SocialPlatform.Instagram, instagramHandle] : null,
-      redes.includes('tiktok') ? [SocialPlatform.TikTok, tiktokHandle] : null,
-    ]);
+    await this.joinCompetition(profile.id as ProfileId);
     return { id: applicationId };
   }
 
   /**
-   * Cadastro pelo site: grava a candidatura e já cria a conta com a senha escolhida, sem
-   * e-mail de confirmação. A pessoa entra na hora, conecta as redes e aguarda a equipe.
+   * Cadastro pelo site: cria a conta com a senha escolhida, sem e-mail de confirmação, e libera
+   * a participação na hora. A pessoa adiciona as redes em Conexões; a equipe aprova as contas.
    */
   async submit(input: SubmitApplicationInput): Promise<{ id: string; accountCreated: true }> {
     const nomeCompleto = (input.nome_completo ?? '').trim().replace(/\s+/g, ' ');
@@ -244,14 +182,7 @@ export class ApplicationsService {
     if (password.length > 72) {
       throw new BadRequestException('A senha pode ter no máximo 72 caracteres.');
     }
-    const { whatsapp, redes, instagramHandle, tiktokHandle } = validateSignupDetails(input);
-
-    const nomeConta = [
-      redes.includes('instagram') ? `Instagram ${instagramHandle}` : '',
-      redes.includes('tiktok') ? `TikTok ${tiktokHandle}` : '',
-    ]
-      .filter(Boolean)
-      .join(' · ');
+    const { whatsapp } = validateSignupDetails(input);
 
     const taken = await getPool().query(
       `SELECT 1 FROM applications WHERE lower(email) = lower($1)
@@ -304,25 +235,8 @@ export class ApplicationsService {
         `UPDATE profiles SET onboarding_completed = true, updated_at = now() WHERE id = $1`,
         [userId],
       );
-      const result = await getPool().query<{ id: string }>(
-        `INSERT INTO applications (
-           nome_completo, email, whatsapp, nome_conta, redes_sociais, instagram_handle,
-           tiktok_handle, profile_id
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id`,
-        [
-          nomeCompleto,
-          email,
-          whatsapp,
-          nomeConta,
-          redes,
-          redes.includes('instagram') ? instagramHandle : null,
-          redes.includes('tiktok') ? tiktokHandle : null,
-          userId,
-        ],
-      );
-      applicationId = result.rows[0].id;
+      applicationId = await this.insertApplication(nomeCompleto, email, whatsapp, userId);
+      await this.joinCompetition(userId as ProfileId);
     } catch (error) {
       await this.authClient().auth.admin.deleteUser(userId).catch(() => undefined);
       if (isUniqueViolation(error)) {
@@ -333,35 +247,33 @@ export class ApplicationsService {
       throw error;
     }
 
-    await this.connectHandles(userId as ProfileId, [
-      redes.includes('instagram') ? [SocialPlatform.Instagram, instagramHandle] : null,
-      redes.includes('tiktok') ? [SocialPlatform.TikTok, tiktokHandle] : null,
-    ]);
     return { id: applicationId, accountCreated: true };
   }
 
-  /**
-   * O @ do formulário já vira a rede conectada: a pessoa não digita de novo dentro do app.
-   * Se o @ não for encontrado ou estiver privado, o cadastro segue e ela corrige em Conexões.
-   */
-  private async connectHandles(
-    profileId: ProfileId,
-    handles: ([SocialPlatform, string] | null)[],
-  ): Promise<void> {
-    for (const item of handles) {
-      if (!item) continue;
-      const [platform, handle] = item;
-      if (!this.socialHandles.isEnabled(platform)) continue;
-      try {
-        await this.socialHandles.claim(profileId, platform, handle);
-      } catch (error) {
-        console.warn(
-          'signup_connect_handle_skipped',
-          platform,
-          error instanceof Error ? error.message : error,
-        );
-      }
-    }
+  /** A linha em `applications` guarda o WhatsApp; o cadastro já nasce aprovado e sem redes. */
+  private async insertApplication(
+    nomeCompleto: string,
+    email: string,
+    whatsapp: string,
+    profileId: string,
+  ): Promise<string> {
+    const result = await getPool().query<{ id: string }>(
+      `INSERT INTO applications (
+         nome_completo, email, whatsapp, nome_conta, redes_sociais, status, profile_id
+       )
+       VALUES ($1, $2, $3, '', '{}', 'approved', $4)
+       RETURNING id`,
+      [nomeCompleto, email, whatsapp, profileId],
+    );
+    return result.rows[0].id;
+  }
+
+  /** A participação nasce aprovada. Quem a equipe suspendeu continua suspenso. */
+  private async joinCompetition(profileId: ProfileId): Promise<void> {
+    const membership = await this.membershipRepo.findByProfileId(profileId);
+    if (membership?.status === MembershipStatus.Suspended) return;
+    if (membership?.status === MembershipStatus.Approved) return;
+    await this.membershipRepo.approve(profileId, null, this.clock.now());
   }
 
   async list(): Promise<ApplicationRow[]> {
@@ -393,19 +305,21 @@ export class ApplicationsService {
           this.clock.now(),
         );
         // Reprovar a candidatura reprovou as contas com o mesmo recado; aprovar depois desfaz isso.
-        const approved = await this.accountReview.approveAllFor(
-          profileId as ProfileId,
-          actorId as ProfileId,
-          current.status === 'rejected' ? current.review_note : null,
-          // A própria candidatura é atualizada e auditada logo abaixo.
-          { fromApplication: true },
-        );
-        if (approved === 0) {
+        // Contas pendentes continuam esperando a análise da equipe, conta por conta.
+        const restored =
+          current.status === 'rejected' && current.review_note
+            ? await this.accountReview.restoreRejectedWithApplication(
+                profileId as ProfileId,
+                current.review_note,
+                actorId as ProfileId,
+              )
+            : 0;
+        if (restored === 0) {
           await this.notifications.notify(
             profileId,
             'application_approved',
             'Seu cadastro foi aprovado',
-            'Conecte o seu Instagram ou TikTok. A equipe confere a conta e ela entra no ranking.',
+            'Adicione o seu Instagram ou TikTok em Conexões. A equipe confere cada conta e ela entra no ranking.',
           );
         }
       } else {

@@ -1,218 +1,193 @@
-import { RefreshCw, Unlink } from 'lucide-react';
-import { CompetitionGate } from '@/components/arena/CompetitionGate';
+import { ExternalLink, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PlatformMark } from '@/components/brand/PlatformMark';
+import { SocialHandleDialog } from '@/components/social/SocialHandleDialog';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Spinner } from '@/components/ui/Spinner';
-import { SocialHandleDialog } from '@/components/social/SocialHandleDialog';
+import { ApiError, api, type SocialAccount, type SocialPlatform } from '@/lib/api';
 import {
-  ApiError,
-  api,
-  type SocialAccount,
-  type SocialPlatform,
-} from '@/lib/api';
-import { connectionDuty, reviewBadge, reviewLine, statusBadge } from '@/lib/connection';
-import { formatDateTime, platformLabel } from '@/lib/format';
-import {
-  ABANDONED_OAUTH_HINT,
-  clearOAuthStarted,
-  markOAuthStarted,
-  readAbandonedOAuth,
-} from '@/lib/oauth-return';
+  MAX_ACCOUNTS_PER_PLATFORM,
+  PLATFORMS,
+  activeAccounts,
+  connectionDuty,
+  handleOf,
+  reviewBadge,
+  statusBadge,
+} from '@/lib/connection';
+import { formatDateTime, formatViews, platformLabel, profileUrl } from '@/lib/format';
 
-const CALLBACK_ERRORS: Record<string, string> = {
-  access_denied: 'Você cancelou a conexão. Quando quiser, toque em Conectar de novo.',
-  missing_parameters: 'A conexão foi interrompida antes de terminar. Toque em Conectar de novo.',
-  invalid_platform: 'Essa rede não está disponível. Conecte o Instagram ou o TikTok.',
-  connection_failed: 'Não foi possível concluir a conexão. Toque em Conectar de novo.',
-  already_connected: 'Essa conta já está conectada a outro embaixador. Use outra conta ou fale com a equipe.',
-  state_expired: 'A conexão demorou demais e expirou. Toque em Conectar de novo.',
-  instagram_review_required:
-    'O Instagram ainda não liberou essa forma de conexão para a sua conta. Tente mais tarde ou fale com a equipe.',
-  instagram_not_professional:
-    'Essa conta do Instagram precisa ser profissional. Mude para criador ou empresa no app do Instagram e conecte de novo.',
-};
-
-function handleOf(account: SocialAccount): string | null {
-  const handle = account.username?.replace(/^@/, '').trim();
-  return handle ? `@${handle}` : null;
-}
+type Notice = { tone: 'success' | 'error'; text: string } | null;
 
 function syncLine(account: SocialAccount): string {
   const when = formatDateTime(account.lastSyncAt);
-  if (when) return `Views atualizadas em ${when}`;
-  if (account.status === 'connected' || account.status === 'syncing') return 'Em coleta';
+  if (when) return `${formatViews(account.views)} views · última coleta em ${when}`;
+  if (connectionDuty(account.status) === 'ready') return 'Em coleta. As views aparecem depois da primeira leitura.';
   return 'Sem dados';
 }
 
-/** Um selo por conta: o problema da conexão, se houver; senão, a análise da equipe. */
-function accountBadges(account: SocialAccount) {
-  const badges: { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }[] = [];
-  if (account.status !== 'connected') badges.push(statusBadge(account.status));
-  if (connectionDuty(account.status) === 'ready') badges.push(reviewBadge(account.reviewStatus));
-  return badges;
+function isPlatform(value: string | null): value is SocialPlatform {
+  return value === 'instagram' || value === 'tiktok';
 }
 
-export function ConnectionsPage() {
-  const [params, setParams] = useSearchParams();
-  const callbackError = params.get('error');
-  const connected = params.get('connected') === 'true';
-  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [retrying, setRetrying] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionId, setActionId] = useState<string | null>(null);
-  const [pendingDisconnect, setPendingDisconnect] = useState<SocialAccount | null>(null);
-  const [handlePlatform, setHandlePlatform] = useState<SocialPlatform | null>(null);
-  const [handleSuggestion, setHandleSuggestion] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const handleOpenerRef = useRef<HTMLElement | null>(null);
-  const hasCallbackResult = connected || callbackError != null;
-  const [abandoned] = useState(() => (hasCallbackResult ? null : readAbandonedOAuth()));
+/** Conta inventada na hora, só para a prévia local responder aos botões. */
+function previewAccount(platform: SocialPlatform, handle: string): SocialAccount {
+  return {
+    id: `preview-${platform}-${handle}`,
+    platform,
+    username: handle,
+    status: 'connected',
+    transport: 'demo',
+    lastSyncAt: null,
+    syncMessage: null,
+    verificationCode: null,
+    reviewStatus: 'pending',
+    reviewNote: null,
+    views: 0,
+    createdAt: new Date().toISOString(),
+  };
+}
 
-  useEffect(() => {
-    if (hasCallbackResult) clearOAuthStarted();
-  }, [hasCallbackResult]);
+export function ConnectionsPage({ preview }: { preview?: SocialAccount[] }) {
+  const [params, setParams] = useSearchParams();
+  const [accounts, setAccounts] = useState<SocialAccount[]>(preview ?? []);
+  const [loading, setLoading] = useState(!preview);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<SocialAccount | null>(null);
+  const [addPlatform, setAddPlatform] = useState<SocialPlatform | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
   const loadAccounts = useCallback(async () => {
-    setError(null);
+    if (preview) return;
     try {
-      const data = await api.socialAccounts();
-      setAccounts(data);
-      setLoadFailed(false);
+      setAccounts(await api.socialAccounts());
+      setLoadError(null);
     } catch (err) {
-      setLoadFailed(true);
-      if (err instanceof ApiError && err.status === 401) {
-        setError('Sua sessão expirou. Saia e entre de novo para ver as conexões.');
-      } else {
-        setError(
-          err instanceof Error
+      setLoadError(
+        err instanceof ApiError && err.status === 401
+          ? 'Sua sessão expirou. Saia e entre de novo para ver as conexões.'
+          : err instanceof Error
             ? err.message
             : 'Não foi possível carregar as conexões. Verifique a internet e tente de novo.',
-        );
-      }
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [preview]);
 
   useEffect(() => {
     void loadAccounts();
   }, [loadAccounts]);
 
-  const instagramConnected = accounts.some(
-    (account) => account.platform === 'instagram' && account.status !== 'disconnected',
-  );
-  const visibleCallbackError =
-    callbackError === 'connection_failed' && instagramConnected ? null : callbackError;
-  const abandonedHint =
-    abandoned &&
-    !accounts.some((account) => account.platform === abandoned && account.status !== 'disconnected')
-      ? ABANDONED_OAUTH_HINT[abandoned]
-      : null;
+  const listed = activeAccounts(accounts);
+  const countOf = (platform: SocialPlatform) =>
+    listed.filter((account) => account.platform === platform).length;
 
+  // O ranking manda para cá com ?adicionar=instagram para abrir o diálogo direto.
+  const requested = params.get('adicionar');
   useEffect(() => {
-    if (loading || callbackError !== 'connection_failed' || !instagramConnected) return;
+    if (loading || !isPlatform(requested)) return;
     const next = new URLSearchParams(params);
-    next.delete('error');
+    next.delete('adicionar');
     setParams(next, { replace: true });
-  }, [callbackError, instagramConnected, loading, params, setParams]);
+    if (countOf(requested) < MAX_ACCOUNTS_PER_PLATFORM) setAddPlatform(requested);
+    // Só reage ao pedido vindo do endereço.
+  }, [loading, requested]);
 
-  async function handleConnect(platform: SocialPlatform) {
+  function openAdd(platform: SocialPlatform) {
     const active = document.activeElement;
-    handleOpenerRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
-    setActionId(platform);
-    setError(null);
+    openerRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
     setNotice(null);
-    try {
-      const start = await api.startOAuth(platform);
-      if (start.mode === 'handle') {
-        setHandleSuggestion(start.suggestedHandle);
-        setHandlePlatform(platform);
-        setActionId(null);
-        return;
-      }
-      markOAuthStarted(platform);
-      window.location.href = start.url;
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Não foi possível abrir a conexão. Tente de novo.',
-      );
-      setActionId(null);
-    }
+    setAddPlatform(platform);
+  }
+
+  function failure(err: unknown, fallback: string) {
+    setNotice({ tone: 'error', text: err instanceof Error ? err.message : fallback });
   }
 
   async function handleSync(account: SocialAccount) {
     setActionId(account.id);
-    setError(null);
     setNotice(null);
     try {
-      await api.syncSocialAccount(account.id);
-      setNotice(
-        `Pedido enviado. As views do ${platformLabel(account.platform)} aparecem atualizadas em alguns minutos.`,
-      );
+      if (!preview) await api.syncSocialAccount(account.id);
+      setNotice({
+        tone: 'success',
+        text: `Pedido enviado. As views de ${handleOf(account.username) ?? 'sua conta'} aparecem atualizadas em alguns minutos.`,
+      });
       await loadAccounts();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Não foi possível atualizar as views. Tente de novo em instantes.',
-      );
+      failure(err, 'Não foi possível atualizar as views. Tente de novo em instantes.');
     } finally {
       setActionId(null);
     }
   }
 
-  async function handleRequestReview(id: string) {
-    setActionId(id);
-    setError(null);
-    setNotice(null);
-    try {
-      await api.requestAccountReview(id);
-      setNotice('Pronto. A equipe vai olhar a conta de novo e você recebe um aviso aqui.');
-      await loadAccounts();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Não foi possível pedir a nova análise. Tente de novo.',
-      );
-    } finally {
-      setActionId(null);
-    }
-  }
-
-  async function handleDisconnect(account: SocialAccount) {
+  async function handleRequestReview(account: SocialAccount) {
     setActionId(account.id);
-    setError(null);
     setNotice(null);
     try {
-      await api.deleteSocialAccount(account.id);
-      setPendingDisconnect(null);
-      setNotice(`${platformLabel(account.platform)} desconectado. Você pode conectar de novo quando quiser.`);
-      await loadAccounts();
+      const next = preview
+        ? { ...account, reviewStatus: 'pending' as const, reviewNote: null }
+        : await api.requestAccountReview(account.id);
+      setAccounts((current) => current.map((item) => (item.id === account.id ? next : item)));
+      setNotice({
+        tone: 'success',
+        text: 'Pronto. A equipe vai olhar a conta de novo e você recebe um aviso aqui.',
+      });
     } catch (err) {
-      setPendingDisconnect(null);
-      setError(
-        err instanceof Error ? err.message : 'Não foi possível desconectar a conta. Tente de novo.',
-      );
+      failure(err, 'Não foi possível pedir a nova análise. Tente de novo.');
     } finally {
       setActionId(null);
     }
   }
 
-  const listed = accounts.filter((account) => account.status !== 'disconnected');
-  const disconnectName = pendingDisconnect
-    ? handleOf(pendingDisconnect) ?? platformLabel(pendingDisconnect.platform)
-    : '';
+  async function handleRemove(account: SocialAccount) {
+    setActionId(account.id);
+    setNotice(null);
+    try {
+      if (!preview) await api.deleteSocialAccount(account.id);
+      setAccounts((current) => current.filter((item) => item.id !== account.id));
+      setNotice({
+        tone: 'success',
+        text: `${handleOf(account.username) ?? 'Conta'} removida. As views dela deixam de somar no ranking.`,
+      });
+      await loadAccounts();
+    } catch (err) {
+      failure(err, 'Não foi possível remover a conta. Tente de novo.');
+    } finally {
+      setActionId(null);
+      setPendingRemove(null);
+    }
+  }
+
+  function handleAdded(account: SocialAccount) {
+    const known = accounts.some((item) => item.id === account.id);
+    setAccounts((current) => [...current.filter((item) => item.id !== account.id), account]);
+    const handle = handleOf(account.username) ?? 'A conta';
+    setNotice({
+      tone: 'success',
+      text: known
+        ? `${handle} já estava na sua lista.`
+        : account.reviewStatus === 'approved'
+          ? `${handle} adicionada. A coleta começa agora e as views entram no ranking em seguida.`
+          : `${handle} adicionada. A equipe vai conferir o perfil e você recebe um aviso aqui quando ele entrar no ranking.`,
+    });
+    void loadAccounts();
+  }
 
   return (
     <div className="mx-auto max-w-[640px] space-y-6">
       <header>
         <h1 className="page-title">Conexões</h1>
         <p className="mt-2 max-w-[62ch] text-text-muted">
-          As redes que contam views para você no ranking.
+          As contas do Instagram e do TikTok que somam views para você no ranking. Você pode ter
+          até {MAX_ACCOUNTS_PER_PLATFORM} em cada rede, e a equipe aprova cada uma.
         </p>
       </header>
 
@@ -220,163 +195,219 @@ export function ConnectionsPage() {
         <div className="flex justify-center py-16">
           <Spinner label="Carregando conexões..." />
         </div>
+      ) : loadError ? (
+        <div className="space-y-4">
+          <Alert variant="error" role="alert">
+            {loadError}
+          </Alert>
+          <Button
+            variant="secondary"
+            loading={retrying}
+            onClick={() => {
+              setRetrying(true);
+              void loadAccounts().finally(() => setRetrying(false));
+            }}
+          >
+            <RefreshCw className="size-4" aria-hidden />
+            Tentar de novo
+          </Button>
+        </div>
       ) : (
         <>
-          {error || visibleCallbackError ? (
-            <Alert variant="error" role="alert">
-              {error ??
-                CALLBACK_ERRORS[visibleCallbackError ?? ''] ??
-                'Não foi possível concluir a conexão. Toque em Conectar de novo.'}
-            </Alert>
-          ) : connected || notice ? (
-            <Alert variant="success" role="status">
-              {notice ?? 'Conta conectada. As views começam a ser contadas agora.'}
-            </Alert>
-          ) : abandonedHint ? (
-            <Alert variant="warning" role="status">
-              {abandonedHint}
+          {notice ? (
+            <Alert
+              variant={notice.tone}
+              role={notice.tone === 'error' ? 'alert' : 'status'}
+            >
+              {notice.text}
             </Alert>
           ) : null}
 
-          {loadFailed && accounts.length === 0 ? (
-            <div>
-              <Button
-                variant="secondary"
-                className="min-h-[44px]"
-                loading={retrying}
-                onClick={() => {
-                  setRetrying(true);
-                  void loadAccounts().finally(() => setRetrying(false));
-                }}
-              >
-                <RefreshCw className="size-4" aria-hidden />
-                Tentar de novo
-              </Button>
-            </div>
-          ) : (
-            <CompetitionGate
-              accounts={accounts}
-              persist
-              busy={actionId}
-              onConnect={(platform) => void handleConnect(platform)}
-              onRequestReview={(id) => void handleRequestReview(id)}
-            />
-          )}
+          {PLATFORMS.map((platform) => {
+            const items = listed.filter((account) => account.platform === platform);
+            const full = items.length >= MAX_ACCOUNTS_PER_PLATFORM;
+            const name = platformLabel(platform);
+            const headingId = `contas-${platform}`;
+            const limitId = `limite-${platform}`;
+            return (
+              <section key={platform} aria-labelledby={headingId} className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <PlatformMark platform={platform} size={32} />
+                  <h2 id={headingId} className="text-base font-semibold text-text">
+                    {name}
+                  </h2>
+                  <span className="text-sm text-text-muted">
+                    {items.length} de {MAX_ACCOUNTS_PER_PLATFORM}
+                  </span>
+                </div>
 
-          {listed.length === 0 ? null : (
-            <section aria-labelledby="contas-conectadas" className="space-y-3">
-              <h2 id="contas-conectadas" className="text-base font-semibold text-text">
-                Suas contas
-              </h2>
-              <ul className="space-y-2.5">
-                {listed.map((account) => {
-                  const busy = actionId === account.id;
-                  const handle = handleOf(account);
-                  const review =
-                    connectionDuty(account.status) === 'ready'
-                      ? null
-                      : reviewLine(account.reviewStatus, account.reviewNote);
-                  return (
-                    <li
-                      key={account.id}
-                      className="rounded-[14px] border border-border bg-surface-card p-4 sm:p-5"
-                    >
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <span className="mt-0.5 shrink-0">
-                            <PlatformMark platform={account.platform} size={40} />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                              <h3 className="min-w-0 max-w-full truncate font-semibold text-text">
-                                {handle ?? platformLabel(account.platform)}
-                              </h3>
-                              {accountBadges(account).map((badge) => (
-                                <Badge key={badge.label} tone={badge.tone}>
-                                  {badge.label}
-                                </Badge>
-                              ))}
-                            </div>
-                            <p className="mt-1 text-sm text-text-muted">
-                              {handle ? `${platformLabel(account.platform)} · ` : ''}
-                              {syncLine(account)}
-                            </p>
-                            {account.syncMessage ? (
-                              <p className="mt-2 text-sm text-text-muted" role="status">
-                                {account.syncMessage}
-                              </p>
-                            ) : null}
-                            {review ? (
-                              <p className="mt-2 text-sm font-medium text-text" role="status">
-                                {review}
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 gap-2.5">
-                          {account.status === 'pending_verification' ? null : (
-                            <Button
-                              variant="secondary"
-                              className="min-h-[44px] flex-1 sm:flex-none"
-                              loading={busy}
-                              disabled={actionId !== null}
-                              onClick={() => void handleSync(account)}
-                              aria-label={`Atualizar as views do ${platformLabel(account.platform)}`}
-                            >
-                              {busy ? null : <RefreshCw className="size-4" aria-hidden />}
-                              Atualizar views
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            className="min-h-[44px] flex-1 text-[var(--bad)] sm:flex-none"
-                            disabled={actionId !== null}
-                            onClick={() => setPendingDisconnect(account)}
-                            aria-label={`Desconectar ${platformLabel(account.platform)}`}
-                          >
-                            <Unlink className="size-4" aria-hidden />
-                            Desconectar
-                          </Button>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
+                {items.length === 0 ? (
+                  <p className="rounded-[14px] border border-dashed border-field-line px-4 py-5 text-sm text-text-muted">
+                    Nenhuma conta do {name} ainda. Adicione o @ onde você posta para as views
+                    contarem.
+                  </p>
+                ) : (
+                  <ul className="space-y-2.5">
+                    {items.map((account) => (
+                      <AccountCard
+                        key={account.id}
+                        account={account}
+                        busy={actionId === account.id}
+                        disabled={actionId !== null}
+                        onSync={() => void handleSync(account)}
+                        onRequestReview={() => void handleRequestReview(account)}
+                        onRemove={() => setPendingRemove(account)}
+                      />
+                    ))}
+                  </ul>
+                )}
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    className="cta cta-touch w-full sm:w-auto"
+                    data-blocked={full || undefined}
+                    disabled={full}
+                    aria-describedby={full ? limitId : undefined}
+                    onClick={() => openAdd(platform)}
+                  >
+                    <Plus className="size-4" aria-hidden />
+                    Adicionar conta do {name}
+                  </button>
+                  {full ? (
+                    <p id={limitId} className="text-sm text-text-muted">
+                      Você chegou ao limite de {MAX_ACCOUNTS_PER_PLATFORM} contas no {name}.
+                      Remova uma para adicionar outra.
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+            );
+          })}
         </>
       )}
 
       <ConfirmDialog
-        open={pendingDisconnect !== null}
-        title={`Desconectar ${disconnectName}?`}
-        description="As views dessa conta deixam de contar no ranking até você conectar de novo."
-        confirmLabel="Desconectar"
-        busy={pendingDisconnect !== null && actionId === pendingDisconnect.id}
+        open={pendingRemove !== null}
+        title={`Remover ${handleOf(pendingRemove?.username) ?? 'esta conta'}?`}
+        description="As views dessa conta deixam de somar no ranking. Se adicionar de novo depois, a equipe confere outra vez."
+        confirmLabel="Remover conta"
+        busy={pendingRemove !== null && actionId === pendingRemove.id}
         onConfirm={() => {
-          if (pendingDisconnect) void handleDisconnect(pendingDisconnect);
+          if (pendingRemove) void handleRemove(pendingRemove);
         }}
-        onCancel={() => setPendingDisconnect(null)}
+        onCancel={() => setPendingRemove(null)}
       />
 
       <SocialHandleDialog
-        platform={handlePlatform}
-        account={accounts.find((item) => item.platform === handlePlatform) ?? null}
-        suggestedHandle={handleSuggestion}
-        returnFocusTo={handleOpenerRef.current}
-        onClose={() => setHandlePlatform(null)}
-        onChanged={(next) => {
-          if (next.status !== 'pending_verification') {
-            setNotice(
-              next.reviewStatus === 'approved'
-                ? `${platformLabel(next.platform)} conectado. A coleta começa agora e as views entram no ranking em seguida.`
-                : `${platformLabel(next.platform)} conectado. A equipe vai analisar o perfil e você recebe um aviso aqui quando ele entrar no ranking.`,
-            );
-          }
-          void loadAccounts();
-        }}
+        platform={addPlatform}
+        returnFocusTo={openerRef.current}
+        submitAccount={
+          preview ? async (platform, handle) => previewAccount(platform, handle) : undefined
+        }
+        onClose={() => setAddPlatform(null)}
+        onAdded={handleAdded}
       />
     </div>
+  );
+}
+
+function AccountCard({
+  account,
+  busy,
+  disabled,
+  onSync,
+  onRequestReview,
+  onRemove,
+}: {
+  account: SocialAccount;
+  busy: boolean;
+  disabled: boolean;
+  onSync: () => void;
+  onRequestReview: () => void;
+  onRemove: () => void;
+}) {
+  const handle = handleOf(account.username) ?? platformLabel(account.platform);
+  const href = profileUrl(account.platform, account.username);
+  const review = reviewBadge(account.reviewStatus);
+  const problem = connectionDuty(account.status) === 'ready' ? null : statusBadge(account.status);
+
+  return (
+    <li className="rounded-[14px] border border-border bg-surface-card p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="-my-2 inline-flex min-h-[44px] max-w-full items-center gap-1.5 font-semibold text-text underline-offset-4 hover:underline"
+              aria-label={`${handle}. Abrir o perfil no ${platformLabel(account.platform)}`}
+            >
+              <span className="truncate">{handle}</span>
+              <ExternalLink className="size-3.5 shrink-0 text-text-muted" aria-hidden />
+            </a>
+          ) : (
+            <p className="truncate font-semibold text-text">{handle}</p>
+          )}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <Badge tone={review.tone}>{review.label}</Badge>
+            {problem ? <Badge tone={problem.tone}>{problem.label}</Badge> : null}
+          </div>
+          {account.reviewStatus === 'changes_requested' ? (
+            <p className="mt-2 text-sm text-text">
+              <span className="font-semibold">Recado da equipe:</span>{' '}
+              {account.reviewNote ?? 'Confira o perfil e avise quando ajustar.'}
+            </p>
+          ) : account.reviewStatus === 'rejected' ? (
+            <p className="mt-2 text-sm text-text">
+              <span className="font-semibold">Motivo:</span>{' '}
+              {account.reviewNote ?? 'A equipe não informou o motivo. Fale com a equipe se tiver dúvida.'}
+            </p>
+          ) : null}
+          <p className="mt-2 text-sm text-text-muted">{syncLine(account)}</p>
+          {account.syncMessage ? (
+            <p className="mt-1 text-sm text-text-muted" role="status">
+              {account.syncMessage}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2.5 sm:max-w-[220px] sm:justify-end">
+          {account.reviewStatus === 'changes_requested' ? (
+            <button
+              type="button"
+              className="cta cta-touch w-full"
+              disabled={disabled}
+              onClick={onRequestReview}
+            >
+              {busy ? 'Enviando...' : 'Já ajustei'}
+            </button>
+          ) : null}
+          {account.status === 'pending_verification' ? null : (
+            <Button
+              variant="secondary"
+              className="flex-1 sm:flex-none"
+              loading={busy && account.reviewStatus !== 'changes_requested'}
+              disabled={disabled}
+              onClick={onSync}
+              aria-label={`Atualizar as views de ${handle}`}
+            >
+              {busy ? null : <RefreshCw className="size-4" aria-hidden />}
+              Atualizar views
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            className="flex-1 text-[var(--bad)] sm:flex-none"
+            disabled={disabled}
+            onClick={onRemove}
+            aria-label={`Remover ${handle}`}
+          >
+            <Trash2 className="size-4" aria-hidden />
+            Remover
+          </Button>
+        </div>
+      </div>
+    </li>
   );
 }

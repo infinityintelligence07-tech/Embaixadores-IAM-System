@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { 
   compareRankingCandidates, 
   assignSequentialPositions,
+  combineAccountMetrics,
   RankingCandidate 
 } from './ranking-rules';
 import { RankingCategory, asProfileId, asContentId } from './types';
@@ -193,5 +194,21 @@ describe('ranking-rules', () => {
       const user5Position = ranked.find(r => r.profileId === asProfileId('id-5'))!.position;
       expect(user5Position).toBe(6);
     });
+  });
+});
+
+describe('combineAccountMetrics', () => {
+  it('soma as views das contas e fica com o maior vídeo entre elas', () => {
+    expect(
+      combineAccountMetrics([
+        { totalViews: 100, bestVideoViews: 60, bestContentId: 'a' },
+        { totalViews: 300, bestVideoViews: 200, bestContentId: 'b' },
+        { totalViews: 0, bestVideoViews: 0, bestContentId: null },
+      ]),
+    ).toEqual({ totalViews: 400, bestVideoViews: 200, bestContentId: 'b' });
+  });
+
+  it('sem contas, zera', () => {
+    expect(combineAccountMetrics([])).toEqual({ totalViews: 0, bestVideoViews: 0, bestContentId: null });
   });
 });

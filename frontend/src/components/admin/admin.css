@@ -855,39 +855,58 @@
   fill: rgba(0, 0, 0, 0.28);
 }
 
-.board-handles {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.board-handles li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 14px;
-}
-
-.board-handles .platform-mark {
+.board-card-head .platform-mark {
+  flex: none;
   border-radius: 5px;
 }
 
-.board-handles a {
-  min-width: 0;
+.board-card-head .board-handle {
   overflow: hidden;
-  color: var(--accent);
-  font-weight: 600;
-  text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.board-handles a:hover {
+.board-handle a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.board-handle a:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.board-person {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-person .admin-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 6px;
+}
+
+.admin-accounts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.admin-accounts .platform-mark,
+.admin-actions .platform-mark {
+  flex: none;
+  border-radius: 4px;
+}
+
+.admin-actions button .platform-mark {
+  margin-right: 6px;
 }
 
 .board-meta {
@@ -986,6 +1005,16 @@
 
 .board-details-foot {
   display: flex;
+}
+
+.board-details .is-stop {
+  border-color: rgba(180, 35, 24, 0.28);
+  color: var(--bad);
+}
+
+.board-details .is-stop:hover:not(:disabled) {
+  border-color: rgba(180, 35, 24, 0.5);
+  background: var(--bad-soft);
 }
 
 .board-pager {

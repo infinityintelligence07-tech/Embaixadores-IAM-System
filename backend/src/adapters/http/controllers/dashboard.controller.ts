@@ -1,7 +1,7 @@
 import { BadRequestException, Controller, Get, Inject, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../guards/auth.guard';
 import { GetDashboardUseCase } from '../../../application/dashboard/get-dashboard.use-case';
-import { SocialPlatform } from '../../../domain/types';
+import { AccountReviewStatus, SocialPlatform } from '../../../domain/types';
 import { MetricsRepository, SocialAccountRepository } from '../../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 
@@ -23,40 +23,40 @@ export class DashboardController {
     const result = await this.getDashboardUseCase.execute(req.user.id);
     
     return {
-      slices: result.slices.map(slice => ({
-        platform: slice.platform,
-        positionTotal: slice.positionTotal,
-        positionBest: slice.positionBest,
-        totalParticipants: slice.totalParticipants,
-        ineligibilityReason: slice.ineligibilityReason,
-        monitoredViewsTotal: slice.monitoredViewsTotal,
-        bestVideo: slice.bestVideo,
-        officialAccountViews: slice.officialAccountViews,
-        officialAccountViewsLabel: slice.officialAccountViewsLabel,
-        contentCount: slice.contentCount,
-        lastSyncAt: slice.lastSyncAt?.toISOString() || null,
-        connectionStatus: slice.connectionStatus,
-        syncCoverageRatio: slice.syncCoverageRatio,
+      totalViews: result.totalViews,
+      byPlatform: result.byPlatform,
+      bestVideo: result.bestVideo,
+      lastSyncAt: result.lastSyncAt?.toISOString() ?? null,
+      accounts: result.accounts.map((account) => ({
+        ...account,
+        lastSyncAt: account.lastSyncAt?.toISOString() ?? null,
       })),
       rankingCriteria: result.rankingCriteria,
     };
   }
 
-  /** Views somadas por dia nos últimos 30 dias, a partir da primeira medição. */
+  /**
+   * Views somadas por dia nos últimos 30 dias, a partir da primeira medição, juntando todas as
+   * contas aprovadas. `platform` é opcional e limita a uma rede.
+   */
   @Get('dashboard/growth')
   async getGrowth(@Req() req: any, @Query('platform') platformParam?: string) {
-    const platform = platformParam ?? SocialPlatform.Instagram;
-    if (!Object.values(SocialPlatform).includes(platform as SocialPlatform)) {
+    if (platformParam && !Object.values(SocialPlatform).includes(platformParam as SocialPlatform)) {
       throw new BadRequestException('Plataforma inválida.');
     }
-    const account = await this.socialAccountRepo.findByProfileAndPlatform(
-      req.user.id,
-      platform as SocialPlatform,
+    const platform = (platformParam as SocialPlatform | undefined) ?? null;
+    const accounts = (await this.socialAccountRepo.findActiveByProfile(req.user.id)).filter(
+      (account) =>
+        account.reviewStatus === AccountReviewStatus.Approved &&
+        (!platform || account.platform === platform),
     );
-    if (!account) {
+    if (accounts.length === 0) {
       return { platform, points: [], current: null, lastWeek: null };
     }
-    const daily = await this.metricsRepo.dailyViewsByAccount(account.id, GROWTH_DAYS);
+    const daily = await this.metricsRepo.dailyViewsByAccounts(
+      accounts.map((account) => account.id),
+      GROWTH_DAYS,
+    );
     const first = daily.findIndex((item) => item.measured);
     const points = first < 0 ? [] : daily.slice(first).map(({ day, views }) => ({ day, views }));
     const current = points.length > 0 ? points[points.length - 1].views : null;

@@ -150,7 +150,8 @@ export interface SyncRun {
 
 export interface RankingVersion {
   id: RankingVersionId;
-  platform: SocialPlatform;
+  /** Null é o ranking geral, que soma todas as redes. */
+  platform: SocialPlatform | null;
   category: RankingCategory;
   status: RankingVersionStatus;
   computedAt: Date | null;

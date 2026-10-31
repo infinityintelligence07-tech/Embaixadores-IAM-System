@@ -38,27 +38,35 @@ export class PgSocialAccountRepository implements SocialAccountRepository {
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
   }
   
-  async findByProfileAndPlatform(
-    profileId: ProfileId,
-    platform: SocialPlatform,
-  ): Promise<SocialAccount | null> {
+  async findActiveByProfile(profileId: ProfileId): Promise<SocialAccount[]> {
     const result = await this.pool.query(
-      `SELECT * FROM social_accounts WHERE profile_id = $1 AND platform = $2 AND disconnected_at IS NULL`,
-      [profileId, platform],
+      `SELECT * FROM social_accounts
+       WHERE profile_id = $1 AND disconnected_at IS NULL
+       ORDER BY platform, created_at, id`,
+      [profileId],
     );
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    return result.rows.map((row) => this.mapRow(row));
   }
-  
-  /** Inclui contas desconectadas. Usado na reconexão para reaproveitar a linha. */
-  async findAnyByProfileAndPlatform(
+
+  async findAllActive(): Promise<SocialAccount[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM social_accounts
+       WHERE disconnected_at IS NULL
+       ORDER BY profile_id, platform, created_at, id`,
+    );
+    return result.rows.map((row) => this.mapRow(row));
+  }
+
+  async countActiveByProfileAndPlatform(
     profileId: ProfileId,
     platform: SocialPlatform,
-  ): Promise<SocialAccount | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM social_accounts WHERE profile_id = $1 AND platform = $2`,
+  ): Promise<number> {
+    const result = await this.pool.query<{ total: string }>(
+      `SELECT COUNT(*) AS total FROM social_accounts
+       WHERE profile_id = $1 AND platform = $2 AND disconnected_at IS NULL`,
       [profileId, platform],
     );
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    return Number(result.rows[0]?.total ?? 0);
   }
 
   /** Inclui contas desconectadas. A unicidade (platform, platform_user_id) vale para todas. */

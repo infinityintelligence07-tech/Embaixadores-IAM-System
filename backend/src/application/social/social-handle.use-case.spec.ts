@@ -50,8 +50,8 @@ function uniqueViolation(): Error {
 function setup() {
   const socialAccountRepo = {
     findAnyByPlatformUserId: vi.fn().mockResolvedValue(null),
-    findAnyByProfileAndPlatform: vi.fn().mockResolvedValue(null),
-    create: vi.fn(),
+    countActiveByProfileAndPlatform: vi.fn().mockResolvedValue(0),
+    create: vi.fn(async (input: Partial<SocialAccount>) => account({ id: 'acc-new' as SocialAccountId, ...input })),
     update: vi.fn(async (id: string, input: Partial<SocialAccount>) => account({ id: id as SocialAccountId, ...input })),
     deleteCredentials: vi.fn(),
   };
@@ -72,22 +72,36 @@ function setup() {
       aliasUserIds: [],
     }),
   };
+  const tiktokLookup = {
+    ...lookup,
+    platform: 'tiktok' as const,
+    lookupProfile: vi.fn().mockResolvedValue({
+      platformUserId: 'tt-9',
+      username: 'fulano_tt',
+      displayName: 'Fulano',
+      avatarUrl: null,
+      profileUrl: 'https://www.tiktok.com/@fulano_tt',
+      bio: '',
+      isPrivate: false,
+      aliasUserIds: [],
+    }),
+  };
   const useCase = new SocialHandleUseCase(
     { now: () => NOW },
     socialAccountRepo as never,
     syncJobRepo as never,
     contentRepo as never,
     auditRepo as never,
-    [lookup],
+    [lookup, tiktokLookup],
   );
   return { useCase, socialAccountRepo, syncJobRepo, lookup };
 }
 
 describe('SocialHandleUseCase.claim', () => {
-  it('dois pedidos simultâneos da mesma pessoa devolvem a conta já gravada', async () => {
+  it('dois pedidos simultâneos do mesmo @ devolvem a conta já gravada', async () => {
     const { useCase, socialAccountRepo } = setup();
     const saved = account();
-    socialAccountRepo.findAnyByProfileAndPlatform
+    socialAccountRepo.findAnyByPlatformUserId
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(saved);
     socialAccountRepo.create.mockRejectedValue(uniqueViolation());
@@ -99,7 +113,7 @@ describe('SocialHandleUseCase.claim', () => {
     const { useCase, socialAccountRepo } = setup();
     socialAccountRepo.findAnyByPlatformUserId
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(account({ profileId: OTHER }));
+      .mockResolvedValue(account({ profileId: OTHER }));
     socialAccountRepo.create.mockRejectedValue(uniqueViolation());
 
     const error = await useCase.claim(ME, SocialPlatform.Instagram, '@fulano').catch((e) => e);
@@ -116,12 +130,16 @@ describe('SocialHandleUseCase.claim', () => {
     );
   });
 
-  it('a mesma conta em coleta só atualiza nome e foto', async () => {
+  it('o mesmo @ já ativo devolve a conta existente, sem duplicar nem contar vaga', async () => {
     const { useCase, socialAccountRepo, syncJobRepo } = setup();
-    socialAccountRepo.findAnyByProfileAndPlatform.mockResolvedValue(account());
+    socialAccountRepo.findAnyByPlatformUserId.mockResolvedValue(account());
+    socialAccountRepo.countActiveByProfileAndPlatform.mockResolvedValue(5);
 
-    await useCase.claim(ME, SocialPlatform.Instagram, '@fulano');
+    const result = await useCase.claim(ME, SocialPlatform.Instagram, '@fulano');
 
+    expect(result.id).toBe('acc-1');
+    expect(socialAccountRepo.create).not.toHaveBeenCalled();
+    expect(socialAccountRepo.countActiveByProfileAndPlatform).not.toHaveBeenCalled();
     expect(syncJobRepo.enqueue).not.toHaveBeenCalled();
     expect(socialAccountRepo.update).toHaveBeenCalledTimes(1);
     expect(socialAccountRepo.update.mock.calls[0][1]).not.toHaveProperty('status');
@@ -129,7 +147,7 @@ describe('SocialHandleUseCase.claim', () => {
 
   it('a mesma conta com a coleta parada volta a conectada e coleta de novo, sem perder a análise', async () => {
     const { useCase, socialAccountRepo, syncJobRepo } = setup();
-    socialAccountRepo.findAnyByProfileAndPlatform.mockResolvedValue(
+    socialAccountRepo.findAnyByPlatformUserId.mockResolvedValue(
       account({
         status: ConnectionStatus.InsufficientPermission,
         reviewStatus: AccountReviewStatus.Approved,
@@ -141,7 +159,56 @@ describe('SocialHandleUseCase.claim', () => {
     const input = socialAccountRepo.update.mock.calls[0][1];
     expect(input.status).toBe(ConnectionStatus.Connected);
     expect(input).not.toHaveProperty('reviewStatus');
+    expect(socialAccountRepo.create).not.toHaveBeenCalled();
     expect(syncJobRepo.enqueue).toHaveBeenCalledWith({ socialAccountId: 'acc-1', priority: 200 });
+  });
+
+  it('um @ novo vira mais uma conta, pendente e na fila de coleta, sem mexer nas outras', async () => {
+    const { useCase, socialAccountRepo, syncJobRepo } = setup();
+    socialAccountRepo.countActiveByProfileAndPlatform.mockResolvedValue(2);
+
+    const result = await useCase.claim(ME, SocialPlatform.Instagram, '@fulano');
+
+    expect(socialAccountRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ profileId: ME, platform: SocialPlatform.Instagram, platformUserId: '123' }),
+    );
+    expect(result.reviewStatus).toBe(AccountReviewStatus.Pending);
+    expect(result.status).toBe(ConnectionStatus.Connected);
+    expect(socialAccountRepo.update.mock.calls.every(([id]) => id === 'acc-new')).toBe(true);
+    expect(syncJobRepo.enqueue).toHaveBeenCalledWith({ socialAccountId: 'acc-new', priority: 200 });
+  });
+
+  it('recusa a sexta conta ativa no Instagram com o recado do limite', async () => {
+    const { useCase, socialAccountRepo } = setup();
+    socialAccountRepo.countActiveByProfileAndPlatform.mockResolvedValue(5);
+
+    const error = await useCase.claim(ME, SocialPlatform.Instagram, '@fulano').catch((e) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.message).toBe('Você já tem 5 contas no Instagram. Remova uma para adicionar outra.');
+    expect(socialAccountRepo.countActiveByProfileAndPlatform).toHaveBeenCalledWith(ME, SocialPlatform.Instagram);
+    expect(socialAccountRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('o limite vale por rede: o TikTok tem as próprias 5 vagas e o mesmo recado', async () => {
+    const { useCase, socialAccountRepo } = setup();
+    socialAccountRepo.countActiveByProfileAndPlatform.mockImplementation(
+      async (_profileId: string, platform: SocialPlatform) => (platform === SocialPlatform.TikTok ? 5 : 0),
+    );
+
+    await expect(useCase.claim(ME, SocialPlatform.TikTok, '@fulano_tt')).rejects.toThrow(
+      'Você já tem 5 contas no TikTok. Remova uma para adicionar outra.',
+    );
+    await expect(useCase.claim(ME, SocialPlatform.Instagram, '@fulano')).resolves.toBeTruthy();
+  });
+
+  it('readicionar uma conta removida antes também ocupa vaga', async () => {
+    const { useCase, socialAccountRepo } = setup();
+    socialAccountRepo.findAnyByPlatformUserId.mockResolvedValue(account({ disconnectedAt: NOW }));
+    socialAccountRepo.countActiveByProfileAndPlatform.mockResolvedValue(5);
+
+    await expect(useCase.claim(ME, SocialPlatform.Instagram, '@fulano')).rejects.toThrow(/5 contas/);
+    expect(socialAccountRepo.update).not.toHaveBeenCalled();
   });
 
   it('não engole erros que não são de duplicidade', async () => {

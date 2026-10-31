@@ -8,30 +8,29 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../guards/auth.guard';
-import {
-  AccountReviewStatus,
-  AppRole,
-  MembershipStatus,
-  RankingCategory,
-  SocialPlatform,
-} from '../../../domain/types';
-import { RankingRepository, MembershipRepository, SocialAccountRepository } from '../../../ports/repositories.port';
-import { isEligibleForRanking } from '../../../domain/eligibility';
+import { AppRole, RankingCategory, SocialPlatform } from '../../../domain/types';
+import { RankingEntry } from '../../../domain/entities';
+import { RankingRepository } from '../../../ports/repositories.port';
 import { ClockPort } from '../../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
 import { Inject } from '@nestjs/common';
 import { CampaignsService } from '../../../application/rankings/campaigns.service';
+import { ComputeAndPublishRankingUseCase } from '../../../application/rankings/compute-and-publish.use-case';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Valor do parâmetro `campaign` para pedir o ranking desde o início, sem período. */
 const GENERAL = 'geral';
+/** Quantas posições acima e abaixo da pessoa aparecem em `view=around`. */
+const AROUND = 5;
 
 const PLATFORMS = new Set<string>(Object.values(SocialPlatform));
 const CATEGORIES = new Set<string>(Object.values(RankingCategory));
-const VIEWS = new Set(['all', 'top3', 'top10']);
+const VIEWS = new Set(['all', 'top3', 'top10', 'top', 'around']);
+type RankingView = 'all' | 'top3' | 'top10' | 'top' | 'around';
 
-function parsePlatform(value?: string): SocialPlatform {
-  if (!value) return SocialPlatform.Instagram;
+/** Sem rede, o quadro geral (todas as redes), que é o padrão. */
+function parsePlatform(value?: string): SocialPlatform | null {
+  if (!value) return null;
   if (!PLATFORMS.has(value)) throw new BadRequestException('Plataforma inválida.');
   return value as SocialPlatform;
 }
@@ -42,10 +41,10 @@ function parseCategory(value?: string): RankingCategory {
   return value as RankingCategory;
 }
 
-function parseView(value?: string): 'all' | 'top3' | 'top10' {
+function parseView(value?: string): RankingView {
   if (!value) return 'all';
   if (!VIEWS.has(value)) throw new BadRequestException('Visualização inválida.');
-  return value as 'all' | 'top3' | 'top10';
+  return value as RankingView;
 }
 
 function clampInt(value: string | undefined, fallback: number, min: number, max: number): number {
@@ -54,6 +53,29 @@ function clampInt(value: string | undefined, fallback: number, min: number, max:
   return Math.min(max, Math.max(min, parsed));
 }
 
+/** Recorte fixo do ranking (sem busca nem página). Null quando a visão é a lista completa. */
+function sliceView(entries: RankingEntry[], view: RankingView, me: string): RankingEntry[] | null {
+  switch (view) {
+    case 'top3':
+      return entries.slice(0, 3);
+    case 'top10':
+    case 'top':
+      return entries.slice(0, 10);
+    case 'around': {
+      const index = entries.findIndex((entry) => entry.profileId === me);
+      if (index < 0) return entries.slice(0, 10);
+      return entries.slice(Math.max(0, index - AROUND), index + AROUND + 1);
+    }
+    case 'all':
+      return null;
+    default: {
+      const exhaustive: never = view;
+      return exhaustive;
+    }
+  }
+}
+
+/** Ranking geral (todas as redes) por padrão; com `platform`, o quadro só daquela rede. */
 @Controller('api/rankings')
 @UseGuards(AuthGuard)
 export class RankingsController {
@@ -62,11 +84,8 @@ export class RankingsController {
     private readonly clock: ClockPort,
     @Inject(INJECTION_TOKENS.RANKING_REPOSITORY)
     private readonly rankingRepo: RankingRepository,
-    @Inject(INJECTION_TOKENS.MEMBERSHIP_REPOSITORY)
-    private readonly membershipRepo: MembershipRepository,
-    @Inject(INJECTION_TOKENS.SOCIAL_ACCOUNT_REPOSITORY)
-    private readonly socialAccountRepo: SocialAccountRepository,
     private readonly campaigns: CampaignsService,
+    private readonly ranking: ComputeAndPublishRankingUseCase,
   ) {}
 
   /** Campanhas e meses que já começaram, mais o geral. `defaultId` é o que abre primeiro. */
@@ -129,25 +148,17 @@ export class RankingsController {
       };
     }
     
-    let entries = published.entries;
-    const fullTotal = entries.length;
-
-    // Top 3 / Top 10: recortes do ranking geral (mesma versão), sem busca
-    if (view === 'top3') {
-      entries = entries.slice(0, 3);
-    } else if (view === 'top10') {
-      entries = entries.slice(0, 10);
-    } else if (searchQuery) {
+    const fullTotal = published.entries.length;
+    const sliced = sliceView(published.entries, view, req.user.id);
+    let entries = sliced ?? published.entries;
+    if (!sliced && searchQuery) {
       const query = searchQuery.toLowerCase();
-      entries = entries.filter((e) =>
-        e.publicName.toLowerCase().includes(query),
-      );
+      entries = entries.filter((e) => e.publicName.toLowerCase().includes(query));
     }
 
-    const total = view === 'all' ? entries.length : fullTotal;
-    const offset = view === 'all' ? (page - 1) * pageSize : 0;
-    const paginatedEntries =
-      view === 'all' ? entries.slice(offset, offset + pageSize) : entries;
+    const total = sliced ? fullTotal : entries.length;
+    const offset = sliced ? 0 : (page - 1) * pageSize;
+    const paginatedEntries = sliced ? entries : entries.slice(offset, offset + pageSize);
     
     return {
       items: paginatedEntries.map(entry => ({
@@ -201,61 +212,21 @@ export class RankingsController {
     const myEntry = published.entries.find(e => e.profileId === req.user.id);
     
     if (!myEntry) {
-      // Check why not eligible
-      const membership = await this.membershipRepo.findByProfileId(req.user.id);
-      const account = await this.socialAccountRepo.findByProfileAndPlatform(
-        req.user.id,
-        platform,
-      );
-      
-      let reason = 'Fora do ranking no momento';
-
+      let reason: string;
       if (req.user.role === AppRole.Admin) {
-        return {
-          eligible: false,
-          reason: 'Conta da equipe não entra no ranking',
-          position: null,
-          total: published.entries.length,
-          score: null,
-          gapToAbove: null,
-          category,
-          platform,
-          entry: null,
-        };
-      }
-      
-      const teamNote =
-        account &&
-        (account.reviewStatus === AccountReviewStatus.ChangesRequested ||
-          account.reviewStatus === AccountReviewStatus.Rejected);
-
-      if (membership?.status === MembershipStatus.Suspended) {
-        reason = 'Cadastro suspenso';
-      } else if ((!membership || membership.status !== 'approved') && !teamNote) {
-        reason = 'Cadastro ainda não aprovado';
-      } else if (!membership) {
-        reason = 'Cadastro ainda não aprovado';
-      } else if (!account) {
-        reason = 'Conta não conectada';
+        reason = 'Conta da equipe não entra no ranking';
       } else {
-        const eligibility = isEligibleForRanking({
-          // Com recado da equipe na conta, o recado vale mais que o "aguardando aprovação".
-          membershipStatus:
-            teamNote && membership.status === MembershipStatus.Pending
-              ? MembershipStatus.Approved
-              : membership.status,
-          connectionStatus: account.status,
-          reviewStatus: account.reviewStatus,
-          reviewNote: account.reviewNote,
-          lastSyncedAt: account.lastSyncedAt,
-          staleToleranceHours: published.version.staleToleranceHours,
-          now: this.clock.now(),
-          syncCoverageRatio: account.syncCoverageRatio,
-          firstSyncIncomplete: !account.lastSuccessfulSyncAt,
-        });
-        reason = eligibility.reason || 'Fora do ranking no momento';
+        const eligibility = await this.ranking.eligibilityFor(
+          req.user.id,
+          published.version.staleToleranceHours,
+          platform,
+        );
+        // Elegível agora, mas a publicação é anterior: entra na próxima atualização.
+        reason = eligibility.eligible
+          ? 'Sua posição aparece na próxima atualização do ranking, em até 10 minutos.'
+          : eligibility.reason || 'Fora do ranking no momento';
       }
-      
+
       return {
         eligible: false,
         reason,

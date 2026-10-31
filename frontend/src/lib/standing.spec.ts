@@ -42,11 +42,10 @@ describe('describeChase', () => {
       myScore: 156000,
       belowGap: 800,
       category: 'total_views',
-      platform: 'instagram',
     });
     expect(copy.detail).toBe('Faltam 12.400 views para a 9ª posição.');
     expect(copy.progress).toBeGreaterThan(0.9);
-    expect(copy.context).toBe('Views totais no Instagram, entre 48 embaixadores.');
+    expect(copy.context).toBe('Views totais, entre 48 embaixadores.');
     expect(copy.context).not.toContain('10ª');
   });
 
@@ -60,9 +59,8 @@ describe('describeChase', () => {
       myScore: 300,
       belowGap: null,
       category: 'total_views',
-      platform: 'instagram',
     });
-    expect(copy.context).toBe('Views totais no Instagram. Só você no ranking por enquanto.');
+    expect(copy.context).toBe('Views totais. Só você no ranking por enquanto.');
     expect(copy.detail).toBe('Você lidera este ranking.');
   });
 
@@ -76,7 +74,6 @@ describe('describeChase', () => {
       myScore: 900000,
       belowGap: 8200,
       category: 'best_video',
-      platform: 'tiktok',
     });
     expect(copy.detail).toBe('Você lidera. A 2ª posição está a 8.200 views.');
   });
@@ -84,16 +81,16 @@ describe('describeChase', () => {
   it('explica quando a pessoa ainda está fora', () => {
     const copy = describeChase({
       eligible: false,
-      reason: 'Conta social não conectada ou com autorização inválida',
+      reason: 'Nenhuma conta aprovada ainda',
       position: null,
       total: 12,
       gapToAbove: null,
       myScore: null,
       belowGap: null,
       category: 'total_views',
-      platform: 'tiktok',
     });
-    expect(copy.detail).toContain('não conectada');
+    expect(copy.detail).toBe('Nenhuma conta aprovada ainda. Quando a equipe aprovar uma conta, ela passa a somar aqui.');
+    expect(copy.context).toBe('Views totais, somando todas as suas contas.');
     expect(copy.progress).toBeNull();
   });
 });

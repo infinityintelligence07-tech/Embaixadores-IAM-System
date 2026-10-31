@@ -55,4 +55,35 @@ describe('PgRankingRepository.publishAtomic', () => {
     expect(queries.at(-1)?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalled();
   });
+
+  it('o quadro geral (todas as redes) usa platform nulo e trava separado dos quadros por rede', async () => {
+    const queries: { sql: string; params?: unknown[] }[] = [];
+    const client = {
+      query: vi.fn(async (sql: string, params?: unknown[]) => {
+        queries.push({ sql, params });
+        if (sql.includes('INSERT INTO ranking_versions')) {
+          return { rows: [{ id: 'v2', platform: null, category: 'best_video', status: 'published' }] };
+        }
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const repo = new PgRankingRepository();
+    (repo as unknown as { pool: unknown }).pool = { connect: async () => client };
+
+    const result = await repo.publishAtomic({
+      platform: null,
+      category: RankingCategory.BestVideo,
+      campaignId: null,
+      staleToleranceHours: 24,
+      computedAt: new Date('2026-10-30T12:00:00Z'),
+      entries: [],
+    });
+
+    expect(result.version.platform).toBeNull();
+    expect(queries[1].params).toEqual(['ranking:todas:best_video:geral']);
+    const supersede = queries.find(({ sql }) => sql.includes("SET status = 'superseded'"));
+    expect(supersede?.sql).toContain('platform IS NOT DISTINCT FROM');
+    expect(supersede?.params?.[0]).toBeNull();
+  });
 });

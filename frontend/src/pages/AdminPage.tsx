@@ -1,8 +1,9 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AdminBoard } from '@/components/admin/AdminBoard';
+import { AdminBoard, type BoardStatus } from '@/components/admin/AdminBoard';
 import { CampaignsSection } from '@/components/admin/CampaignsSection';
 import { ListFooter, useListWindow } from '@/components/admin/ListWindow';
+import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   api,
+  type AdminAccount,
   type AdminAuditEntry,
   type AdminSettings,
   type AdminSyncJob,
@@ -68,9 +70,9 @@ function postingLine(user: AdminUser): string {
 function statusLabel(status: UserStatus): string {
   switch (status) {
     case 'approved':
-      return 'Aprovado';
+      return 'Ativo';
     case 'pending':
-      return 'Aguardando';
+      return 'Acesso pendente';
     case 'suspended':
       return 'Suspenso';
     default: {
@@ -135,7 +137,7 @@ function platformName(platform: SocialPlatform): string {
 const AUDIT_ACTIONS: Record<string, string> = {
   approve_application: 'Cadastro aprovado',
   reject_application: 'Cadastro reprovado',
-  approve_membership: 'Embaixador aprovado',
+  approve_membership: 'Acesso liberado',
   review_account_approved: 'Conta aprovada no ranking',
   review_account_changes_requested: 'Ajuste pedido na conta',
   review_account_rejected: 'Conta reprovada',
@@ -211,8 +213,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingSuspend, setPendingSuspend] = useState<AdminUser | null>(null);
-  const [waitingCount, setWaitingCount] = useState(0);
+  const [accounts, setAccounts] = useState<AdminAccount[]>([]);
+  const [accountsStatus, setAccountsStatus] = useState<BoardStatus>('loading');
   const hasLoadedRef = useRef(false);
+  const hasAccountsRef = useRef(false);
+
+  const waitingCount = accounts.filter((item) => item.reviewStatus === 'pending').length;
 
   const usersList = useListWindow(users.length);
   const syncsList = useListWindow(syncs.length);
@@ -227,8 +233,31 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     setError(text);
   }, []);
 
+  const loadAccounts = useCallback(async () => {
+    if (!hasAccountsRef.current) setAccountsStatus('loading');
+    try {
+      const data = preview
+        ? (await import('@/components/admin/previewData')).previewAccounts
+        : await api.adminAccounts();
+      setAccounts(data);
+      setAccountsStatus('ready');
+      hasAccountsRef.current = true;
+    } catch {
+      // Depois da primeira carga, uma releitura que falha mantém a lista que já está na tela.
+      if (!hasAccountsRef.current) setAccountsStatus('failed');
+    }
+  }, [preview]);
+
+  const updateAccount = useCallback((accountId: string, patch: Partial<AdminAccount>) => {
+    setAccounts((current) =>
+      current.map((item) => (item.accountId === accountId ? { ...item, ...patch } : item)),
+    );
+  }, []);
+
   const loadAll = useCallback(async () => {
+    const accountsTask = loadAccounts();
     if (preview) {
+      await accountsTask;
       setLoading(false);
       return;
     }
@@ -261,32 +290,36 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         `Não foi possível carregar ${failed.join(', ')}. Atualize a página para tentar de novo.`,
       );
     }
+    await accountsTask;
     hasLoadedRef.current = true;
     setLoading(false);
-  }, [preview]);
+  }, [loadAccounts, preview]);
 
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
 
-  async function handleApprove(id: string) {
-    setActionLoading(id);
+  /** Devolve o acesso a quem foi suspenso. Quem se cadastra já entra com acesso. */
+  async function handleReactivate(user: AdminUser) {
+    setActionLoading(user.id);
     setError(null);
     setMessage(null);
     try {
       if (preview) {
         setUsers((current) =>
-          current.map((user) => (user.id === id ? { ...user, status: 'approved' } : user)),
+          current.map((item) => (item.id === user.id ? { ...item, status: 'approved' } : item)),
         );
       } else {
-        await api.adminApproveUser(id);
+        await api.adminApproveUser(user.id);
         await loadAll();
       }
       setMessage(
-        'Embaixador aprovado. O acesso completo foi liberado e as contas informadas entram no ranking.',
+        `${user.publicName} voltou a ter acesso. As contas aprovadas dessa pessoa voltam a somar no ranking na próxima atualização.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível aprovar. Tente de novo.');
+      setError(
+        err instanceof Error ? err.message : 'Não foi possível devolver o acesso. Tente de novo.',
+      );
     } finally {
       setActionLoading(null);
     }
@@ -314,17 +347,19 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     }
   }
 
-  async function handleRequestSync(userId: string, platform: SocialPlatform) {
-    const key = `${userId}-${platform}`;
-    setActionLoading(key);
+  async function handleRequestSync(account: AdminAccount) {
+    setActionLoading(`sync-${account.accountId}`);
     setError(null);
     setMessage(null);
     try {
       if (!preview) {
-        await api.adminRequestSync(userId, platform);
+        await api.adminRequestSync(account.accountId);
         await loadAll();
       }
-      setMessage(`Coleta do ${platformName(platform)} pedida. Os dados chegam em alguns minutos.`);
+      const handle = account.username ? ` @${account.username.replace(/^@/, '')}` : '';
+      setMessage(
+        `Coleta da conta${handle} no ${platformName(account.platform)} pedida. Os dados chegam em alguns minutos.`,
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Não foi possível pedir a coleta. Tente de novo.',
@@ -423,6 +458,11 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     Number.isFinite(settings.manualSyncCooldownSeconds) &&
     settings.manualSyncCooldownSeconds >= 0;
 
+  const accountsByPerson = new Map<string, AdminAccount[]>();
+  for (const item of accounts) {
+    accountsByPerson.set(item.profileId, [...(accountsByPerson.get(item.profileId) ?? []), item]);
+  }
+
   const sortedUsers = [...users].sort((a, b) =>
     peopleOrder === 'posts'
       ? (b.postsLast30Days ?? 0) - (a.postsLast30Days ?? 0)
@@ -434,7 +474,8 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
       <header>
         <h1 className="page-title">Administração</h1>
         <p className="admin-lead">
-          Aprove novos membros, acompanhe as coletas e ajuste as regras do programa.
+          Aprove as contas de rede dos embaixadores, acompanhe as coletas e ajuste as regras do
+          programa.
         </p>
       </header>
 
@@ -488,7 +529,9 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               {item.id === 'novos' && waitingCount > 0 ? (
                 <span
                   className="admin-nav-count"
-                  aria-label={`${waitingCount} aguardando`}
+                  aria-label={
+                    waitingCount === 1 ? '1 conta aguardando' : `${waitingCount} contas aguardando`
+                  }
                 >
                   {waitingCount}
                 </span>
@@ -499,10 +542,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
 
         {section === 'novos' ? (
           <AdminBoard
-            users={users}
+            accounts={accounts}
+            status={accountsStatus}
             preview={preview != null}
+            onRetry={() => void loadAccounts()}
+            onUpdate={updateAccount}
             onChanged={loadAll}
-            onWaitingCount={setWaitingCount}
             onMessage={showMessage}
             onError={showError}
           />
@@ -558,14 +603,15 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               <div className="admin-empty" role="status">
                 <strong>Nenhum embaixador cadastrado</strong>
                 <p>
-                  Quando alguém se cadastrar no site, a pessoa aparece em Aprovações para
-                  aprovar e depois aqui.
+                  Quem se cadastrar no site aparece aqui na hora. As contas de rede que a pessoa
+                  adicionar no app vão para Aprovações.
                 </p>
               </div>
             ) : (
               sortedUsers.slice(usersList.start, usersList.end).map((user) => {
                 const team = user.role === 'admin';
                 const busy = actionLoading === user.id;
+                const own = accountsByPerson.get(user.id) ?? [];
                 return (
                   <article key={user.id} className="admin-row">
                     <div className="admin-person">
@@ -586,24 +632,44 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                         {user.fullName} · {user.email}
                       </span>
                       <span>{postingLine(user)}</span>
+                      {team ? null : own.length === 0 ? (
+                        <span>
+                          {accountsStatus === 'failed'
+                            ? 'Não foi possível carregar as contas.'
+                            : 'Ainda não adicionou nenhuma conta.'}
+                        </span>
+                      ) : (
+                        <span className="admin-accounts">
+                          {own.map((item) => (
+                            <span key={item.accountId}>
+                              <PlatformMark platform={item.platform} size={16} />
+                              {item.username
+                                ? `@${item.username.replace(/^@/, '')}`
+                                : 'Conta sem @'}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </div>
                     <div className="admin-actions">
-                      <button
-                        type="button"
-                        disabled={actionLoading === `${user.id}-instagram`}
-                        onClick={() => void handleRequestSync(user.id, 'instagram')}
-                      >
-                        {actionLoading === `${user.id}-instagram`
-                          ? 'Pedindo...'
-                          : 'Coletar Instagram'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actionLoading === `${user.id}-tiktok`}
-                        onClick={() => void handleRequestSync(user.id, 'tiktok')}
-                      >
-                        {actionLoading === `${user.id}-tiktok` ? 'Pedindo...' : 'Coletar TikTok'}
-                      </button>
+                      {own.map((item) => {
+                        const key = `sync-${item.accountId}`;
+                        const handle = item.username
+                          ? `@${item.username.replace(/^@/, '')}`
+                          : platformName(item.platform);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            disabled={actionLoading === key}
+                            aria-label={`Coletar ${handle} no ${platformName(item.platform)}`}
+                            onClick={() => void handleRequestSync(item)}
+                          >
+                            <PlatformMark platform={item.platform} size={16} />
+                            {actionLoading === key ? 'Pedindo...' : `Coletar ${handle}`}
+                          </button>
+                        );
+                      })}
                       {user.status !== 'suspended' ? (
                         <button
                           type="button"
@@ -619,9 +685,13 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                           type="button"
                           className="admin-primary"
                           disabled={busy}
-                          onClick={() => void handleApprove(user.id)}
+                          onClick={() => void handleReactivate(user)}
                         >
-                          {busy ? 'Salvando...' : user.status === 'suspended' ? 'Reativar' : 'Aprovar'}
+                          {busy
+                            ? 'Salvando...'
+                            : user.status === 'suspended'
+                              ? 'Reativar'
+                              : 'Liberar acesso'}
                         </button>
                       ) : null}
                     </div>
@@ -685,7 +755,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                       </span>
                     </strong>
                     <span>
-                      {platformName(job.platform)}
+                      {job.platform ? platformName(job.platform) : 'Todas as contas'}
                       {job.username ? ` @${job.username.replace(/^@/, '')}` : ''}
                       {job.finishedAt
                         ? ` · Terminou em ${formatWhen(job.finishedAt)}`
