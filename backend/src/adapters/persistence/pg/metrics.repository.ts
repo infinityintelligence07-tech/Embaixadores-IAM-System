@@ -22,6 +22,54 @@ import { rankedMediaSql } from '../../../domain/ranked-media';
 import { getPool } from '../../../infrastructure/db/pool';
 import { readJson } from './read-json';
 
+const lastViewsBefore = (bound: string) => `
+  SELECT cs.views FROM content_metric_snapshots cs
+  WHERE cs.content_id = e.id AND cs.views IS NOT NULL AND cs.collected_at < ${bound}
+  ORDER BY cs.collected_at DESC LIMIT 1`;
+
+/**
+ * Views ganhas dentro do período ($2 a $3) por vídeo da conta $1: a última medição antes do fim
+ * menos a última antes do início. Vídeo publicado no período parte de zero. Vídeo antigo que só
+ * passamos a medir depois do início (embaixador que entrou no meio) parte da primeira medição,
+ * para o histórico de antes não entrar como se fosse do período.
+ */
+const GAINS_IN_WINDOW = `
+  WITH eligible AS (
+    SELECT c.id, c.published_at
+    FROM contents c
+    WHERE c.social_account_id = $1
+      AND c.eligible = true
+      AND c.excluded_at IS NULL
+      AND c.removed_on_platform = false
+      AND ${rankedMediaSql('c')}
+  ),
+  watched_since AS (
+    SELECT MIN(cs.collected_at) AS at
+    FROM content_metric_snapshots cs
+    JOIN eligible e ON e.id = cs.content_id
+    WHERE cs.views IS NOT NULL
+  ),
+  gains AS (
+    SELECT e.id,
+           GREATEST(
+             COALESCE(final.views, 0) - CASE
+               WHEN e.published_at >= $2 THEN 0
+               WHEN before.views IS NOT NULL THEN before.views
+               WHEN e.published_at >= (SELECT at FROM watched_since) THEN 0
+               ELSE COALESCE(first_seen.views, 0)
+             END,
+             0
+           ) AS gained
+    FROM eligible e
+    LEFT JOIN LATERAL (${lastViewsBefore('$3')}) final ON true
+    LEFT JOIN LATERAL (${lastViewsBefore('$2')}) before ON true
+    LEFT JOIN LATERAL (
+      SELECT cs.views FROM content_metric_snapshots cs
+      WHERE cs.content_id = e.id AND cs.views IS NOT NULL AND cs.collected_at >= $2
+      ORDER BY cs.collected_at ASC LIMIT 1
+    ) first_seen ON true
+  )`;
+
 @Injectable()
 export class PgMetricsRepository implements MetricsRepository {
   private pool: Pool;
@@ -145,9 +193,7 @@ export class PgMetricsRepository implements MetricsRepository {
     socialAccountId: SocialAccountId,
     window: { from: Date; to: Date } | null = null,
   ): Promise<AmbassadorMetricAggregate | null> {
-    // Sem período ($2/$3 nulos) vale tudo; com período, só vídeos publicados dentro dele.
-    const inWindow = (alias: string) =>
-      `($2::timestamptz IS NULL OR (${alias}.published_at >= $2 AND ${alias}.published_at < $3))`;
+    if (window) return this.aggregateGainedInWindow(socialAccountId, window);
     const result = await this.pool.query(
       `SELECT 
          sa.profile_id,
@@ -162,7 +208,6 @@ export class PgMetricsRepository implements MetricsRepository {
              AND removed_on_platform = false
              AND latest_views IS NOT NULL
              AND ${rankedMediaSql('contents')}
-             AND ${inWindow('contents')}
            ORDER BY latest_views DESC
            LIMIT 1
          ) AS best_content_id
@@ -172,10 +217,9 @@ export class PgMetricsRepository implements MetricsRepository {
          AND c.excluded_at IS NULL
          AND c.removed_on_platform = false
          AND ${rankedMediaSql('c')}
-         AND ${inWindow('c')}
        WHERE sa.id = $1
        GROUP BY sa.profile_id, sa.id`,
-      [socialAccountId, window?.from ?? null, window?.to ?? null],
+      [socialAccountId],
     );
     
     if (!result.rows[0]) {
@@ -183,6 +227,43 @@ export class PgMetricsRepository implements MetricsRepository {
     }
     
     const row = result.rows[0];
+    return {
+      profileId: asProfileId(row.profile_id),
+      totalViews: parseInt(row.total_views, 10) || 0,
+      bestVideoViews: parseInt(row.best_video_views, 10) || 0,
+      bestContentId: row.best_content_id ? asContentId(row.best_content_id) : null,
+    };
+  }
+
+  async gainedViewsByContent(
+    socialAccountId: SocialAccountId,
+    window: { from: Date; to: Date },
+  ): Promise<Map<ContentId, number>> {
+    const result = await this.pool.query(
+      `${GAINS_IN_WINDOW} SELECT id, gained FROM gains WHERE gained > 0`,
+      [socialAccountId, window.from, window.to],
+    );
+    return new Map(
+      result.rows.map((row) => [asContentId(row.id), parseInt(row.gained, 10) || 0]),
+    );
+  }
+
+  private async aggregateGainedInWindow(
+    socialAccountId: SocialAccountId,
+    window: { from: Date; to: Date },
+  ): Promise<AmbassadorMetricAggregate | null> {
+    const result = await this.pool.query(
+      `${GAINS_IN_WINDOW}
+       SELECT (SELECT profile_id FROM social_accounts WHERE id = $1) AS profile_id,
+              COALESCE(SUM(gained), 0) AS total_views,
+              COALESCE(MAX(gained), 0) AS best_video_views,
+              (SELECT id FROM gains WHERE gained > 0 ORDER BY gained DESC LIMIT 1) AS best_content_id
+       FROM gains`,
+      [socialAccountId, window.from, window.to],
+    );
+
+    const row = result.rows[0];
+    if (!row?.profile_id) return null;
     return {
       profileId: asProfileId(row.profile_id),
       totalViews: parseInt(row.total_views, 10) || 0,

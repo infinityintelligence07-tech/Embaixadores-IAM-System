@@ -123,7 +123,9 @@ export function TermsPage() {
       <LegalSection title="4. Rankings e visualizações">
         <p>
           Os rankings somam as visualizações dos Reels e vídeos publicados no próprio perfil e
-          destacam o melhor vídeo, separados por rede. Fotos e carrosséis do Instagram não contam.
+          destacam o melhor vídeo, separados por rede. Nos rankings por mês ou campanha, contam as
+          visualizações ganhas dentro do período, de qualquer vídeo, mesmo postado antes. Fotos e
+          carrosséis do Instagram não contam.
           Quando um número ainda não estiver disponível, a plataforma mostra que ele está
           indisponível, sem trocá-lo por uma estimativa.
         </p>

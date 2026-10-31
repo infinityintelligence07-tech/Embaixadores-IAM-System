@@ -126,7 +126,7 @@ export function CampaignsSection({
           }
         : await api.adminCreateCampaign({ name: name.trim(), startDate, endDate });
       onMessage(
-        `Campanha "${created.name}" criada. O ranking dela conta os vídeos publicados de ${shortDay(created.firstDay)} a ${shortDay(created.lastDay)}.`,
+        `Campanha "${created.name}" criada. O ranking dela conta as views ganhas de ${shortDay(created.firstDay)} a ${shortDay(created.lastDay)}.`,
       );
       setName('');
       setStartDate('');
@@ -169,8 +169,9 @@ export function CampaignsSection({
         <div className="admin-panel-head">
           <h2 id="ranking-mode-title">Como os rankings começam</h2>
           <p>
-            Cada ranking conta só os vídeos publicados dentro do período. O ranking geral, desde o
-            início, continua disponível para todos.
+            Cada ranking conta as views ganhas dentro do período, de qualquer vídeo, mesmo postado
+            antes. Assim, um vídeo que viraliza depois ainda pontua no período em que cresceu. O
+            ranking geral, desde o início, continua disponível para todos.
           </p>
         </div>
         <div className="admin-row">

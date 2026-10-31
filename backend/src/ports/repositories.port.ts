@@ -247,11 +247,16 @@ export interface MetricsRepository {
   getLatestAccountSnapshot(
     socialAccountId: SocialAccountId,
   ): Promise<AccountMetricSnapshot | null>;
-  /** Com `window`, só somam os vídeos publicados dentro do período da campanha. */
+  /** Com `window`, somam as views ganhas dentro do período, de qualquer vídeo. */
   aggregateEligibleMetricsByAccount(
     socialAccountId: SocialAccountId,
     window?: { from: Date; to: Date } | null,
   ): Promise<AmbassadorMetricAggregate | null>;
+  /** Views ganhas por vídeo dentro do período; vídeos sem ganho ficam de fora. */
+  gainedViewsByContent(
+    socialAccountId: SocialAccountId,
+    window: { from: Date; to: Date },
+  ): Promise<Map<ContentId, number>>;
   /**
    * Views somadas no fim de cada dia (horário de Brasília), a partir das medições guardadas.
    * Dias antes da primeira medição vêm com `measured = false`.

@@ -380,7 +380,11 @@ export const api = {
       method: 'POST',
     }),
 
-  contents: () => fetchJson<ContentItem[]>('/api/contents'),
+  /** Com `campaignId`, `views` são as ganhas dentro do período, como no ranking dele. */
+  contents: (campaignId?: string) =>
+    fetchJson<ContentItem[]>(
+      campaignId ? `/api/contents?campaignId=${encodeURIComponent(campaignId)}` : '/api/contents',
+    ),
 
   rankings: (params: {
     platform?: SocialPlatform;

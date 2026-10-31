@@ -82,8 +82,8 @@ function campaignLine(campaign: Campaign | undefined): string {
   if (!campaign) return 'Todos os vídeos desde o início do programa.';
   const period = `${shortDay(campaign.firstDay)} a ${shortDay(campaign.lastDay)}`;
   return campaign.state === 'finished'
-    ? `Encerrado. Contou os vídeos publicados de ${period}.`
-    : `Contam os vídeos publicados de ${period}.`;
+    ? `Encerrado. Contou as views ganhas de ${period}, de qualquer vídeo.`
+    : `Contam as views ganhas de ${period}, de qualquer vídeo, mesmo postado antes.`;
 }
 
 export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
@@ -202,7 +202,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
       }
       const [accountResult, contentResult, dashboardResult] = await Promise.allSettled([
         api.socialAccounts(),
-        api.contents(),
+        api.contents(selected === GENERAL_RANKING ? undefined : selected),
         api.dashboard(),
       ]);
       if (!active) return;
@@ -271,10 +271,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const patent = patentFor(totalViewsStanding?.score ?? 0);
   const activeCampaign = campaigns.find((item) => item.id === campaign);
   const videos = contents
-    .filter(
-      (item) =>
-        !item.excluded && item.platform === platform && inCampaign(item, activeCampaign),
-    )
+    .filter((item) => !item.excluded && item.platform === platform)
     .sort((a, b) => b.views - a.views)
     .slice(0, 6);
   const slice = slices.find((item) => item.platform === platform);
@@ -666,10 +663,10 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
 
       {videosOpen ? (
         <section id="videos-mais-acessados" aria-label="Vídeos mais acessados">
-          {videos.length === 0 && activeCampaign && hasVideosOn(contents, platform) ? (
+          {videos.length === 0 && activeCampaign && !blocked ? (
             <EmptyState
-              title={`Nenhum vídeo publicado em ${periodName(activeCampaign)}`}
-              description="Só contam os vídeos publicados dentro do período. Publique um novo para entrar neste ranking."
+              title={`Nenhuma view nova em ${periodName(activeCampaign)} ainda`}
+              description="Contam as views que seus vídeos ganham dentro do período, inclusive os vídeos antigos. Publique e divulgue para subir."
               action={
                 <Link className="arena-link" to="/conteudos">
                   Ver todos os conteúdos
@@ -1069,20 +1066,6 @@ function Thumbnail({ src, fallbackClass }: { src: string | null; fallbackClass: 
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <span className={fallbackClass} aria-hidden />;
   return <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />;
-}
-
-function inCampaign(item: ContentItem, campaign: Campaign | undefined): boolean {
-  if (!campaign) return true;
-  if (!item.publishedAt) return false;
-  const published = new Date(item.publishedAt).getTime();
-  return (
-    published >= new Date(campaign.startsAt).getTime() &&
-    published < new Date(campaign.endsAt).getTime()
-  );
-}
-
-function hasVideosOn(contents: ContentItem[], platform: SocialPlatform): boolean {
-  return contents.some((item) => !item.excluded && item.platform === platform);
 }
 
 /** "Outubro de 2026" vira "outubro de 2026" no meio da frase; campanhas mantêm o nome. */
