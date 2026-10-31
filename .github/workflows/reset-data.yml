@@ -1,0 +1,170 @@
+name: Reset data (temporário)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "report (só conta e faz cópia), reset (zera ranking, redes e views, mantém as pessoas) ou wipe (apaga embaixadores)"
+        required: true
+        default: report
+        type: choice
+        options: [report, reset, wipe]
+      confirm:
+        description: "reset pede ZERAR-RANKING; wipe pede APAGAR-TUDO"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Conferir confirmação
+        if: (inputs.mode == 'wipe' && inputs.confirm != 'APAGAR-TUDO') || (inputs.mode == 'reset' && inputs.confirm != 'ZERAR-RANKING')
+        run: |
+          echo "Sem a palavra de confirmação a limpeza não roda."
+          exit 1
+
+      - name: Configurar SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Relatório, cópia e limpeza
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          cat > reset.js <<'JS'
+          const { Pool } = require('pg');
+          const { createClient } = require('@supabase/supabase-js');
+          const mode = process.env.MODE;
+          const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+          const TABLES = [
+            'profiles', 'ambassador_memberships', 'applications', 'social_accounts', 'contents',
+            'content_metric_snapshots', 'account_metric_snapshots', 'sync_jobs', 'sync_runs',
+            'ranking_versions', 'ranking_entries', 'notifications', 'audit_logs', 'oauth_states',
+            'campaigns', 'app_settings',
+          ];
+          (async () => {
+            const counts = {};
+            const backup = {};
+            for (const table of TABLES) {
+              const rows = (await pool.query(`SELECT * FROM public.${table}`)).rows;
+              counts[table] = rows.length;
+              backup[table] = rows;
+            }
+            const members = (await pool.query(
+              `SELECT p.public_name, p.role, m.status, p.created_at,
+                      (SELECT count(*) FROM social_accounts sa WHERE sa.profile_id = p.id AND sa.disconnected_at IS NULL) AS redes
+               FROM profiles p LEFT JOIN ambassador_memberships m ON m.profile_id = p.id
+               WHERE p.deleted_at IS NULL ORDER BY p.created_at`,
+            )).rows;
+            const apps = (await pool.query(
+              `SELECT nome_completo, status, created_at FROM applications ORDER BY created_at`,
+            )).rows;
+            console.error('CONTAGEM ' + JSON.stringify(counts));
+            console.error('PERFIS (nome público, papel, situação, redes, criado em):');
+            for (const m of members) {
+              console.error(`  - ${m.public_name} | ${m.role} | ${m.status ?? '-'} | ${m.redes} | ${new Date(m.created_at).toISOString().slice(0, 10)}`);
+            }
+            console.error('CANDIDATURAS (nome, situação, enviada em):');
+            for (const a of apps) {
+              console.error(`  - ${a.nome_completo} | ${a.status} | ${new Date(a.created_at).toISOString().slice(0, 10)}`);
+            }
+            process.stdout.write(JSON.stringify(backup));
+
+            const countAll = async () => {
+              const after = {};
+              for (const table of TABLES) {
+                after[table] = Number((await pool.query(`SELECT count(*) FROM public.${table}`)).rows[0].count);
+              }
+              return after;
+            };
+
+            if (mode === 'reset') {
+              // Cadastros, aprovações e fotos ficam; somem redes, vídeos, views e rankings publicados.
+              const client = await pool.connect();
+              try {
+                await client.query('BEGIN');
+                await client.query('DELETE FROM ranking_entries');
+                await client.query('DELETE FROM ranking_versions');
+                await client.query('DELETE FROM social_accounts');
+                await client.query('DELETE FROM oauth_states');
+                await client.query('COMMIT');
+              } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
+              } finally {
+                client.release();
+              }
+              console.error('DEPOIS ' + JSON.stringify(await countAll()));
+              await pool.end();
+              return;
+            }
+
+            if (mode !== 'wipe') {
+              console.error('Modo report: nada foi apagado.');
+              await pool.end();
+              return;
+            }
+
+            const targets = (await pool.query(`SELECT id FROM profiles WHERE role <> 'admin'`)).rows.map((r) => r.id);
+            const client = await pool.connect();
+            try {
+              await client.query('BEGIN');
+              await client.query('DELETE FROM ranking_entries');
+              await client.query('DELETE FROM ranking_versions');
+              await client.query('DELETE FROM social_accounts');
+              await client.query('DELETE FROM applications');
+              await client.query('DELETE FROM notifications');
+              await client.query('DELETE FROM oauth_states');
+              await client.query('DELETE FROM audit_logs');
+              await client.query('UPDATE ambassador_memberships SET approved_by = NULL WHERE approved_by = ANY($1::uuid[])', [targets]);
+              await client.query('UPDATE app_settings SET updated_by = NULL WHERE updated_by = ANY($1::uuid[])', [targets]);
+              await client.query('UPDATE campaigns SET created_by = NULL WHERE created_by = ANY($1::uuid[])', [targets]);
+              await client.query('COMMIT');
+            } catch (error) {
+              await client.query('ROLLBACK');
+              throw error;
+            } finally {
+              client.release();
+            }
+
+            const auth = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false },
+            });
+            let removed = 0;
+            for (const id of targets) {
+              const { error } = await auth.auth.admin.deleteUser(id);
+              if (error) console.error(`Falha ao apagar usuário ${id.slice(0, 8)}: ${error.message}`);
+              else removed += 1;
+            }
+            await pool.query(`DELETE FROM profiles WHERE role <> 'admin'`);
+            const fs = require('fs');
+            const avatarDir = process.env.AVATAR_DIR || '/app/cache/avatars';
+            for (const id of targets) {
+              for (const ext of ['jpg', 'png', 'webp']) fs.rmSync(`${avatarDir}/${id}.${ext}`, { force: true });
+            }
+            console.error(`Usuários apagados: ${removed} de ${targets.length}`);
+            console.error('DEPOIS ' + JSON.stringify(await countAll()));
+            await pool.end();
+          })().catch((error) => {
+            console.error('ERRO ' + (error && error.message ? error.message : error));
+            process.exit(1);
+          });
+          JS
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" "mkdir -p /opt/embaixadores/backups && chmod 700 /opt/embaixadores/backups"
+          STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "cd /opt/embaixadores && docker compose -f docker-compose.yml -f docker-compose.vps.yml exec -T -e MODE=$MODE app node - > /opt/embaixadores/backups/backup-$STAMP-$MODE.json && chmod 600 /opt/embaixadores/backups/backup-$STAMP-$MODE.json && ls -la /opt/embaixadores/backups | tail -3" < reset.js
