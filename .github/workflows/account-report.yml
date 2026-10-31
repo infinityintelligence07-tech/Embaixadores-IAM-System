@@ -1,0 +1,68 @@
+name: Relatório de contas (temporário)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Configurar SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Relatório
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          cat > report.js <<'JS'
+          const { Pool } = require('pg');
+          const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+          const mask = (e) => {
+            const [u, d] = String(e || '').split('@');
+            return u ? `${u.slice(0, 3)}***@${d || ''}` : '-';
+          };
+          (async () => {
+            const rows = (await pool.query(`
+              SELECT p.id, p.email, p.public_name, p.full_name, p.role, p.created_at, p.deleted_at,
+                     m.status AS membership,
+                     (SELECT string_agg(i.provider, ',') FROM auth.identities i WHERE i.user_id = p.id) AS providers,
+                     (SELECT u.last_sign_in_at FROM auth.users u WHERE u.id = p.id) AS last_sign_in,
+                     (SELECT string_agg(sa.platform || ':' || sa.status || ':' || coalesce(sa.review_status, '-'), ' ')
+                        FROM social_accounts sa WHERE sa.profile_id = p.id) AS networks,
+                     (SELECT count(*) FROM applications a WHERE a.profile_id = p.id OR lower(a.email) = lower(p.email)) AS applications
+              FROM profiles p
+              LEFT JOIN ambassador_memberships m ON m.profile_id = p.id
+              WHERE p.role = 'admin'
+                 OR p.created_at > now() - interval '3 days'
+                 OR p.id IN (SELECT user_id FROM auth.identities WHERE provider = 'google')
+                 OR (SELECT u.last_sign_in_at FROM auth.users u WHERE u.id = p.id) > now() - interval '1 day'
+              ORDER BY p.created_at`)).rows;
+            for (const r of rows) {
+              console.log([
+                mask(r.email), `nome=${r.public_name}`, `completo=${r.full_name}`, `papel=${r.role}`,
+                `membro=${r.membership}`, `entra=${r.providers}`, `ultimo=${r.last_sign_in && r.last_sign_in.toISOString()}`,
+                `redes=${r.networks || '-'}`, `candidaturas=${r.applications}`,
+                `criado=${r.created_at.toISOString()}`, r.deleted_at ? 'APAGADO' : '',
+              ].join(' | '));
+            }
+            await pool.end();
+          })().catch((error) => {
+            console.error('ERRO ' + (error && error.message ? error.message : error));
+            process.exit(1);
+          });
+          JS
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "cd /opt/embaixadores && docker compose -f docker-compose.yml -f docker-compose.vps.yml exec -T app node -" < report.js
