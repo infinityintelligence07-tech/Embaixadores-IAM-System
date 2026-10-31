@@ -27,13 +27,15 @@ import { ClockPort } from '../../ports/clock.port';
 import { INJECTION_TOKENS } from '../../infrastructure/tokens/injection-tokens';
 import { ThumbnailCacheService } from '../../infrastructure/media/thumbnail-cache.service';
 
-const MAX_PAGES = 100; // Safety limit per run
+// Cada página lida custa um crédito no fornecedor de dados. 20 páginas cobrem centenas de
+// vídeos; perfis maiores que isso param aqui em vez de esvaziar o saldo.
+const MAX_PAGES = 20;
 const SNAPSHOT_MIN_INTERVAL_MS = 60 * 60 * 1000; // Skip duplicate snapshots within 1 hour
 const RATE_LIMIT_BACKOFF_MS = 30 * 60 * 1000; // At least 30 minutes
 const ASSUMED_TOKEN_LIFETIME_MS = 60 * 60 * 1000; // Credentials without expiresAt
-/** Contas com mais de MAX_PAGES páginas seguem em rodadas seguidas, a partir do cursor salvo. */
+/** Com MAX_CONTINUATIONS acima de zero, contas maiores seguem em rodadas seguidas a partir do cursor salvo. */
 const CONTINUE_DELAY_MS = 60 * 1000;
-const MAX_CONTINUATIONS = 5;
+const MAX_CONTINUATIONS = 0;
 
 interface RunCounters {
   itemsFetched: number;
@@ -171,6 +173,7 @@ export class SyncAccountUseCase {
       const seenPlatformIds = new Set<string>();
       let pagesFetched = 0;
       let completed = false;
+      let reachedEnd = false;
       
       // Fetch all content with pagination
       while (pagesFetched < MAX_PAGES) {
@@ -188,6 +191,7 @@ export class SyncAccountUseCase {
         
         if (!page.nextCursor) {
           completed = true;
+          reachedEnd = true;
           break;
         }
         
@@ -212,7 +216,7 @@ export class SyncAccountUseCase {
 
       // Deleted posts: only after a full pass that started from the first
       // page, otherwise a partial run would mark everything as removed.
-      if (completed && !resumedFromCheckpoint && totalFetched > 0) {
+      if (reachedEnd && !resumedFromCheckpoint && totalFetched > 0) {
         await this.markMissingAsRemoved(account.id, seenPlatformIds);
       }
       

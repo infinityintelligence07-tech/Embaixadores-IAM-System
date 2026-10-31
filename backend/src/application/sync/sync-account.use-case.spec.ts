@@ -187,8 +187,8 @@ describe('SyncAccountUseCase', () => {
     );
   });
 
-  it('renova o lock a cada página e continua contas grandes em outra rodada', async () => {
-    const { useCase, provider, syncJobRepo, socialAccountRepo } = setup({
+  it('renova o lock a cada página e para no limite de páginas sem gastar mais créditos', async () => {
+    const { useCase, provider, syncJobRepo, socialAccountRepo, contentRepo } = setup({
       account: account({ syncCoverageRatio: 1 }),
     });
     let page = 0;
@@ -199,19 +199,16 @@ describe('SyncAccountUseCase', () => {
 
     await useCase.execute('job-1');
 
-    expect(provider.listContents).toHaveBeenCalledTimes(100);
+    expect(provider.listContents).toHaveBeenCalledTimes(20);
     const checkpointUpdate = syncJobRepo.update.mock.calls.find(([, input]) => input.checkpoint)?.[1];
     expect(checkpointUpdate?.lockedAt).toEqual(NOW);
-    expect(syncJobRepo.update).toHaveBeenLastCalledWith(
-      'job-1',
-      expect.objectContaining({
-        status: SyncJobStatus.Pending,
-        attempts: 0,
-        checkpoint: expect.objectContaining({ cursor: 'c100', continuations: 1 }),
-      }),
+    expect(syncJobRepo.update).toHaveBeenLastCalledWith('job-1', { status: SyncJobStatus.Succeeded });
+    expect(socialAccountRepo.update).toHaveBeenLastCalledWith(
+      'acc-1',
+      expect.objectContaining({ syncCoverageRatio: 1 }),
     );
-    // Quem já tinha cobertura completa não sai do ranking por causa da rodada parcial.
-    expect(socialAccountRepo.update.mock.calls.at(-1)?.[1]).not.toHaveProperty('syncCoverageRatio');
+    // Sem ler o perfil até o fim, vídeo nenhum é marcado como removido.
+    expect(contentRepo.markRemoved).not.toHaveBeenCalled();
   });
 
   it('depois do limite de rodadas, trata a conta grande como completa', async () => {
