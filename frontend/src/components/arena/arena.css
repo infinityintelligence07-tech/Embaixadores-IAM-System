@@ -270,6 +270,39 @@
   font-size: 13px;
 }
 
+.arena-period-zero {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(122, 162, 255, 0.35);
+  border-radius: 14px;
+  background: rgba(0, 52, 184, 0.16);
+}
+
+.arena-campaign .arena-period-zero p {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.arena-period-zero button {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(122, 162, 255, 0.45);
+  border-radius: 12px;
+  background: transparent;
+  color: #b9ccff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.arena-period-zero button:hover {
+  background: rgba(122, 162, 255, 0.12);
+}
+
 .arena-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;

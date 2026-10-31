@@ -596,6 +596,19 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
             <option value={GENERAL_RANKING}>Geral, desde o início</option>
           </select>
           <p>{campaignLine(campaigns.find((item) => item.id === campaign))}</p>
+          {activeCampaign && !blocked && (generalStanding?.score ?? 0) === 0 && lifetimeViews > 0 ? (
+            <div className="arena-period-zero" role="note">
+              <p>
+                Neste período você está com 0 views por enquanto. Vídeos postados a partir de{' '}
+                {shortDay(activeCampaign.firstDay)} contam inteiros. Os vídeos mais antigos contam só
+                as views que ganharem daqui para frente. As {formatViews(lifetimeViews)} views que você
+                já tem aparecem no Geral.
+              </p>
+              <button type="button" onClick={() => selectCampaign(GENERAL_RANKING)}>
+                Ver o Geral, desde o início
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
