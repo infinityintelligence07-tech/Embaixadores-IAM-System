@@ -59,6 +59,10 @@ export class AdminCompetitionController {
       body.note,
       req.user.id as ProfileId,
     );
+    // A pessoa olha o ranking logo depois do aviso; esperar a rodada de 10 minutos parece erro.
+    void this.ranking.publishAll().catch((error) => {
+      console.error('ranking_publish_after_review_failed', error instanceof Error ? error.message : error);
+    });
     return { id: account.id, reviewStatus: account.reviewStatus, reviewNote: account.reviewNote };
   }
 

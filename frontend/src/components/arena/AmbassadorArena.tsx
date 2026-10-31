@@ -527,11 +527,12 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           <button type="button" className="tier-current" onClick={() => setLadderOpen(true)}>
             <img src={patent.current.image} alt="" />
             <span>
-              <small>Seu nível, desde o início</small>
+              <small>Seu nível</small>
               <strong>{patent.current.name}</strong>
               <em>
+                Você soma {formatViews(lifetimeViews)} views desde o início.{' '}
                 {patent.next
-                  ? `Faltam ${formatViews(patent.remaining)} views para ${patent.next.name}.`
+                  ? `Faltam ${formatViews(patent.remaining)} para ${patent.next.name}.`
                   : 'Você chegou ao nível máximo.'}
               </em>
               <span className="tier-progress" aria-hidden>
