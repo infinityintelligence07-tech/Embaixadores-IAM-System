@@ -22,6 +22,12 @@
   gap: 10px;
 }
 
+/* Fixo sobre a lista, o aviso precisa de fundo sólido para não se misturar com o que passa por trás. */
+.admin-feedback > * {
+  background-color: var(--bg-card) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+}
+
 .admin-feedback-body {
   display: flex;
   align-items: flex-start;
