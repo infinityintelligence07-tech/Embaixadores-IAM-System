@@ -1,0 +1,52 @@
+name: Conferir fornecedor de dados (temporário)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Configurar SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Logs e saldo (só leitura)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          cat > check.js <<'JS'
+          (async () => {
+            const key = process.env.SCRAPECREATORS_API_KEY;
+            const headers = { 'x-api-key': key };
+            for (const url of [
+              'https://api.scrapecreators.com/v1/credit-balance',
+              'https://api.scrapecreators.com/v1/instagram/profile?handle=natgeo',
+              'https://api.scrapecreators.com/v1/tiktok/profile?handle=natgeo',
+            ]) {
+              try {
+                const r = await fetch(url, { headers });
+                const text = await r.text();
+                console.log(url.replace(/\?.*/, ''), r.status, text.slice(0, 220).replace(/\s+/g, ' '));
+              } catch (error) {
+                console.log(url, 'ERRO', error.message);
+              }
+            }
+          })();
+          JS
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "cd /opt/embaixadores && docker compose -f docker-compose.yml -f docker-compose.vps.yml logs --since 90m app 2>&1 | grep -iE 'instagram|scrape|claim|handle|429|402|401|credit' | grep -v 'GET /api' | tail -40"
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "cd /opt/embaixadores && docker compose -f docker-compose.yml -f docker-compose.vps.yml exec -T app node -" < check.js
