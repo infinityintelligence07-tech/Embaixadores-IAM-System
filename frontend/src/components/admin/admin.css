@@ -680,3 +680,353 @@
     transition: none;
   }
 }
+
+/* Quadro de aprovações: uma coluna por decisão, a pessoa muda de coluna arrastando ou pelos botões. */
+.board-search {
+  width: min(100%, 420px);
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 10px;
+  background: white;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.board-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.board-notice {
+  background: var(--accent-soft);
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(250px, 1fr));
+  gap: 10px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--line);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+
+.board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--bg);
+  scroll-snap-align: start;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.board-col[data-drop='open'] {
+  border-color: rgba(0, 52, 184, 0.35);
+  border-style: dashed;
+}
+
+.board-col[data-drop='over'] {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+}
+
+.board-col[data-drop='closed'] {
+  opacity: 0.55;
+}
+
+.board-col-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.board-col[data-col='waiting'] .board-col-head h3::before,
+.board-col[data-col='adjust'] .board-col-head h3::before,
+.board-col[data-col='approved'] .board-col-head h3::before,
+.board-col[data-col='out'] .board-col-head h3::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.board-col[data-col='waiting'] .board-col-head h3::before { background: #ff9500; }
+.board-col[data-col='adjust'] .board-col-head h3::before { background: #8a4b00; }
+.board-col[data-col='approved'] .board-col-head h3::before { background: var(--accent); }
+.board-col[data-col='out'] .board-col-head h3::before { background: var(--bad); }
+
+.board-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: white;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.board-col-head p {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.board-drop-hint {
+  margin: 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: white;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.board-empty {
+  margin: 0;
+  padding: 14px 12px;
+  border: 1px dashed rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.board-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.board-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  cursor: grab;
+}
+
+.board-card:active {
+  cursor: grabbing;
+}
+
+.board-card[data-busy='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.board-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.board-card-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.board-grip {
+  flex: none;
+  fill: rgba(0, 0, 0, 0.28);
+}
+
+.board-handles {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.board-handles li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.board-handles .platform-mark {
+  border-radius: 5px;
+}
+
+.board-handles a {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-handles a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.board-meta {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.board-card .admin-note {
+  margin: 0;
+  font-size: 13px;
+}
+
+.board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.board-actions button,
+.board-pager button,
+.board-more,
+.board-details .is-stop {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  background: white;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.board-actions button:hover:not(:disabled),
+.board-pager button:hover:not(:disabled),
+.board-more:hover {
+  border-color: rgba(0, 52, 184, 0.35);
+  background: rgba(0, 52, 184, 0.04);
+}
+
+.board-actions .board-toggle {
+  flex: 0 0 100%;
+  min-height: 36px;
+  border-color: transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.board-actions button:disabled,
+.board-pager button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.board-details {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: auto;
+}
+
+.board-details > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.board-details dt {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.board-details dd {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.board-details a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.board-details-foot {
+  display: flex;
+}
+
+.board-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.board-pager span {
+  flex: none;
+}
+
+@media (min-width: 900px) {
+  /* Nas aprovações o menu vai para o topo e o quadro usa a largura toda. */
+  .admin-layout.is-wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-layout.is-wide .admin-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .board-search {
+    width: 100%;
+    font-size: 16px;
+  }
+
+  .board {
+    grid-template-columns: repeat(4, minmax(82%, 1fr));
+    padding: 12px 16px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-col {
+    transition: none;
+  }
+}

@@ -1,9 +1,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AccountReviewsPanel } from '@/components/admin/AccountReviewsPanel';
+import { AdminBoard } from '@/components/admin/AdminBoard';
 import { CampaignsSection } from '@/components/admin/CampaignsSection';
 import { ListFooter, useListWindow } from '@/components/admin/ListWindow';
-import { NewMembersSection } from '@/components/admin/NewMembersSection';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -37,7 +36,7 @@ export interface AdminPreview {
 }
 
 const sections: { id: AdminSection; label: string }[] = [
-  { id: 'novos', label: 'Novos membros' },
+  { id: 'novos', label: 'Aprovações' },
   { id: 'pessoas', label: 'Pessoas' },
   { id: 'rankings', label: 'Rankings' },
   { id: 'sincronizacao', label: 'Coletas' },
@@ -213,8 +212,6 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
   const [message, setMessage] = useState<string | null>(null);
   const [pendingSuspend, setPendingSuspend] = useState<AdminUser | null>(null);
   const [waitingCount, setWaitingCount] = useState(0);
-  const [waitingAccounts, setWaitingAccounts] = useState(0);
-  const [reviewsReloadKey, setReviewsReloadKey] = useState(0);
   const hasLoadedRef = useRef(false);
 
   const usersList = useListWindow(users.length);
@@ -272,11 +269,6 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
     void loadAll();
   }, [loadAll]);
 
-  const membersChanged = useCallback(() => {
-    setReviewsReloadKey((key) => key + 1);
-    void loadAll();
-  }, [loadAll]);
-
   async function handleApprove(id: string) {
     setActionLoading(id);
     setError(null);
@@ -288,7 +280,6 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         );
       } else {
         await api.adminApproveUser(id);
-        setReviewsReloadKey((key) => key + 1);
         await loadAll();
       }
       setMessage(
@@ -480,7 +471,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         </div>
       ) : null}
 
-      <div className="admin-layout">
+      <div className={section === 'novos' ? 'admin-layout is-wide' : 'admin-layout'}>
         <nav className="admin-nav" aria-label="Seções da administração">
           {sections.map((item) => (
             <button
@@ -494,12 +485,12 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               }}
             >
               {item.label}
-              {item.id === 'novos' && waitingCount + waitingAccounts > 0 ? (
+              {item.id === 'novos' && waitingCount > 0 ? (
                 <span
                   className="admin-nav-count"
-                  aria-label={`${waitingCount + waitingAccounts} aguardando`}
+                  aria-label={`${waitingCount} aguardando`}
                 >
-                  {waitingCount + waitingAccounts}
+                  {waitingCount}
                 </span>
               ) : null}
             </button>
@@ -507,26 +498,14 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
         </nav>
 
         {section === 'novos' ? (
-          <div className="admin-stack">
-            <NewMembersSection
-              pendingSignups={users}
-              preview={preview != null}
-              approvingUserId={actionLoading}
-              onApproveSignup={(id) => void handleApprove(id)}
-              onChanged={membersChanged}
-              onPendingCount={setWaitingCount}
-              onMessage={showMessage}
-              onError={showError}
-            />
-            <AccountReviewsPanel
-              preview={preview != null}
-              reloadKey={reviewsReloadKey}
-              onCount={setWaitingAccounts}
-              onChanged={() => void loadAll()}
-              onMessage={showMessage}
-              onError={showError}
-            />
-          </div>
+          <AdminBoard
+            users={users}
+            preview={preview != null}
+            onChanged={loadAll}
+            onWaitingCount={setWaitingCount}
+            onMessage={showMessage}
+            onError={showError}
+          />
         ) : null}
 
         {section === 'rankings' ? (
@@ -579,7 +558,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
               <div className="admin-empty" role="status">
                 <strong>Nenhum embaixador cadastrado</strong>
                 <p>
-                  Quando alguém se cadastrar no site, a pessoa aparece em Novos membros para
+                  Quando alguém se cadastrar no site, a pessoa aparece em Aprovações para
                   aprovar e depois aqui.
                 </p>
               </div>
