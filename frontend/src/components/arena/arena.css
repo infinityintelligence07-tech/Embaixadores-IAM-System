@@ -1471,7 +1471,7 @@ body:has(.tier-layer[open]) {
 /* A linha inteira marca a caixa; flex: none impede a caixa de encolher ao lado do texto longo. */
 .complete-consent {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   min-height: 44px;
   padding: 4px 0;
@@ -1486,14 +1486,14 @@ body:has(.tier-layer[open]) {
   width: 20px;
   height: 20px;
   min-height: 20px;
-  margin: 0;
+  margin: 1px 0 0;
   accent-color: var(--accent-2);
   cursor: pointer;
 }
 
-/* Padding em elemento inline aumenta a área de toque sem mexer no fluxo do texto. */
+/* Padding vertical em elemento inline aumenta a área de toque sem abrir espaço antes da pontuação. */
 .complete-consent a {
-  padding: 10px 2px;
+  padding: 10px 0;
   color: var(--ink);
   text-underline-offset: 3px;
 }

@@ -26,7 +26,11 @@ export function Input({
   useLayoutEffect(() => {
     const node = leadingRef.current;
     if (!textLeading || !node) return;
-    const measure = () => setLeadingWidth(node.getBoundingClientRect().width);
+    // Dentro de um diálogo fechado a largura medida é 0; nesse caso fica o espaço padrão.
+    const measure = () => {
+      const width = node.getBoundingClientRect().width;
+      if (width > 0) setLeadingWidth(width);
+    };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(measure);

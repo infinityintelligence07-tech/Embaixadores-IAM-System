@@ -313,7 +313,8 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const shownTail = paged
     ? visibleTail.slice(tailPage * TAIL_PAGE, (tailPage + 1) * TAIL_PAGE)
     : visibleTail;
-  const needsSignup = !locked && !loading && Boolean(profile?.needsSignupDetails);
+  // O perfil chega antes do ranking: o cartão de cadastro aparece na hora, sem empurrar a tela depois.
+  const needsSignup = !locked && Boolean(profile?.needsSignupDetails);
 
   useEffect(() => {
     const dialog = ladderRef.current;
@@ -462,13 +463,13 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         <p className="arena-hello">
           Olá, <strong>{name}</strong>
         </p>
-        {loading ? (
+        {needsSignup ? (
+          <h1 className="arena-standing">Falta pouco para entrar na competição</h1>
+        ) : loading ? (
           <div className="arena-skeleton arena-skeleton-hero" aria-hidden>
             <i />
             <i />
           </div>
-        ) : needsSignup ? (
-          <h1 className="arena-standing">Falta pouco para entrar na competição</h1>
         ) : blocked ? (
           <h1 className="arena-standing">Falta só o seu @</h1>
         ) : standing?.eligible && standing.position != null ? (
@@ -485,7 +486,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         ) : (
           <h1 className="arena-standing">Você ainda não está neste ranking</h1>
         )}
-        {loading || blocked ? null : (
+        {loading || blocked || needsSignup ? null : (
           <>
             <p className="arena-context">{chase.context}</p>
             <p className="arena-detail">{chase.detail}</p>
@@ -505,14 +506,14 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         )}
       </header>
 
-      {loading ? null : needsSignup ? (
+      {needsSignup ? (
         <CompleteSignupCard
           onDone={async () => {
             await refreshProfile();
             retry();
           }}
         />
-      ) : (
+      ) : loading ? null : (
         <CompetitionGate
           accounts={accounts}
           busy={connecting ?? requestBusy}

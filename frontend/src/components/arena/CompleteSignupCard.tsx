@@ -1,69 +1,112 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PlatformMark } from '@/components/brand/PlatformMark';
 import { Input } from '@/components/ui/Input';
 import { api, type SocialPlatform } from '@/lib/api';
+import { handleError, normalizeHandle } from '@/lib/connection';
 import { platformLabel } from '@/lib/format';
 
 const PLATFORMS: SocialPlatform[] = ['instagram', 'tiktok'];
 
-function digits(value: string): string {
-  return value.replace(/\D/g, '');
+type Field = 'whatsapp' | 'networks' | SocialPlatform | 'consent';
+type Errors = Partial<Record<Field, string>>;
+
+function phoneDigits(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  return digits.length > 11 && digits.startsWith('55') ? digits.slice(2) : digits;
 }
 
-function bareHandle(value: string): string {
-  return value.trim().replace(/^@+/, '');
+function formatPhone(value: string): string {
+  const digits = phoneDigits(value);
+  if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return value;
+}
+
+function phoneError(value: string): string | undefined {
+  const digits = phoneDigits(value);
+  if (!digits) return 'Informe o seu WhatsApp com DDD.';
+  if (digits.length < 10 || digits.length > 11 || digits.startsWith('0')) {
+    return 'Confira o WhatsApp: use DDD e número, como (11) 98765-4321.';
+  }
+  return undefined;
+}
+
+function atError(platform: SocialPlatform, value: string): string | undefined {
+  const handle = normalizeHandle(value);
+  if (!handle) return `Informe o seu @ do ${platformLabel(platform)}.`;
+  return handleError(platform, handle) ?? undefined;
 }
 
 /** Primeiro acesso pelo Google: WhatsApp, rede e @ numa tela só. */
 export function CompleteSignupCard({ onDone }: { onDone: () => Promise<void> }) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [whatsapp, setWhatsapp] = useState('');
   const [networks, setNetworks] = useState<SocialPlatform[]>([]);
   const [handles, setHandles] = useState<Record<SocialPlatform, string>>({ instagram: '', tiktok: '' });
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [touched, setTouched] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const phoneError =
-    touched && digits(whatsapp).length < 10 ? 'Informe o WhatsApp com DDD.' : undefined;
+  function clear(field: Field) {
+    setErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
 
   function toggle(platform: SocialPlatform) {
+    clear('networks');
     setNetworks((current) =>
       current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform],
     );
   }
 
+  function validate(): Errors {
+    const next: Errors = {};
+    const phone = phoneError(whatsapp);
+    if (phone) next.whatsapp = phone;
+    if (networks.length === 0) next.networks = 'Marque Instagram, TikTok ou os dois.';
+    for (const platform of networks) {
+      const message = atError(platform, handles[platform]);
+      if (message) next[platform] = message;
+    }
+    if (!consent) next.consent = 'Para participar, autorize a divulgação do seu nome no ranking.';
+    return next;
+  }
+
+  function focusFirst(found: Errors) {
+    const order: Field[] = ['whatsapp', 'networks', 'instagram', 'tiktok', 'consent'];
+    const first = order.find((field) => found[field]);
+    if (!first) return;
+    const target = formRef.current?.querySelector<HTMLElement>(`[data-field="${first}"]`);
+    target?.focus();
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setTouched(true);
-    setError(null);
-    if (digits(whatsapp).length < 10) return;
-    if (networks.length === 0) {
-      setError('Marque Instagram, TikTok ou os dois.');
-      return;
-    }
-    const missing = networks.find((platform) => !bareHandle(handles[platform]));
-    if (missing) {
-      setError(`Informe o @ do ${platformLabel(missing)}.`);
-      return;
-    }
-    if (!consent) {
-      setError('Para participar, autorize a divulgação do seu nome no ranking.');
+    setServerError(null);
+    const found = validate();
+    setErrors(found);
+    if (Object.keys(found).length > 0) {
+      focusFirst(found);
       return;
     }
     setBusy(true);
     try {
       await api.completeSignup({
-        whatsapp,
+        whatsapp: formatPhone(whatsapp),
         redes_sociais: networks,
-        instagram_handle: networks.includes('instagram') ? `@${bareHandle(handles.instagram)}` : '',
-        tiktok_handle: networks.includes('tiktok') ? `@${bareHandle(handles.tiktok)}` : '',
+        instagram_handle: networks.includes('instagram') ? `@${normalizeHandle(handles.instagram)}` : '',
+        tiktok_handle: networks.includes('tiktok') ? `@${normalizeHandle(handles.tiktok)}` : '',
         ranking_consent: true,
       });
       await onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível salvar. Tente de novo.');
+      setServerError(err instanceof Error ? err.message : 'Não foi possível salvar. Tente de novo.');
       setBusy(false);
     }
   }
@@ -74,30 +117,38 @@ export function CompleteSignupCard({ onDone }: { onDone: () => Promise<void> }) 
         <h2 id="complete-signup-title">Complete o seu cadastro</h2>
         <p className="gate-lead">Informe o seu WhatsApp e o @ onde você posta. Não pede senha da rede.</p>
       </div>
-      <form className="complete-form" onSubmit={submit} noValidate>
+      <form ref={formRef} className="complete-form" onSubmit={submit} noValidate>
         <Input
           label="WhatsApp"
           name="whatsapp"
+          data-field="whatsapp"
           type="tel"
           inputMode="tel"
           autoComplete="tel"
-          placeholder="(11) 99999-9999"
+          placeholder="(11) 98765-4321"
           value={whatsapp}
-          onChange={(event) => setWhatsapp(event.target.value)}
-          onBlur={() => {
-            if (whatsapp.trim()) setTouched(true);
+          onChange={(event) => {
+            setWhatsapp(event.target.value);
+            clear('whatsapp');
           }}
-          error={phoneError}
+          onBlur={() => {
+            if (!whatsapp.trim()) return;
+            setWhatsapp(formatPhone(whatsapp));
+            const message = phoneError(whatsapp);
+            if (message) setErrors((current) => ({ ...current, whatsapp: message }));
+          }}
+          error={errors.whatsapp}
           disabled={busy}
         />
-        <fieldset className="complete-networks">
+        <fieldset className="complete-networks" aria-describedby={errors.networks ? 'complete-networks-error' : undefined}>
           <legend>Em qual rede você vai publicar?</legend>
           <div>
-            {PLATFORMS.map((platform) => (
+            {PLATFORMS.map((platform, index) => (
               <button
                 key={platform}
                 type="button"
                 className="complete-network"
+                data-field={index === 0 ? 'networks' : undefined}
                 aria-pressed={networks.includes(platform)}
                 onClick={() => toggle(platform)}
                 disabled={busy}
@@ -107,41 +158,68 @@ export function CompleteSignupCard({ onDone }: { onDone: () => Promise<void> }) 
               </button>
             ))}
           </div>
+          {errors.networks ? (
+            <p id="complete-networks-error" className="complete-error" role="alert">
+              {errors.networks}
+            </p>
+          ) : null}
         </fieldset>
         {networks.map((platform) => (
           <Input
             key={platform}
             label={`Seu @ no ${platformLabel(platform)}`}
             name={`${platform}-handle`}
+            data-field={platform}
             leading="@"
             placeholder="seuperfil"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
             value={handles[platform]}
-            onChange={(event) =>
-              setHandles((current) => ({ ...current, [platform]: event.target.value }))
-            }
-            hint="O perfil precisa estar público."
+            onChange={(event) => {
+              const value = event.target.value;
+              setHandles((current) => ({ ...current, [platform]: value }));
+              clear(platform);
+            }}
+            onBlur={() => {
+              if (!handles[platform].trim()) return;
+              const cleaned = normalizeHandle(handles[platform]);
+              if (cleaned) setHandles((current) => ({ ...current, [platform]: cleaned }));
+              const message = atError(platform, handles[platform]);
+              if (message) setErrors((current) => ({ ...current, [platform]: message }));
+            }}
+            error={errors[platform]}
+            hint="O perfil precisa estar público. Pode colar o link do perfil."
             disabled={busy}
           />
         ))}
-        <label className="complete-consent">
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(event) => setConsent(event.target.checked)}
-            disabled={busy}
-          />
-          <span>
-            Autorizo a divulgação do meu nome no ranking e concordo com os{' '}
-            <Link to="/termos">Termos de uso</Link> e a{' '}
-            <Link to="/privacidade">Política de privacidade</Link>.
-          </span>
-        </label>
-        {error ? (
+        <div>
+          <label className="complete-consent">
+            <input
+              type="checkbox"
+              data-field="consent"
+              checked={consent}
+              onChange={(event) => {
+                setConsent(event.target.checked);
+                clear('consent');
+              }}
+              aria-invalid={Boolean(errors.consent) || undefined}
+              disabled={busy}
+            />
+            <span>
+              Autorizo a divulgação do meu nome no ranking e concordo com os{' '}
+              <Link to="/termos">Termos de uso</Link> e a <Link to="/privacidade">Política de privacidade</Link>.
+            </span>
+          </label>
+          {errors.consent ? (
+            <p className="complete-error" role="alert">
+              {errors.consent}
+            </p>
+          ) : null}
+        </div>
+        {serverError ? (
           <p className="complete-error" role="alert">
-            {error}
+            {serverError}
           </p>
         ) : null}
         <button type="submit" className="cta complete-submit" disabled={busy}>

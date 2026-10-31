@@ -22,8 +22,8 @@ export function PrivacyPage() {
       <LegalSection title="1. Dados que coletamos">
         <ul className={listClass}>
           <li>
-            Cadastro: nome, nome público e e-mail. Quem entra com o Google compartilha também o nome
-            e o e-mail da conta Google. A autenticação é feita pelo Supabase Auth.
+            Cadastro: nome, nome público e e-mail. Quem entra com o Google, quando essa opção estiver
+            disponível, compartilha o nome e o e-mail da conta Google. A autenticação é feita pelo Supabase Auth.
           </li>
           <li>
             Candidatura: nome, e-mail, WhatsApp e o @ do Instagram ou TikTok, usados pela equipe
@@ -35,7 +35,7 @@ export function PrivacyPage() {
             identificador, nome de usuário, foto, endereço do perfil, Reels e vídeos publicados e as
             visualizações de cada um. Nunca pedimos a senha da rede social.
           </li>
-          <li>Uso da plataforma: logs técnicos, sincronizações e auditoria administrativa.</li>
+          <li>Uso da plataforma: registros técnicos de acesso, das coletas de views e das ações da equipe.</li>
         </ul>
       </LegalSection>
       <LegalSection title="2. Finalidades">
@@ -62,7 +62,7 @@ export function PrivacyPage() {
         <p>
           Não vendemos dados pessoais. Os dados podem ser processados por fornecedores necessários
           à operação: Supabase (autenticação e banco de dados), Google (entrada com conta Google,
-          quando escolhida) e o fornecedor de dados públicos das redes sociais.
+          quando disponível e escolhida) e o fornecedor de dados públicos das redes sociais.
         </p>
       </LegalSection>
       <LegalSection title="5. Retenção">
