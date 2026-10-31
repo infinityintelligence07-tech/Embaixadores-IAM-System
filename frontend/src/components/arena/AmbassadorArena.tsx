@@ -267,14 +267,18 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
     category,
     platform,
   });
-  const totalViewsStanding = standings[boardKey(platform, 'total_views')];
-  const patent = patentFor(totalViewsStanding?.score ?? 0);
   const activeCampaign = campaigns.find((item) => item.id === campaign);
+  const general = campaign === GENERAL_RANKING;
   const videos = contents
     .filter((item) => !item.excluded && item.platform === platform)
     .sort((a, b) => b.views - a.views)
     .slice(0, 6);
   const slice = slices.find((item) => item.platform === platform);
+  // O nível acompanha a carreira inteira: não volta ao primeiro quando um mês novo começa.
+  const lifetimeViews =
+    slice?.monitoredViewsTotal ??
+    (general ? standings[boardKey(platform, 'total_views')]?.score ?? 0 : 0);
+  const patent = patentFor(lifetimeViews);
   const blocked =
     !loading &&
     connectionDuty(accounts.find((account) => account.platform === platform)?.status) !== 'ready';
@@ -549,6 +553,30 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         </Alert>
       ) : null}
 
+      {loading || needsSignup ? null : (
+        <section className="tier" aria-label="Nível">
+          <button type="button" className="tier-current" onClick={() => setLadderOpen(true)}>
+            <img src={patent.current.image} alt="" />
+            <span>
+              <small>Seu nível no {platformLabel(platform)}, desde o início</small>
+              <strong>{patent.current.name}</strong>
+              <em>
+                {patent.next
+                  ? `Faltam ${formatViews(patent.remaining)} views para ${patent.next.name}.`
+                  : 'Você chegou ao nível máximo.'}
+              </em>
+              <span className="tier-progress" aria-hidden>
+                <i style={{ width: `${Math.max(4, Math.round(patent.progress * 100))}%` }} />
+              </span>
+            </span>
+            <span className="tier-more">
+              <span>Ver níveis</span>
+              <Chevron className="arena-chevron" />
+            </span>
+          </button>
+        </section>
+      )}
+
       {loading || locked ? null : (
         <GrowthCard
           platform={platform}
@@ -765,6 +793,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                     place={place}
                     entry={entry}
                     category={category}
+                    showTier={general}
                   />
                 );
               })}
@@ -780,6 +809,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                     key={entry.profileId}
                     entry={entry}
                     category={category}
+                    showTier={general}
                     delay={index * 40}
                   />
                 ))}
@@ -819,7 +849,12 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
                   />
                   <ol className="rank-list">
                     {shownTail.map((entry) => (
-                      <RankRow key={entry.profileId} entry={entry} category={category} />
+                      <RankRow
+                        key={entry.profileId}
+                        entry={entry}
+                        category={category}
+                        showTier={general}
+                      />
                     ))}
                   </ol>
                   {visibleTail.length === 0 ? (
@@ -875,27 +910,6 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
         </>
       )}
 
-      <section className="tier" aria-label="Nível">
-        <button type="button" className="tier-current" onClick={() => setLadderOpen(true)}>
-          <img src={patent.current.image} alt="" />
-          <span>
-            <small>Seu nível</small>
-            <strong>{patent.current.name}</strong>
-            <em>
-              {patent.next
-                ? `Faltam ${formatViews(patent.remaining)} views para ${patent.next.name}.`
-                : 'Você chegou ao nível máximo.'}
-            </em>
-            <span className="tier-progress" aria-hidden>
-              <i style={{ width: `${Math.max(4, Math.round(patent.progress * 100))}%` }} />
-            </span>
-          </span>
-          <span className="tier-more">
-            <span>Ver níveis</span>
-            <Chevron className="arena-chevron" />
-          </span>
-        </button>
-      </section>
       <dialog
         ref={ladderRef}
         className="tier-layer"
@@ -978,10 +992,12 @@ function Pedestal({
   place,
   entry,
   category,
+  showTier,
 }: {
   place: 1 | 2 | 3;
   entry: RankingEntry | null;
   category: RankingCategory;
+  showTier: boolean;
 }) {
   if (!entry) {
     return (
@@ -1004,7 +1020,7 @@ function Pedestal({
           name={entry.publicName}
           url={entry.avatarUrl}
           size={place === 1 ? 'lg' : 'md'}
-          views={entry.totalViews}
+          views={showTier ? entry.totalViews : null}
           own={entry.isCurrentUser}
         />
         <span className="place-coin" aria-label={`${place}º lugar`}>
@@ -1023,10 +1039,12 @@ function Pedestal({
 function RankRow({
   entry,
   category,
+  showTier,
   delay = 0,
 }: {
   entry: RankingEntry;
   category: RankingCategory;
+  showTier: boolean;
   delay?: number;
 }) {
   return (
@@ -1041,7 +1059,7 @@ function RankRow({
         name={entry.publicName}
         url={entry.avatarUrl}
         size="sm"
-        views={entry.totalViews}
+        views={showTier ? entry.totalViews : null}
         own={entry.isCurrentUser}
       />
       <p className="rank-name">
@@ -1085,14 +1103,15 @@ function Avatar({
   name: string;
   url: string | null;
   size: 'lg' | 'md' | 'sm';
-  views: number;
+  /** Views desde o início; nos rankings por período fica nulo e o selo de nível some. */
+  views: number | null;
   /** Na própria linha vale a foto atual do perfil, sem esperar o ranking ser publicado de novo. */
   own?: boolean;
 }) {
   const { profile } = useAuth();
   const src = own && profile ? profile.avatarUrl : url;
   const [failed, setFailed] = useState<string | null>(null);
-  const tier = patentFor(views).current;
+  const tier = views == null ? null : patentFor(views).current;
   return (
     <span className={`avatar-wrap avatar-wrap-${size}`}>
       {src && failed !== src ? (
@@ -1108,7 +1127,7 @@ function Avatar({
           {initial(name)}
         </span>
       )}
-      <img className="tier-pip" src={tier.image} alt={`Nível ${tier.name}`} />
+      {tier ? <img className="tier-pip" src={tier.image} alt={`Nível ${tier.name}`} /> : null}
     </span>
   );
 }
