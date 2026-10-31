@@ -102,7 +102,7 @@ export function TermsPage() {
       <LegalSection title="2. Cadastro e elegibilidade">
         <p>
           O embaixador deve fornecer dados verdadeiros: nome, nome público, e-mail e WhatsApp. A
-          conta pode ser criada com e-mail e senha ou, quando disponível, com a conta Google. A
+          conta pode ser criada com e-mail e senha ou com a conta Google. A
           participação nos rankings depende da aprovação da equipe. Contas suspensas não
           participam da classificação.
         </p>
