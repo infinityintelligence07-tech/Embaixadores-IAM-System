@@ -1059,3 +1059,91 @@
     transition: none;
   }
 }
+
+/* Dentro do cartão da pessoa, cada conta tem a própria linha e as próprias decisões. */
+.board-col-sum {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.board-accounts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.board-account {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: auto;
+}
+
+.board-account-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.board-account-head .platform-mark {
+  flex: none;
+  border-radius: 5px;
+}
+
+.board-account-head .board-handle {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-account .admin-note {
+  margin: 0;
+  background: white;
+  font-size: 13px;
+}
+
+.board-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.board-account-actions button {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  background: white;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.board-account-actions button:hover:not(:disabled) {
+  border-color: rgba(0, 52, 184, 0.35);
+}
+
+.board-account-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.board-actions .admin-primary {
+  flex: 1 1 100%;
+}

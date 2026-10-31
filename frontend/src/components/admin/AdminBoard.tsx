@@ -67,7 +67,15 @@ const REJECT_SUGGESTIONS = [
   'Essa conta não é da pessoa que a adicionou.',
 ];
 
-type Pending = { kind: 'adjust' | 'reject'; account: AdminAccount };
+interface Group {
+  key: string;
+  column: Column;
+  profileId: string;
+  person: AdminAccount;
+  accounts: AdminAccount[];
+}
+
+type Pending = { kind: 'adjust' | 'reject'; group: Group; accounts: AdminAccount[] };
 
 export type BoardStatus = 'loading' | 'ready' | 'failed';
 
@@ -81,9 +89,17 @@ function handleLabel(account: AdminAccount): string {
   return handle ? `@${handle}` : 'Conta sem @';
 }
 
-/** "@fulano no Instagram", para recados e avisos. */
-function accountPhrase(account: AdminAccount): string {
-  return `${handleLabel(account)} no ${platformLabel(account.platform)}`;
+/** "@fulano no Instagram e @ciclano no TikTok", para recados e avisos. */
+function accountsPhrase(accounts: AdminAccount[]): string {
+  const parts = accounts.map((item) => `${handleLabel(item)} no ${platformLabel(item.platform)}`);
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} e ${parts[parts.length - 1]}`;
+}
+
+function handlesPhrase(accounts: AdminAccount[]): string {
+  const parts = accounts.map(handleLabel);
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} e ${parts[parts.length - 1]}`;
 }
 
 function viewsLine(account: AdminAccount): string {
@@ -105,8 +121,12 @@ function formatPhone(raw: string): string {
   return raw;
 }
 
+function personName(account: AdminAccount): string {
+  return account.fullName || account.publicName;
+}
+
 function firstName(account: AdminAccount): string {
-  const source = account.fullName || account.publicName;
+  const source = personName(account);
   return source.split(' ')[0] || source;
 }
 
@@ -115,29 +135,44 @@ function sentence(text: string): string {
   return /[.!?]$/.test(clean) ? clean : `${clean}.`;
 }
 
-function noticeFor(account: AdminAccount, decision: ReviewDecision, note = ''): string {
-  const name = firstName(account);
-  const phrase = accountPhrase(account);
+function noticeFor(accounts: AdminAccount[], decision: ReviewDecision, note = ''): string {
+  const name = firstName(accounts[0]);
+  const phrase = accountsPhrase(accounts);
+  const many = accounts.length > 1;
   switch (decision) {
     case 'approved':
-      return `Oi, ${name}! Sua conta ${phrase} foi aprovada e as views dela passam a contar no ranking dos Embaixadores.`;
+      return many
+        ? `Oi, ${name}! Suas contas ${phrase} foram aprovadas e as views delas passam a contar no ranking dos Embaixadores.`
+        : `Oi, ${name}! Sua conta ${phrase} foi aprovada e as views dela passam a contar no ranking dos Embaixadores.`;
     case 'changes_requested':
-      return `Oi, ${name}! Para a sua conta ${phrase} entrar no ranking dos Embaixadores, falta um ajuste: ${sentence(note)} Depois, toque em "Já ajustei" no app.`;
+      return `Oi, ${name}! Para ${many ? 'suas contas' : 'sua conta'} ${phrase} entrar no ranking dos Embaixadores, falta um ajuste: ${sentence(note)} Depois, toque em "Já ajustei" no app.`;
     case 'rejected':
-      return `Oi, ${name}. Sua conta ${phrase} não foi aprovada para o ranking dos Embaixadores: ${sentence(note)}`;
+      return `Oi, ${name}. ${many ? 'Suas contas' : 'Sua conta'} ${phrase} não ${many ? 'foram aprovadas' : 'foi aprovada'} para o ranking dos Embaixadores: ${sentence(note)}`;
   }
 }
 
-/** Mais antigas primeiro onde há decisão a tomar; nas decididas, a decisão mais recente. */
-function sortColumn(column: Column, items: AdminAccount[]): AdminAccount[] {
+/** Uma pessoa vira um cartão por coluna, com as contas dela que estão naquela situação. */
+function groupColumn(column: Column, items: AdminAccount[]): Group[] {
+  const byPerson = new Map<string, AdminAccount[]>();
+  for (const item of items) byPerson.set(item.profileId, [...(byPerson.get(item.profileId) ?? []), item]);
   const decided = (item: AdminAccount) => item.reviewedAt ?? item.connectedAt;
-  return [...items].sort((a, b) =>
-    column === 'waiting'
-      ? a.connectedAt.localeCompare(b.connectedAt)
-      : column === 'adjust'
-        ? decided(a).localeCompare(decided(b))
-        : decided(b).localeCompare(decided(a)),
+  const groups = [...byPerson.entries()].map(([profileId, accounts]) => {
+    const sorted = [...accounts].sort(
+      (a, b) => a.platform.localeCompare(b.platform) || a.connectedAt.localeCompare(b.connectedAt),
+    );
+    const anchor =
+      column === 'waiting'
+        ? sorted.map((item) => item.connectedAt).sort()[0]
+        : sorted.map(decided).sort().reverse()[0];
+    return { key: `${column}:${profileId}`, column, profileId, person: sorted[0], accounts: sorted, anchor };
+  });
+  // Quem espera há mais tempo vem primeiro; nas colunas decididas, a decisão mais recente.
+  groups.sort((a, b) =>
+    column === 'waiting' || column === 'adjust'
+      ? a.anchor.localeCompare(b.anchor)
+      : b.anchor.localeCompare(a.anchor),
   );
+  return groups.map(({ anchor: _anchor, ...group }) => group);
 }
 
 export function AdminBoard({
@@ -162,10 +197,10 @@ export function AdminBoard({
   onError: (message: string) => void;
 }) {
   const [query, setQuery] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [dragging, setDragging] = useState<AdminAccount | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<Group | null>(null);
   const [over, setOver] = useState<Column | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [notice, setNotice] = useState<{ name: string; href: string } | null>(null);
 
@@ -182,68 +217,81 @@ export function AdminBoard({
   }, [accounts, query]);
 
   const byColumn = useMemo(() => {
-    const groups: Record<Column, AdminAccount[]> = { waiting: [], adjust: [], approved: [], out: [] };
-    for (const item of visible) groups[COLUMN_OF[item.reviewStatus]].push(item);
-    for (const column of COLUMNS) groups[column.id] = sortColumn(column.id, groups[column.id]);
+    const raw: Record<Column, AdminAccount[]> = { waiting: [], adjust: [], approved: [], out: [] };
+    for (const item of visible) raw[COLUMN_OF[item.reviewStatus]].push(item);
+    const groups = {} as Record<Column, Group[]>;
+    for (const column of COLUMNS) groups[column.id] = groupColumn(column.id, raw[column.id]);
     return groups;
   }, [visible]);
 
-  function offerWhatsApp(account: AdminAccount, text: string) {
-    const digits = waDigits(account.whatsapp);
+  function offerWhatsApp(list: AdminAccount[], text: string) {
+    const digits = waDigits(list[0].whatsapp);
     setNotice(
       digits
-        ? { name: firstName(account), href: `https://wa.me/${digits}?text=${encodeURIComponent(text)}` }
+        ? { name: firstName(list[0]), href: `https://wa.me/${digits}?text=${encodeURIComponent(text)}` }
         : null,
     );
   }
 
-  async function decide(account: AdminAccount, decision: ReviewDecision, note?: string) {
-    setBusyId(account.accountId);
+  async function decide(
+    group: Group,
+    list: AdminAccount[],
+    decision: ReviewDecision,
+    note?: string,
+  ) {
+    setBusyKey(group.key);
+    let done: AdminAccount[] = [];
     try {
       const reviewedAt = new Date().toISOString();
-      if (preview) {
-        onUpdate(account.accountId, {
-          reviewStatus: decision,
-          reviewNote: decision === 'approved' ? null : (note ?? null),
-          reviewedAt,
-          reviewedByName: 'Você',
-        });
-      } else {
-        const result = await api.adminReviewAccount(account.accountId, decision, note);
-        onUpdate(account.accountId, {
-          reviewStatus: result.reviewStatus,
-          reviewNote: result.reviewNote,
-          reviewedAt,
-        });
+      for (const account of list) {
+        if (preview) {
+          onUpdate(account.accountId, {
+            reviewStatus: decision,
+            reviewNote: decision === 'approved' ? null : (note ?? null),
+            reviewedAt,
+            reviewedByName: 'Você',
+          });
+        } else {
+          const result = await api.adminReviewAccount(account.accountId, decision, note);
+          onUpdate(account.accountId, {
+            reviewStatus: result.reviewStatus,
+            reviewNote: result.reviewNote,
+            reviewedAt,
+          });
+        }
+        done = [...done, account];
       }
-      const handle = handleLabel(account);
-      const name = firstName(account);
+      const handles = handlesPhrase(list);
+      const name = firstName(list[0]);
+      const many = list.length > 1;
       onMessage(
         decision === 'approved'
-          ? `${handle} aprovada. As views dessa conta entram no ranking na próxima atualização e ${name} vê a decisão no app.`
+          ? `${handles} ${many ? 'aprovadas' : 'aprovada'}. As views entram no ranking na próxima atualização e ${name} vê a decisão no app.`
           : decision === 'changes_requested'
-            ? `Ajuste pedido para ${handle}. ${name} vê o recado no app.`
-            : `${handle} reprovada. A conta fica fora do ranking e ${name} vê o motivo no app.`,
+            ? `Ajuste pedido para ${handles}. ${name} vê o recado no app.`
+            : `${handles} ${many ? 'reprovadas' : 'reprovada'}. ${many ? 'As contas ficam' : 'A conta fica'} fora do ranking e ${name} vê o motivo no app.`,
       );
-      offerWhatsApp(account, noticeFor(account, decision, note));
-      setOpenId(null);
+      offerWhatsApp(list, noticeFor(list, decision, note));
+      setOpenKey(null);
       if (!preview) await onChanged();
     } catch (err) {
+      const partial =
+        done.length > 0 ? ` Já ${done.length === 1 ? 'foi salva' : 'foram salvas'}: ${handlesPhrase(done)}.` : '';
       onError(
-        err instanceof ApiError
+        (err instanceof ApiError
           ? err.message
-          : 'Não foi possível salvar a decisão. Confira a internet e tente de novo.',
+          : 'Não foi possível salvar a decisão. Confira a internet e tente de novo.') + partial,
       );
+      if (!preview && done.length > 0) await onChanged();
     } finally {
-      setBusyId(null);
+      setBusyKey(null);
       setPending(null);
     }
   }
 
-  function move(account: AdminAccount, to: Column) {
-    const from = COLUMN_OF[account.reviewStatus];
-    if (from === to) return;
-    if (!MOVES[from].includes(to)) {
+  function move(group: Group, to: Column) {
+    if (group.column === to) return;
+    if (!MOVES[group.column].includes(to)) {
       onError(
         to === 'waiting'
           ? 'Aguardando é só para conta que ainda não teve decisão. Escolha aprovar, pedir ajuste ou reprovar.'
@@ -251,14 +299,14 @@ export function AdminBoard({
       );
       return;
     }
-    if (to === 'approved') void decide(account, 'approved');
-    else setPending({ kind: to === 'adjust' ? 'adjust' : 'reject', account });
+    if (to === 'approved') void decide(group, group.accounts, 'approved');
+    else setPending({ kind: to === 'adjust' ? 'adjust' : 'reject', group, accounts: group.accounts });
   }
 
-  function onDragStart(event: DragEvent<HTMLLIElement>, account: AdminAccount) {
+  function onDragStart(event: DragEvent<HTMLLIElement>, group: Group) {
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', account.accountId);
-    setDragging(account);
+    event.dataTransfer.setData('text/plain', group.key);
+    setDragging(group);
   }
 
   function onDragEnd() {
@@ -268,22 +316,24 @@ export function AdminBoard({
 
   function onDrop(event: DragEvent<HTMLElement>, to: Column) {
     event.preventDefault();
-    const account = dragging;
+    const group = dragging;
     setDragging(null);
     setOver(null);
-    if (account) move(account, to);
+    if (group) move(group, to);
   }
 
-  const draggingFrom = dragging ? COLUMN_OF[dragging.reviewStatus] : null;
+  const draggingFrom = dragging?.column ?? null;
+  const pendingMany = (pending?.accounts.length ?? 0) > 1;
+  const pendingName = pending ? firstName(pending.group.person) : 'A pessoa';
 
   return (
     <section className="admin-panel board-panel" aria-labelledby="board-title">
       <div className="admin-panel-head">
         <h2 id="board-title">Aprovações</h2>
         <p>
-          Cada cartão é uma conta de rede. Arraste a conta para a coluna da decisão ou use os
-          botões do cartão. Só conta aprovada soma no ranking. Ajuste e reprovação pedem um recado,
-          que a pessoa vê no app.
+          Cada cartão é uma pessoa, com as contas dela que estão naquela situação. Decida conta por
+          conta dentro do cartão, ou arraste o cartão para decidir todas de uma vez. Só conta
+          aprovada soma no ranking. Ajuste e reprovação pedem um recado, que a pessoa vê no app.
         </p>
       </div>
       <div className="admin-toolbar">
@@ -333,7 +383,7 @@ export function AdminBoard({
               <BoardColumn
                 key={column.id}
                 column={column}
-                accounts={byColumn[column.id]}
+                groups={byColumn[column.id]}
                 searching={query.trim() !== ''}
                 dropState={
                   !draggingFrom || draggingFrom === column.id
@@ -356,21 +406,19 @@ export function AdminBoard({
                   }
                 }}
                 onDrop={(event) => onDrop(event, column.id)}
-                renderCard={(account) => (
-                  <AccountCard
-                    key={account.accountId}
-                    account={account}
-                    busy={busyId === account.accountId}
-                    disabled={busyId !== null}
-                    open={openId === account.accountId}
-                    onToggle={() =>
-                      setOpenId(openId === account.accountId ? null : account.accountId)
-                    }
-                    onDragStart={(event) => onDragStart(event, account)}
+                renderCard={(group) => (
+                  <PersonCard
+                    key={group.key}
+                    group={group}
+                    busy={busyKey === group.key}
+                    disabled={busyKey !== null}
+                    open={openKey === group.key}
+                    onToggle={() => setOpenKey(openKey === group.key ? null : group.key)}
+                    onDragStart={(event) => onDragStart(event, group)}
                     onDragEnd={onDragEnd}
-                    onApprove={() => void decide(account, 'approved')}
-                    onAdjust={() => setPending({ kind: 'adjust', account })}
-                    onReject={() => setPending({ kind: 'reject', account })}
+                    onApprove={(list) => void decide(group, list, 'approved')}
+                    onAdjust={(list) => setPending({ kind: 'adjust', group, accounts: list })}
+                    onReject={(list) => setPending({ kind: 'reject', group, accounts: list })}
                   />
                 )}
               />
@@ -383,22 +431,29 @@ export function AdminBoard({
         open={pending !== null}
         title={
           pending?.kind === 'adjust'
-            ? `Pedir ajuste em ${pending ? handleLabel(pending.account) : ''}`
-            : `Reprovar ${pending ? handleLabel(pending.account) : ''}?`
+            ? `Pedir ajuste em ${pending ? handlesPhrase(pending.accounts) : ''}`
+            : `Reprovar ${pending ? handlesPhrase(pending.accounts) : ''}?`
         }
         description={
           pending?.kind === 'adjust'
-            ? `A conta fica fora do ranking até o ajuste. ${pending ? firstName(pending.account) : 'A pessoa'} vê o recado no app e avisa quando terminar.`
-            : `A conta fica fora do ranking e ${pending ? firstName(pending.account) : 'a pessoa'} vê o motivo no app. As outras contas dela não mudam. Dá para aprovar depois.`
+            ? `${pendingMany ? 'As contas ficam' : 'A conta fica'} fora do ranking até o ajuste. ${pendingName} vê o recado no app e avisa quando terminar.`
+            : `${pendingMany ? 'As contas ficam' : 'A conta fica'} fora do ranking e ${pendingName} vê o motivo no app. As outras contas dela não mudam. Dá para aprovar depois.`
         }
-        confirmLabel={pending?.kind === 'adjust' ? 'Enviar pedido de ajuste' : 'Reprovar conta'}
+        confirmLabel={
+          pending?.kind === 'adjust'
+            ? 'Enviar pedido de ajuste'
+            : pendingMany
+              ? 'Reprovar contas'
+              : 'Reprovar conta'
+        }
         tone={pending?.kind === 'adjust' ? 'primary' : 'danger'}
         suggestions={pending?.kind === 'adjust' ? ADJUST_SUGGESTIONS : REJECT_SUGGESTIONS}
-        busy={pending !== null && busyId === pending.account.accountId}
+        busy={pending !== null && busyKey === pending.group.key}
         onConfirm={(note) => {
           if (!pending) return;
           void decide(
-            pending.account,
+            pending.group,
+            pending.accounts,
             pending.kind === 'adjust' ? 'changes_requested' : 'rejected',
             note,
           );
@@ -411,7 +466,7 @@ export function AdminBoard({
 
 function BoardColumn({
   column,
-  accounts,
+  groups,
   searching,
   dropState,
   onDragOver,
@@ -420,17 +475,18 @@ function BoardColumn({
   renderCard,
 }: {
   column: (typeof COLUMNS)[number];
-  accounts: AdminAccount[];
+  groups: Group[];
   searching: boolean;
   dropState: 'open' | 'over' | 'closed' | undefined;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDragLeave: (event: DragEvent<HTMLElement>) => void;
   onDrop: (event: DragEvent<HTMLElement>) => void;
-  renderCard: (account: AdminAccount) => ReactElement;
+  renderCard: (group: Group) => ReactElement;
 }) {
-  const list = useListWindow(accounts.length);
+  const list = useListWindow(groups.length);
   const titleId = `board-col-${column.id}`;
-  const remaining = accounts.length - list.visible;
+  const remaining = groups.length - list.visible;
+  const accountCount = groups.reduce((sum, group) => sum + group.accounts.length, 0);
   return (
     <section
       className="board-col"
@@ -444,21 +500,32 @@ function BoardColumn({
       <header className="board-col-head">
         <h3 id={titleId}>
           {column.title}
-          <span className="board-count">{accounts.length}</span>
+          <span
+            className="board-count"
+            aria-label={`${accountCount} ${accountCount === 1 ? 'conta' : 'contas'}`}
+          >
+            {accountCount}
+          </span>
         </h3>
         <p>{column.hint}</p>
+        {groups.length > 0 ? (
+          <p className="board-col-sum">
+            {accountCount === 1 ? '1 conta' : `${accountCount} contas`} de{' '}
+            {groups.length === 1 ? '1 pessoa' : `${groups.length} pessoas`}
+          </p>
+        ) : null}
       </header>
       {dropState === 'over' || dropState === 'open' ? (
         <p className="board-drop-hint" aria-hidden>
-          Solte aqui
+          Solte aqui para decidir todas as contas do cartão
         </p>
       ) : null}
-      {accounts.length === 0 ? (
+      {groups.length === 0 ? (
         <p className="board-empty">
-          {searching ? 'Nenhuma conta com essa busca nesta coluna.' : column.empty}
+          {searching ? 'Ninguém com essa busca nesta coluna.' : column.empty}
         </p>
       ) : (
-        <ol className="board-list">{accounts.slice(list.start, list.end).map(renderCard)}</ol>
+        <ol className="board-list">{groups.slice(list.start, list.end).map(renderCard)}</ol>
       )}
       {list.paged ? (
         <nav className="board-pager" aria-label={`Páginas de ${column.title}`}>
@@ -485,8 +552,8 @@ function BoardColumn({
   );
 }
 
-function AccountCard({
-  account,
+function PersonCard({
+  group,
   busy,
   disabled,
   open,
@@ -497,25 +564,21 @@ function AccountCard({
   onAdjust,
   onReject,
 }: {
-  account: AdminAccount;
+  group: Group;
   busy: boolean;
   disabled: boolean;
   open: boolean;
   onToggle: () => void;
   onDragStart: (event: DragEvent<HTMLLIElement>) => void;
   onDragEnd: () => void;
-  onApprove: () => void;
-  onAdjust: () => void;
-  onReject: () => void;
+  onApprove: (accounts: AdminAccount[]) => void;
+  onAdjust: (accounts: AdminAccount[]) => void;
+  onReject: (accounts: AdminAccount[]) => void;
 }) {
-  const column = COLUMN_OF[account.reviewStatus];
-  const detailsId = `board-card-${account.accountId.replace(/[^a-z0-9]/gi, '-')}`;
-  const digits = waDigits(account.whatsapp);
-  const href = account.profileUrl ?? profileUrl(account.platform, account.username);
-  const added = formatDay(account.connectedAt);
-  const decidedAt = formatDateTime(account.reviewedAt);
-  const lastSync = formatDateTime(account.lastSyncAt);
-  const showNote = (column === 'adjust' || column === 'out') && account.reviewNote;
+  const { column, person, accounts } = group;
+  const detailsId = `board-card-${group.key.replace(/[^a-z0-9]/gi, '-')}`;
+  const digits = waDigits(person.whatsapp);
+  const many = accounts.length > 1;
 
   return (
     <li
@@ -534,56 +597,44 @@ function AccountCard({
             </g>
           ))}
         </svg>
-        <PlatformMark platform={account.platform} size={18} />
-        <strong className="board-handle">
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`${handleLabel(account)} no ${platformLabel(account.platform)}, abre o perfil`}
-            >
-              {handleLabel(account)}
-            </a>
-          ) : (
-            handleLabel(account)
-          )}
-        </strong>
-        {account.membershipStatus === 'suspended' ? (
+        <strong>{personName(person)}</strong>
+        {person.membershipStatus === 'suspended' ? (
           <span className="admin-status" data-tone="stop">
             <i />
             Pessoa suspensa
           </span>
         ) : null}
       </div>
-
-      <p className="board-person">{account.fullName || account.publicName}</p>
       <p className="board-meta">
-        {viewsLine(account)}
-        {added ? ` · Adicionada em ${added}` : ''}
+        {many ? `${accounts.length} contas` : '1 conta'}
+        {column === 'waiting' ? ' esperando decisão' : ''}
       </p>
-      {showNote ? <p className="admin-note">Recado: {account.reviewNote}</p> : null}
+
+      <ul className="board-accounts">
+        {accounts.map((account) => (
+          <AccountRow
+            key={account.accountId}
+            account={account}
+            column={column}
+            disabled={disabled}
+            onApprove={() => onApprove([account])}
+            onAdjust={() => onAdjust([account])}
+            onReject={() => onReject([account])}
+          />
+        ))}
+      </ul>
 
       <div className="board-actions">
         {busy ? (
           <span className="board-meta">Salvando...</span>
-        ) : column === 'waiting' || column === 'adjust' ? (
-          <>
-            <button type="button" className="admin-primary" disabled={disabled} onClick={onApprove}>
-              Aprovar
-            </button>
-            {column === 'waiting' ? (
-              <button type="button" disabled={disabled} onClick={onAdjust}>
-                Pedir ajuste
-              </button>
-            ) : null}
-            <button type="button" className="is-stop" disabled={disabled} onClick={onReject}>
-              Reprovar
-            </button>
-          </>
-        ) : column === 'out' ? (
-          <button type="button" className="admin-primary" disabled={disabled} onClick={onApprove}>
-            Aprovar mesmo assim
+        ) : many && (column === 'waiting' || column === 'adjust' || column === 'out') ? (
+          <button
+            type="button"
+            className="admin-primary"
+            disabled={disabled}
+            onClick={() => onApprove(accounts)}
+          >
+            Aprovar todas ({accounts.length})
           </button>
         ) : null}
         <button
@@ -602,42 +653,109 @@ function AccountCard({
           <div>
             <dt>E-mail</dt>
             <dd>
-              <a href={`mailto:${account.email}`}>{account.email}</a>
+              <a href={`mailto:${person.email}`}>{person.email}</a>
             </dd>
           </div>
           <div>
             <dt>WhatsApp</dt>
             <dd>
-              {digits && account.whatsapp ? (
+              {digits && person.whatsapp ? (
                 <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer">
-                  {formatPhone(account.whatsapp)}
+                  {formatPhone(person.whatsapp)}
                 </a>
               ) : (
                 'Não informado'
               )}
             </dd>
           </div>
-          <div>
-            <dt>Decisão</dt>
-            <dd>
-              {decidedAt
-                ? `${decidedAt}${account.reviewedByName ? ` por ${account.reviewedByName}` : ''}`
-                : 'Ainda sem decisão'}
-            </dd>
-          </div>
-          <div>
-            <dt>Última coleta</dt>
-            <dd>{lastSync ?? 'Em coleta'}</dd>
-          </div>
-          {column === 'approved' ? (
-            <div className="board-details-foot">
-              <button type="button" className="is-stop" disabled={disabled} onClick={onReject}>
-                Reprovar conta
-              </button>
-            </div>
-          ) : null}
+          {accounts.map((account) => {
+            const decidedAt = formatDateTime(account.reviewedAt);
+            const lastSync = formatDateTime(account.lastSyncAt);
+            return (
+              <div key={account.accountId}>
+                <dt>{handleLabel(account)}</dt>
+                <dd>
+                  {decidedAt
+                    ? `Decisão em ${decidedAt}${account.reviewedByName ? ` por ${account.reviewedByName}` : ''}`
+                    : 'Ainda sem decisão'}
+                  {`. Última coleta: ${lastSync ?? 'em coleta'}.`}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
       ) : null}
+    </li>
+  );
+}
+
+function AccountRow({
+  account,
+  column,
+  disabled,
+  onApprove,
+  onAdjust,
+  onReject,
+}: {
+  account: AdminAccount;
+  column: Column;
+  disabled: boolean;
+  onApprove: () => void;
+  onAdjust: () => void;
+  onReject: () => void;
+}) {
+  const href = account.profileUrl ?? profileUrl(account.platform, account.username);
+  const added = formatDay(account.connectedAt);
+  const showNote = (column === 'adjust' || column === 'out') && account.reviewNote;
+  return (
+    <li className="board-account">
+      <div className="board-account-head">
+        <PlatformMark platform={account.platform} size={18} />
+        <strong className="board-handle">
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${handleLabel(account)} no ${platformLabel(account.platform)}, abre o perfil`}
+            >
+              {handleLabel(account)}
+            </a>
+          ) : (
+            handleLabel(account)
+          )}
+        </strong>
+      </div>
+      <p className="board-meta">
+        {viewsLine(account)}
+        {added ? ` · Adicionada em ${added}` : ''}
+      </p>
+      {showNote ? <p className="admin-note">Recado: {account.reviewNote}</p> : null}
+      <div className="board-account-actions">
+        {column === 'waiting' || column === 'adjust' ? (
+          <>
+            <button type="button" className="admin-primary" disabled={disabled} onClick={onApprove}>
+              Aprovar
+            </button>
+            {column === 'waiting' ? (
+              <button type="button" disabled={disabled} onClick={onAdjust}>
+                Ajuste
+              </button>
+            ) : null}
+            <button type="button" className="is-stop" disabled={disabled} onClick={onReject}>
+              Reprovar
+            </button>
+          </>
+        ) : column === 'out' ? (
+          <button type="button" className="admin-primary" disabled={disabled} onClick={onApprove}>
+            Aprovar mesmo assim
+          </button>
+        ) : (
+          <button type="button" className="is-stop" disabled={disabled} onClick={onReject}>
+            Reprovar
+          </button>
+        )}
+      </div>
     </li>
   );
 }
