@@ -5,7 +5,6 @@ import { loadConfig } from '../../infrastructure/config/env';
 import { AppRole } from '../../domain/types';
 
 const STAFF_EMAILS = new Set([
-  'mateuscarddosointencional@gmail.com',
   'contatotiagofiel@gmail.com',
   'nicoleintencional@gmail.com',
 ]);
