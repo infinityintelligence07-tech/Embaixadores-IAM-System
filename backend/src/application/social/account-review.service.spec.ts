@@ -31,7 +31,7 @@ function setup(accounts: FakeAccount[]) {
     update: vi.fn(async (id: string, input: Record<string, unknown>) => ({ id, ...input })),
   };
   const auditRepo = { append: vi.fn() };
-  const notifications = { notify: vi.fn() };
+  const notifications = { notify: vi.fn(), supersede: vi.fn() };
   const service = new AccountReviewService(
     { now: () => new Date('2026-10-30T12:00:00Z') },
     socialAccountRepo as never,

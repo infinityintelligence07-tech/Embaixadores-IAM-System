@@ -279,7 +279,9 @@ export class AccountReviewService {
     });
 
     const name = networkName(account.platform);
-    const handle = account.username ? `@${account.username.replace(/^@/, '')}` : `Seu ${name}`;
+    const label = `${account.username ? `@${account.username.replace(/^@/, '')}` : 'Sua conta'} no ${name}`;
+    // Com várias contas por rede, o título diz qual conta é; o aviso anterior dela sai do topo.
+    await this.notifications.supersede(account.profileId, label);
 
     // Aprovar a conta não mexe na participação: ela nasce aprovada no cadastro e a
     // suspensão é decidida em Pessoas.
@@ -287,21 +289,21 @@ export class AccountReviewService {
       await this.notifications.notify(
         account.profileId,
         'account_approved',
-        `Seu ${name} foi aprovado`,
-        `${handle} entrou na competição. As views dos seus vídeos passam a contar no ranking na próxima atualização, em até 10 minutos.`,
+        `${label} foi aprovada`,
+        'As views dos vídeos dessa conta já passam a somar no ranking.',
       );
     } else if (decision === AccountReviewStatus.ChangesRequested) {
       await this.notifications.notify(
         account.profileId,
         'account_changes_requested',
-        `Ajuste pedido no seu ${name}`,
+        `Ajuste pedido em ${label}`,
         `${note} Depois de ajustar, toque em "Já ajustei" na tela de conexões para a equipe olhar de novo.`,
       );
     } else {
       await this.notifications.notify(
         account.profileId,
         'account_rejected',
-        `Seu ${name} não entrou na competição`,
+        `${label} não foi aprovada`,
         note ?? '',
       );
     }

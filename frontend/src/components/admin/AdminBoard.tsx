@@ -261,7 +261,7 @@ export function AdminBoard({
         }
         done = [...done, account];
       }
-      const handles = handlesPhrase(list);
+      const handles = accountsPhrase(list);
       const name = firstName(list[0]);
       const many = list.length > 1;
       onMessage(
@@ -431,8 +431,8 @@ export function AdminBoard({
         open={pending !== null}
         title={
           pending?.kind === 'adjust'
-            ? `Pedir ajuste em ${pending ? handlesPhrase(pending.accounts) : ''}`
-            : `Reprovar ${pending ? handlesPhrase(pending.accounts) : ''}?`
+            ? `Pedir ajuste em ${pending ? accountsPhrase(pending.accounts) : ''}`
+            : `Reprovar ${pending ? accountsPhrase(pending.accounts) : ''}?`
         }
         description={
           pending?.kind === 'adjust'

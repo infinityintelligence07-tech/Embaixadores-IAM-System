@@ -31,6 +31,15 @@ export class NotificationsService {
     );
   }
 
+  /** Marca como lidos os avisos ainda abertos sobre a mesma conta, pelo título. */
+  async supersede(profileId: string, label: string): Promise<void> {
+    await getPool().query(
+      `UPDATE notifications SET read_at = now()
+       WHERE profile_id = $1 AND read_at IS NULL AND kind LIKE 'account\\_%' AND strpos(title, $2) > 0`,
+      [profileId, label],
+    );
+  }
+
   async listFor(profileId: string): Promise<NotificationView[]> {
     const result = await getPool().query(
       `SELECT id, kind, title, body, read_at, created_at
