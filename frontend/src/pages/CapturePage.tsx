@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { GoogleEntry } from "@/components/auth/GoogleButton";
+import { PlatformMark } from "@/components/brand/PlatformMark";
 import { ApiError, api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { useSurfaceTheme } from "@/lib/theme";
@@ -122,43 +123,6 @@ function validate(form: FormState): FieldErrors {
   return errors;
 }
 
-function IconInstagram() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="net-icon">
-      <rect
-        x="2.75"
-        y="2.75"
-        width="18.5"
-        height="18.5"
-        rx="5.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-      />
-      <circle
-        cx="12"
-        cy="12"
-        r="4.35"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-      />
-      <circle cx="17.55" cy="6.45" r="1.25" fill="currentColor" />
-    </svg>
-  );
-}
-
-function IconTikTok() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="net-icon">
-      <path
-        fill="currentColor"
-        d="M14.35 3h2.55c.18 1.62 1.2 3.05 2.6 3.8v2.45a6.9 6.9 0 0 1-3.25-1.05v6.2c0 3.45-2.7 6.15-6.15 6.15S4 17.85 4 14.4c0-3.25 2.5-5.95 5.7-6.2v2.55c-1.55.25-2.7 1.55-2.7 3.2 0 1.8 1.45 3.25 3.25 3.25s3.25-1.45 3.25-3.25V3z"
-      />
-    </svg>
-  );
-}
-
 function IconCheck() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -173,11 +137,6 @@ function IconCheck() {
     </svg>
   );
 }
-
-const ICONS: Record<string, ReactNode> = {
-  instagram: <IconInstagram />,
-  tiktok: <IconTikTok />,
-};
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -483,7 +442,7 @@ export function CapturePage() {
                         aria-pressed={selected}
                         onClick={() => toggleNetwork(network.id)}
                       >
-                        {ICONS[network.id]}
+                        <PlatformMark platform={network.id} size={30} />
                         <span className="net-tile__label">{network.label}</span>
                         <span className="net-tile__check" aria-hidden="true">
                           {selected ? <IconCheck /> : null}
