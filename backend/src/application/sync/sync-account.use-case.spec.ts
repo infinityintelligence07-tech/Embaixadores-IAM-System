@@ -163,7 +163,7 @@ describe('SyncAccountUseCase', () => {
     await useCase.execute('job-1');
 
     expect(contentRepo.upsert).toHaveBeenCalledTimes(1);
-    expect(syncJobRepo.update).toHaveBeenCalledWith('job-1', { status: SyncJobStatus.Succeeded });
+    expect(syncJobRepo.update).toHaveBeenCalledWith('job-1', { status: SyncJobStatus.Succeeded, lastError: null });
     expect(socialAccountRepo.update).toHaveBeenLastCalledWith(
       'acc-1',
       expect.objectContaining({ status: ConnectionStatus.Connected, syncCoverageRatio: 1 }),
@@ -202,7 +202,7 @@ describe('SyncAccountUseCase', () => {
     expect(provider.listContents).toHaveBeenCalledTimes(20);
     const checkpointUpdate = syncJobRepo.update.mock.calls.find(([, input]) => input.checkpoint)?.[1];
     expect(checkpointUpdate?.lockedAt).toEqual(NOW);
-    expect(syncJobRepo.update).toHaveBeenLastCalledWith('job-1', { status: SyncJobStatus.Succeeded });
+    expect(syncJobRepo.update).toHaveBeenLastCalledWith('job-1', { status: SyncJobStatus.Succeeded, lastError: null });
     expect(socialAccountRepo.update).toHaveBeenLastCalledWith(
       'acc-1',
       expect.objectContaining({ syncCoverageRatio: 1 }),
@@ -223,7 +223,7 @@ describe('SyncAccountUseCase', () => {
 
     await useCase.execute('job-1');
 
-    expect(syncJobRepo.update).toHaveBeenLastCalledWith('job-1', { status: SyncJobStatus.Succeeded });
+    expect(syncJobRepo.update).toHaveBeenLastCalledWith('job-1', { status: SyncJobStatus.Succeeded, lastError: null });
     expect(socialAccountRepo.update).toHaveBeenLastCalledWith(
       'acc-1',
       expect.objectContaining({ syncCoverageRatio: 1 }),

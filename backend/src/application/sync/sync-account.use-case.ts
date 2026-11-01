@@ -269,6 +269,7 @@ export class SyncAccountUseCase {
       } else {
         await this.syncJobRepo.update(job.id, {
           status: SyncJobStatus.Succeeded,
+          lastError: null,
         });
       }
       
