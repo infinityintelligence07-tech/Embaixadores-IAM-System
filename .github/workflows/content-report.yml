@@ -1,0 +1,63 @@
+name: Relatório de vídeos de um embaixador (temporário)
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Parte do nome do embaixador"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Configurar SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Vídeos (só leitura)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          TARGET: ${{ inputs.name }}
+        run: |
+          cat > report.js <<'JS'
+          const { Pool } = require('pg');
+          const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+          (async () => {
+            const rows = (await pool.query(
+              `SELECT p.public_name, sa.platform, sa.username, sa.review_status, c.published_at, c.latest_views,
+                      c.media_type, c.permalink, left(regexp_replace(coalesce(c.title, ''), '\\s+', ' ', 'g'), 140) AS title
+               FROM profiles p
+               JOIN social_accounts sa ON sa.profile_id = p.id AND sa.disconnected_at IS NULL
+               JOIN contents c ON c.social_account_id = sa.id
+               WHERE p.public_name ILIKE '%' || $1 || '%' AND c.excluded_at IS NULL AND c.removed_on_platform = false
+               ORDER BY sa.platform, c.latest_views DESC NULLS LAST`,
+              [process.env.TARGET],
+            )).rows;
+            const mention = (t) => /marcos|fiel|acorde/i.test(t || '');
+            const total = rows.reduce((s, r) => s + Number(r.latest_views || 0), 0);
+            const withMention = rows.filter((r) => mention(r.title));
+            console.log(`Vídeos: ${rows.length} | views: ${total} | legendas que citam Marcos, Fiel ou Acorde: ${withMention.length} (${withMention.reduce((s, r) => s + Number(r.latest_views || 0), 0)} views)`);
+            for (const r of rows) {
+              console.log([r.platform, '@' + r.username, r.review_status, r.media_type, (r.published_at && r.published_at.toISOString().slice(0, 10)) || '-', r.latest_views, mention(r.title) ? 'CITA' : '-', r.title, r.permalink].join(' | '));
+            }
+            await pool.end();
+          })().catch((error) => {
+            console.error('ERRO ' + (error && error.message ? error.message : error));
+            process.exit(1);
+          });
+          JS
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "cd /opt/embaixadores && docker compose -f docker-compose.yml -f docker-compose.vps.yml exec -T -e TARGET=$(printf '%q' "$TARGET") app node -" < report.js
