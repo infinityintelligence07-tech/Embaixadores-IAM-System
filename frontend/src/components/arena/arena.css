@@ -1557,3 +1557,36 @@ body:has(.tier-layer[open]) {
   width: 100%;
   min-height: 48px;
 }
+
+/* O nome leva ao perfil; o clique vale para a linha ou o pedestal inteiro. */
+.rank-row {
+  position: relative;
+}
+
+.profile-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.profile-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+}
+
+.rank-row:hover .profile-link,
+.pedestal:hover .profile-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.profile-link:focus-visible {
+  outline: none;
+}
+
+.profile-link:focus-visible::after {
+  outline: 2px solid #7aa2ff;
+  outline-offset: 2px;
+}

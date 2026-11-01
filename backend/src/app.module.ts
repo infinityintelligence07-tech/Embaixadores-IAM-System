@@ -55,6 +55,7 @@ import { DashboardController } from './adapters/http/controllers/dashboard.contr
 import { SocialController } from './adapters/http/controllers/social.controller';
 import { RankingsController } from './adapters/http/controllers/rankings.controller';
 import { ContentsController } from './adapters/http/controllers/contents.controller';
+import { AmbassadorsController } from './adapters/http/controllers/ambassadors.controller';
 import { AdminController } from './adapters/http/controllers/admin.controller';
 import { AdminCompetitionController } from './adapters/http/controllers/admin-competition.controller';
 import { NotificationsController } from './adapters/http/controllers/notifications.controller';
@@ -189,6 +190,7 @@ import { AdminGuard } from './adapters/http/guards/admin.guard';
     SocialController,
     RankingsController,
     ContentsController,
+    AmbassadorsController,
     AdminController,
     AdminCompetitionController,
     NotificationsController,

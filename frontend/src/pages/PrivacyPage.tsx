@@ -47,6 +47,11 @@ export function PrivacyPage() {
             Calcular e exibir rankings (nome público, avatar e pontuação são divulgados na
             plataforma).
           </li>
+          <li>
+            Mostrar o perfil de cada embaixador aos outros participantes: nome público, foto, o @
+            das contas aprovadas e os vídeos que contam no ranking. E-mail e WhatsApp nunca
+            aparecem.
+          </li>
           <li>Administrar aprovações, suspensões e exclusões auditáveis.</li>
         </ul>
       </LegalSection>

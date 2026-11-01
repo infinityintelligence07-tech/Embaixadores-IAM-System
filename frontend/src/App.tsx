@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/routing/ProtectedRoute';
 import { AdminPage } from '@/pages/AdminPage';
+import { AmbassadorProfilePage } from '@/pages/AmbassadorProfilePage';
 import { CapturePage } from '@/pages/CapturePage';
 import { CaptureSuccessPage } from '@/pages/CaptureSuccessPage';
 import { AuthCallbackPage } from '@/pages/AuthCallbackPage';
@@ -40,6 +41,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/rankings" element={<RankingsPage />} />
+          <Route path="/embaixadores/:id" element={<AmbassadorProfilePage />} />
           <Route path="/conexoes" element={<ConnectionsPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
           <Route path="/conteudos" element={<ContentsPage />} />

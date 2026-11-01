@@ -1041,7 +1041,15 @@ function Pedestal({
         </span>
       </div>
       <div className="column">
-        <p className="pedestal-name">{entry.publicName}</p>
+        <p className="pedestal-name">
+          <Link
+            className="profile-link"
+            to={`/embaixadores/${entry.profileId}`}
+            aria-label={`Ver o perfil de ${entry.publicName}, ${place}º lugar`}
+          >
+            {entry.publicName}
+          </Link>
+        </p>
         <strong>{formatViews(entryScore(entry, category))}</strong>
         <span>views</span>
       </div>
@@ -1076,7 +1084,13 @@ function RankRow({
         own={entry.isCurrentUser}
       />
       <p className="rank-name">
-        <span className="rank-label">{entry.publicName}</span>
+        <Link
+          className="rank-label profile-link"
+          to={`/embaixadores/${entry.profileId}`}
+          aria-label={`Ver o perfil de ${entry.publicName}, ${entry.position}º lugar`}
+        >
+          {entry.publicName}
+        </Link>
         {entry.isCurrentUser ? <span className="rank-you">Você</span> : null}
         {entry.isStale ? <span className="rank-stale">Desatualizado</span> : null}
       </p>

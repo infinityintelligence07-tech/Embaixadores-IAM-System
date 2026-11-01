@@ -180,6 +180,33 @@ export interface RankingEntry {
   isCurrentUser: boolean;
 }
 
+/** Perfil público de quem disputa o ranking: contas aprovadas e os vídeos que mais renderam. */
+export interface AmbassadorProfile {
+  id: string;
+  publicName: string;
+  avatarUrl: string | null;
+  position: number | null;
+  participants: number;
+  totalViews: number;
+  accounts: {
+    id: string;
+    platform: SocialPlatform;
+    username: string | null;
+    profileUrl: string | null;
+    views: number;
+  }[];
+  videos: {
+    id: string;
+    platform: SocialPlatform;
+    username: string | null;
+    title: string | null;
+    views: number;
+    url: string | null;
+    thumbnailUrl: string | null;
+    publishedAt: string | null;
+  }[];
+}
+
 export interface RankingsResponse {
   items: RankingEntry[];
   page: number;
@@ -333,6 +360,9 @@ export const api = {
   me: () => fetchJson<MeResponse>('/api/me'),
 
   dashboard: () => fetchJson<DashboardResponse>('/api/dashboard'),
+
+  ambassador: (id: string) =>
+    fetchJson<AmbassadorProfile>(`/api/ambassadors/${encodeURIComponent(id)}`),
 
   socialAccounts: () => fetchJson<SocialAccount[]>('/api/social/accounts'),
 
