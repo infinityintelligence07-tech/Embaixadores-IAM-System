@@ -38,7 +38,7 @@ jobs:
           (async () => {
             const rows = (await pool.query(
               `SELECT p.public_name, sa.platform, sa.username, sa.review_status, c.published_at, c.latest_views,
-                      c.media_type, c.permalink, left(regexp_replace(coalesce(c.title, ''), '\\s+', ' ', 'g'), 140) AS title
+                      c.media_type, c.permalink, regexp_replace(coalesce(c.title, ''), '\\s+', ' ', 'g') AS title
                FROM profiles p
                JOIN social_accounts sa ON sa.profile_id = p.id AND sa.disconnected_at IS NULL
                JOIN contents c ON c.social_account_id = sa.id
@@ -46,12 +46,12 @@ jobs:
                ORDER BY sa.platform, c.latest_views DESC NULLS LAST`,
               [process.env.TARGET],
             )).rows;
-            const mention = (t) => /marcos|fiel|acorde/i.test(t || '');
+            const mention = (t) => /marcos[\s_.]*fiel|acorde[\s_.]*sua[\s_.]*mente/i.test(t || '');
             const total = rows.reduce((s, r) => s + Number(r.latest_views || 0), 0);
             const withMention = rows.filter((r) => mention(r.title));
             console.log(`Vídeos: ${rows.length} | views: ${total} | legendas que citam Marcos, Fiel ou Acorde: ${withMention.length} (${withMention.reduce((s, r) => s + Number(r.latest_views || 0), 0)} views)`);
             for (const r of rows) {
-              console.log([r.platform, '@' + r.username, r.review_status, r.media_type, (r.published_at && r.published_at.toISOString().slice(0, 10)) || '-', r.latest_views, mention(r.title) ? 'CITA' : '-', r.title, r.permalink].join(' | '));
+              console.log([r.platform, '@' + r.username, r.review_status, r.media_type, (r.published_at && r.published_at.toISOString().slice(0, 10)) || '-', r.latest_views, mention(r.title) ? 'CITA' : '-', r.title.slice(0, 90), r.permalink].join(' | '));
             }
             await pool.end();
           })().catch((error) => {
