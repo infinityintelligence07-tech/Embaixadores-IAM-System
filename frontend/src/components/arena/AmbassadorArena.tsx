@@ -78,8 +78,8 @@ function campaignLine(campaign: Campaign | undefined): string {
   if (!campaign) return 'Todos os vídeos desde o início do programa.';
   const period = `${shortDay(campaign.firstDay)} a ${shortDay(campaign.lastDay)}`;
   return campaign.state === 'finished'
-    ? `Encerrado. Contou as views ganhas de ${period}, de qualquer vídeo.`
-    : `Contam as views ganhas de ${period}, de qualquer vídeo, mesmo postado antes.`;
+    ? `Encerrado. Contou os vídeos postados de ${period} que citam o Marcos na legenda.`
+    : `Contam os vídeos postados de ${period} que citam #MarcosFiel, @marcosfiel ou #AcordeSuaMente na legenda.`;
 }
 
 function errorText(error: unknown, fallback: string): string {
@@ -267,7 +267,7 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
   const counting = accounts.filter(countsInRanking);
   const countingIds = new Set(counting.map((account) => account.id));
   const videos = contents
-    .filter((item) => !item.excluded && countingIds.has(item.accountId))
+    .filter((item) => item.counts && countingIds.has(item.accountId))
     .sort((a, b) => b.views - a.views)
     .slice(0, 6);
   // O nível acompanha a carreira inteira: não volta ao primeiro quando um mês novo começa.
@@ -599,10 +599,9 @@ export function AmbassadorArena({ snapshot }: { snapshot?: ArenaSnapshot }) {
           {activeCampaign && !blocked && (generalStanding?.score ?? 0) === 0 && lifetimeViews > 0 ? (
             <div className="arena-period-zero" role="note">
               <p>
-                Neste período você está com 0 views por enquanto. Vídeos postados a partir de{' '}
-                {shortDay(activeCampaign.firstDay)} contam inteiros. Os vídeos mais antigos contam só
-                as views que ganharem daqui para frente. As {formatViews(lifetimeViews)} views que você
-                já tem aparecem no Geral.
+                Neste período você está com 0 views por enquanto. Só contam os vídeos postados a
+                partir de {shortDay(activeCampaign.firstDay)} que citam o Marcos na legenda. As{' '}
+                {formatViews(lifetimeViews)} views que você já tem aparecem no Geral.
               </p>
               <button type="button" onClick={() => selectCampaign(GENERAL_RANKING)}>
                 Ver o Geral, desde o início

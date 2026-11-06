@@ -22,52 +22,21 @@ import { rankedMediaSql } from '../../../domain/ranked-media';
 import { getPool } from '../../../infrastructure/db/pool';
 import { readJson } from './read-json';
 
-const lastViewsBefore = (bound: string) => `
-  SELECT cs.views FROM content_metric_snapshots cs
-  WHERE cs.content_id = e.id AND cs.views IS NOT NULL AND cs.collected_at < ${bound}
-  ORDER BY cs.collected_at DESC LIMIT 1`;
-
 /**
- * Views ganhas dentro do período ($2 a $3) por vídeo da conta $1: a última medição antes do fim
- * menos a última antes do início. Vídeo publicado no período parte de zero. Vídeo antigo que só
- * passamos a medir depois do início (embaixador que entrou no meio) parte da primeira medição,
- * para o histórico de antes não entrar como se fosse do período.
+ * Views de cada vídeo da conta $1 postado dentro do período ($2 a $3), com todas as views dele.
+ * Vídeo postado antes ou depois do período não entra, mesmo que ganhe views nele.
  */
 const GAINS_IN_WINDOW = `
-  WITH eligible AS (
-    SELECT c.id, c.published_at
+  WITH gains AS (
+    SELECT c.id, COALESCE(c.latest_views, 0) AS gained
     FROM contents c
     WHERE c.social_account_id = $1
       AND c.eligible = true
       AND c.excluded_at IS NULL
       AND c.removed_on_platform = false
       AND ${rankedMediaSql('c')}
-  ),
-  watched_since AS (
-    SELECT MIN(cs.collected_at) AS at
-    FROM content_metric_snapshots cs
-    JOIN eligible e ON e.id = cs.content_id
-    WHERE cs.views IS NOT NULL
-  ),
-  gains AS (
-    SELECT e.id,
-           GREATEST(
-             COALESCE(final.views, 0) - CASE
-               WHEN e.published_at >= $2 THEN 0
-               WHEN before.views IS NOT NULL THEN before.views
-               WHEN e.published_at >= (SELECT at FROM watched_since) THEN 0
-               ELSE COALESCE(first_seen.views, 0)
-             END,
-             0
-           ) AS gained
-    FROM eligible e
-    LEFT JOIN LATERAL (${lastViewsBefore('$3')}) final ON true
-    LEFT JOIN LATERAL (${lastViewsBefore('$2')}) before ON true
-    LEFT JOIN LATERAL (
-      SELECT cs.views FROM content_metric_snapshots cs
-      WHERE cs.content_id = e.id AND cs.views IS NOT NULL AND cs.collected_at >= $2
-      ORDER BY cs.collected_at ASC LIMIT 1
-    ) first_seen ON true
+      AND c.published_at >= $2
+      AND c.published_at < $3
   )`;
 
 @Injectable()

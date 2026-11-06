@@ -56,6 +56,9 @@ function ContentRow({ item }: { item: ContentItem }) {
             {item.username ? ` @${item.username.replace(/^@/, '')}` : ''}
           </Badge>
           <span>{day}</span>
+          {item.counts ? null : (
+            <Badge tone="warning">Não conta: cite #MarcosFiel ou @marcosfiel na legenda</Badge>
+          )}
         </div>
       </div>
     </>
@@ -121,6 +124,7 @@ export function ContentsPage() {
 
   const activeContents = contents.filter((c) => !c.excluded);
   const excludedCount = contents.length - activeContents.length;
+  const missingMarcos = activeContents.filter((c) => !c.counts).length;
   const total = activeContents.length;
   const paged = total > EXPAND_LIMIT;
   const pageCount = Math.ceil(total / PAGE_SIZE);
@@ -247,6 +251,15 @@ export function ContentsPage() {
           ) : null}
         </div>
       )}
+
+      {!loading && !error && missingMarcos > 0 ? (
+        <Alert variant="warning">
+          {missingMarcos === 1
+            ? '1 vídeo não conta no ranking porque a legenda não cita o Marcos.'
+            : `${missingMarcos} vídeos não contam no ranking porque a legenda não cita o Marcos.`}{' '}
+          Para os próximos, coloque #MarcosFiel, @marcosfiel ou #AcordeSuaMente na legenda.
+        </Alert>
+      ) : null}
 
       {!loading && !error && excludedCount > 0 ? (
         <Alert variant="info">

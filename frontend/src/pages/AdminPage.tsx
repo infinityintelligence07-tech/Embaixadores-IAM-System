@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { WhatsAppButton } from '@/components/admin/WhatsAppButton';
 import { AdminBoard, type BoardStatus } from '@/components/admin/AdminBoard';
 import { CampaignsSection } from '@/components/admin/CampaignsSection';
 import { ListFooter, useListWindow } from '@/components/admin/ListWindow';
@@ -652,6 +653,7 @@ export function AdminPage({ preview }: { preview?: AdminPreview }) {
                       )}
                     </div>
                     <div className="admin-actions">
+                      <WhatsAppButton whatsapp={user.whatsapp} name={user.publicName} />
                       {own.map((item) => {
                         const key = `sync-${item.accountId}`;
                         const handle = item.username

@@ -129,9 +129,10 @@ export function TermsPage() {
           contas aprovadas do embaixador, no Instagram e no TikTok, e também destaca o melhor
           vídeo entre todas elas. É esse ranking que define a posição e o nível. Como consulta, a
           plataforma também mostra a classificação só do Instagram ou só do TikTok, somando as
-          contas aprovadas daquela rede. Nos rankings por mês ou campanha, contam as
-          visualizações ganhas dentro do período, de qualquer vídeo, mesmo postado antes. Fotos e
-          carrosséis do Instagram não contam.
+          contas aprovadas daquela rede. Só contam os vídeos cuja legenda cita #MarcosFiel,
+          @marcosfiel, Marcos Fiel ou #AcordeSuaMente, e a equipe pode retirar vídeos que fujam do
+          tema. Nos rankings por mês ou campanha, contam só os vídeos postados dentro do período.
+          Fotos e carrosséis não contam.
           Quando um número ainda não estiver disponível, a plataforma mostra que ele está
           indisponível, sem trocá-lo por uma estimativa.
         </p>

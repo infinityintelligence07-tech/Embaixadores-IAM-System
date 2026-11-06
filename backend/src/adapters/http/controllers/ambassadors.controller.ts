@@ -55,7 +55,7 @@ export class AmbassadorsController {
     for (const account of accounts) {
       const contents = await this.contentRepo.findEligibleByAccount(account.id);
       for (const content of contents) {
-        if (content.excludedAt || !countsTowardRanking(account.platform, content.mediaType)) continue;
+        if (content.excludedAt || !countsTowardRanking(account.platform, content)) continue;
         videos.push({
           id: content.id,
           platform: account.platform,

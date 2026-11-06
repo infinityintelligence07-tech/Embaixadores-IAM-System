@@ -166,6 +166,8 @@ export interface ContentItem {
   publishedAt: string;
   thumbnailUrl: string | null;
   excluded: boolean;
+  /** Entra no ranking: vídeo, não retirado, com o Marcos citado na legenda. */
+  counts: boolean;
 }
 
 export interface RankingEntry {
@@ -235,6 +237,8 @@ export interface AdminUser {
   email: string;
   fullName: string;
   publicName: string;
+  /** Do cadastro; null para quem ainda não informou. */
+  whatsapp: string | null;
   status: UserStatus;
   role: UserRole;
   createdAt: string;

@@ -2,6 +2,7 @@ import { useMemo, useState, type DragEvent, type ReactElement } from 'react';
 import { useListWindow } from '@/components/admin/ListWindow';
 import { NoteDialog } from '@/components/admin/NoteDialog';
 import { PlatformMark } from '@/components/brand/PlatformMark';
+import { WhatsAppButton } from '@/components/admin/WhatsAppButton';
 import { Spinner } from '@/components/ui/Spinner';
 import {
   ApiError,
@@ -625,6 +626,7 @@ function PersonCard({
       </ul>
 
       <div className="board-actions">
+        <WhatsAppButton whatsapp={person.whatsapp} name={personName(person)} />
         {busy ? (
           <span className="board-meta">Salvando...</span>
         ) : many && (column === 'waiting' || column === 'adjust' || column === 'out') ? (

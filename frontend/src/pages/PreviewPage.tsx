@@ -149,6 +149,7 @@ const arenaSnapshot: ArenaSnapshot = {
       publishedAt: '2026-09-28T15:00:00.000Z',
       thumbnailUrl: null,
       excluded: false,
+      counts: true,
     },
     {
       id: 'v2',
@@ -161,6 +162,7 @@ const arenaSnapshot: ArenaSnapshot = {
       publishedAt: '2026-09-21T15:00:00.000Z',
       thumbnailUrl: null,
       excluded: false,
+      counts: true,
     },
     {
       id: 'v3',
@@ -173,6 +175,7 @@ const arenaSnapshot: ArenaSnapshot = {
       publishedAt: '2026-09-18T15:00:00.000Z',
       thumbnailUrl: null,
       excluded: false,
+      counts: true,
     },
   ],
   boards: Object.fromEntries(
@@ -317,6 +320,7 @@ const adminPreview: AdminPreview = {
       publicName: 'Helena',
       status: 'pending',
       role: 'ambassador',
+      whatsapp: '11987654321',
       createdAt: '2026-09-20T12:00:00.000Z',
       postsLast30Days: 12,
       contentCount: 40,
@@ -330,6 +334,7 @@ const adminPreview: AdminPreview = {
       publicName: 'Mateus',
       status: 'approved',
       role: 'ambassador',
+      whatsapp: '11987654321',
       createdAt: '2026-09-02T12:00:00.000Z',
       postsLast30Days: 4,
       contentCount: 18,
@@ -343,6 +348,7 @@ const adminPreview: AdminPreview = {
       publicName: 'Igor',
       status: 'suspended',
       role: 'ambassador',
+      whatsapp: '11987654321',
       createdAt: '2026-08-11T12:00:00.000Z',
       postsLast30Days: 0,
       contentCount: 3,

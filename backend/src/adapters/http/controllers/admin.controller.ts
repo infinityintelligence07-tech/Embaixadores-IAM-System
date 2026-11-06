@@ -34,6 +34,7 @@ import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-token
 import { ComputeAndPublishRankingUseCase } from '../../../application/rankings/compute-and-publish.use-case';
 import { daysWithoutPosting } from '../../../domain/view-metrics';
 import { thumbnailPath } from './media.controller';
+import { getPool } from '../../../infrastructure/db/pool';
 import { SocialAccount } from '../../../domain/entities';
 import {
   ConnectionStatus,
@@ -73,6 +74,17 @@ export class AdminController {
     const since = new Date(now.getTime() - 30 * 86_400_000);
     const rhythms = await this.contentRepo.summarizePosting(since);
     const rhythmByProfile = new Map(rhythms.map((item) => [item.profileId, item]));
+    // O WhatsApp fica no cadastro; o mais recente vale, por pessoa ou por e-mail.
+    const phones = await getPool().query<{ profile_id: string | null; email: string; whatsapp: string }>(
+      `SELECT profile_id, lower(email) AS email, whatsapp FROM applications
+       WHERE coalesce(whatsapp, '') <> '' ORDER BY created_at ASC`,
+    );
+    const phoneByProfile = new Map<string, string>();
+    const phoneByEmail = new Map<string, string>();
+    for (const row of phones.rows) {
+      if (row.profile_id) phoneByProfile.set(row.profile_id, row.whatsapp);
+      phoneByEmail.set(row.email, row.whatsapp);
+    }
     const users = [];
 
     for (const membership of memberships) {
@@ -85,6 +97,8 @@ export class AdminController {
           email: profile.email,
           fullName: profile.fullName,
           publicName: profile.publicName,
+          whatsapp:
+            phoneByProfile.get(profile.id) ?? phoneByEmail.get(profile.email.toLowerCase()) ?? null,
           status: membership.status,
           role: profile.role,
           createdAt: profile.createdAt.toISOString(),

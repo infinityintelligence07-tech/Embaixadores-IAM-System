@@ -6,7 +6,7 @@ import {
   MetricsRepository,
 } from '../../../ports/repositories.port';
 import { INJECTION_TOKENS } from '../../../infrastructure/tokens/injection-tokens';
-import { countsTowardRanking } from '../../../domain/ranked-media';
+import { citesMarcos, isVideoPost } from '../../../domain/ranked-media';
 import { CampaignsService } from '../../../application/rankings/campaigns.service';
 import { thumbnailPath } from './media.controller';
 
@@ -25,7 +25,10 @@ export class ContentsController {
     private readonly campaigns: CampaignsService,
   ) {}
 
-  /** Com `campaignId`, cada vídeo traz só as views ganhas no período, como no ranking dele. */
+  /**
+   * Vídeos da pessoa, com `counts` dizendo se entram no ranking (a legenda precisa citar o
+   * Marcos). Com `campaignId`, só os vídeos postados no período, que são os que contam nele.
+   */
   @Get('contents')
   async listContents(@Req() req: any, @Query('campaignId') campaignId?: string) {
     const campaign =
@@ -38,9 +41,7 @@ export class ContentsController {
         ? await this.metricsRepo.gainedViewsByContent(account.id, window)
         : null;
       const contents = (await this.contentRepo.findEligibleByAccount(account.id)).filter(
-        (content) =>
-          countsTowardRanking(account.platform, content.mediaType) &&
-          (!gained || gained.has(content.id)),
+        (content) => isVideoPost(account.platform, content) && (!gained || gained.has(content.id)),
       );
 
       for (const content of contents) {
@@ -55,6 +56,7 @@ export class ContentsController {
           publishedAt: content.publishedAt?.toISOString() || '',
           thumbnailUrl: thumbnailPath(content),
           excluded: content.excludedAt !== null,
+          counts: content.excludedAt === null && citesMarcos(content.title),
         });
       }
     }

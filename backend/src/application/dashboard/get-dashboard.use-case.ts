@@ -61,7 +61,7 @@ export class GetDashboardUseCase {
       if (account.reviewStatus !== AccountReviewStatus.Approved) continue;
       byPlatform[account.platform] += views.get(account.id) ?? 0;
       const contents = (await this.contentRepo.findEligibleByAccount(account.id)).filter(
-        (content) => countsTowardRanking(account.platform, content.mediaType),
+        (content) => countsTowardRanking(account.platform, content),
       );
       for (const content of contents) {
         if (!best || (content.latestViews ?? 0) > (best.content.latestViews ?? 0)) {
@@ -101,7 +101,7 @@ export class GetDashboardUseCase {
         lastSyncAt: account.lastSyncedAt,
       })),
       rankingCriteria:
-        'O ranking soma as views dos Reels e vídeos de todas as suas contas aprovadas, no Instagram e no TikTok. Fotos e carrosséis não contam. O vídeo com mais views considera o maior vídeo entre todas as contas.',
+        'O ranking soma as views dos Reels e vídeos de todas as suas contas aprovadas, no Instagram e no TikTok, desde que a legenda cite #MarcosFiel, @marcosfiel, Marcos Fiel ou #AcordeSuaMente. Fotos e carrosséis não contam. Na campanha, só contam os vídeos postados dentro do período. A equipe pode retirar vídeos que fujam do tema.',
     };
   }
 }
